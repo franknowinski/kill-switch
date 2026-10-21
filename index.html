@@ -187,8 +187,8 @@ const BAL = {
 const ARMIES = {
   H:  [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["A",2],["C",2],["C",2],
        ["X",4],["X",4],["X",5],["X",5],["X",6],["X",7],["X",7],["X",8],["X",9]],
-  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["R",2],["I",2],["A",2],
-       ["X",2],["X",3],["X",3],["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",6]],
+  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["R",2],["I",2],["A",2],["C",2],["C",2],
+       ["X",3],["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",6]],
 };
 const GAPS = 2;
 const LEVELS_UP = t => t !== "F" && t !== "T";
@@ -226,7 +226,7 @@ function newGame(seed){
     if (key){ const bi = far.findIndex(sq => sq[0] === back); if (bi >= 0){ place(key, far.splice(bi, 1)[0]); others.splice(others.indexOf(key), 1); } }
     others.forEach((p, i) => place(p, far[i]));
   }
-  return { pieces, turn: "H", round: 1, level: 0, scans: BAL.SCANS, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, pendingUp: false };
+  return { pieces, turn: "H", round: 1, level: 0, scans: { H: BAL.SCANS, AI: BAL.SCANS }, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, pendingUp: false };
 }
 const at = (s, r, c) => s.pieces.find(p => p.r === r && p.c === c);
 const inb = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS && !BLOCKED.has(r + "," + c);
@@ -258,7 +258,7 @@ function sideMoves(s, side){
   return out;
 }
 function strongest(s, side){ return Math.max(0, ...s.pieces.filter(p => p.side === side && LEVELS_UP(p.type)).map(p => p.str)); }
-function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, events: [], history: s.history.slice(-40) }; }
+function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, scans: { ...s.scans }, events: [], history: s.history.slice(-40) }; }
 const snap = x => ({ side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
 // which AI pieces may take the pending +1
 const upChoices = s => s.pieces.filter(x => x.side === "AI" && LEVELS_UP(x.type) && x.type !== "I" && x.str <= BAL.UP_MAX);
@@ -466,13 +466,13 @@ if (params.has("sim")){
   const theirs = () => SIDE_WORD[other(me)];
   // pass-the-link: the whole game state in the URL hash (hidden pieces included; fine between friends, not for strangers)
   function encState(s){
-    const o = { v: 1, pu: s.pendingUp ? 1 : 0, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, lv: s.level, sc: s.scans, cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
+    const o = { v: 1, pu: s.pendingUp ? 1 : 0, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, lv: s.level, sc: [s.scans.H, s.scans.AI], cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
     return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
   function decState(code){
     const o = JSON.parse(decodeURIComponent(escape(atob(code.replace(/-/g, "+").replace(/_/g, "/")))));
     if (o.v !== 1) throw new Error("version");
-    return { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, level: o.lv, scans: o.sc, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: !!o.asi, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns, pendingUp: !!o.pu };
+    return { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, level: o.lv, scans: { H: o.sc[0], AI: o.sc[1] }, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: !!o.asi, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns, pendingUp: !!o.pu };
   }
   // two-player links point at the public copy of the game, so they open anywhere (the artifact viewer has no real address of its own)
   const PUBLIC_URL = "https://franknowinski.github.io/kill-switch/";
@@ -597,7 +597,7 @@ if (params.has("sim")){
     const turnsToLevel = BAL.LEVEL_EVERY - ((state.round - 1) % BAL.LEVEL_EVERY);
     const brainIn = BAL.RSI_EVERY - ((state.round - 1) % BAL.RSI_EVERY);
     const pct = 100 * (1 - turnsToLevel / BAL.LEVEL_EVERY);
-    let html = `<div class="left"><div class="top"><div class="t">KILL SWITCH</div><div class="stat">Round <b>${state.round}</b> · ${me === "H" ? `Scans <b>${state.scans}</b>` : `Copies <b>${state.copies.AI}</b>`}</div></div>
+    let html = `<div class="left"><div class="top"><div class="t">KILL SWITCH</div><div class="stat">Round <b>${state.round}</b> · ${me === "H" ? "Scans" : "Hacks"} <b>${state.scans[me]}</b></div></div>
     <div class="lvl"><span>AI +${state.level}</span><div class="bar"><i style="width:${state.rsi ? pct : 0}%"></i></div><span>${!state.rsi ? "🧠 stopped" : state.pendingUp ? "+1 to give · 🧠 in " + brainIn : "+1 in " + turnsToLevel + " · 🧠 in " + brainIn}</span></div>
     <div class="boardwrap"><div class="zoom" id="zoom"><div class="board" id="board">`;
     const cans = sel ? legalMoves(state, sel) : [];
@@ -646,7 +646,7 @@ if (params.has("sim")){
     if (phase === "setup") html += `<button class="ghost" id="shuffle">SHUFFLE</button><button class="primary" id="go">START</button>`;
     else if (phase === "handoff") html += `<button class="primary" id="share">SEND LINK</button><button class="ghost" id="copylink">COPY</button>`;
     else if (phase === "play"){
-      if (me === "H") html += `<button class="ghost" id="scan" aria-pressed="${scanMode}" ${state.scans && state.turn === me ? "" : "disabled"}>SCAN (${state.scans})</button>`;
+      html += `<button class="ghost" id="scan" aria-pressed="${scanMode}" ${state.scans[me] && state.turn === me ? "" : "disabled"}>${me === "H" ? "SCAN" : "HACK"} (${state.scans[me]})</button>`;
       if (sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel)) html += `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>`;
       html += `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart">↻</button>`;
     }
@@ -676,7 +676,7 @@ if (params.has("sim")){
     on("shuffle", () => { sfx.tap(); start(mode, me); }); on("go", begin); on("again", () => { phase = "intro"; render(); }); on("restart", () => { phase = "intro"; render(); });
     on("share", async () => { const url = gameLink(); sfx.tap(); try { if (navigator.share) await navigator.share({ title: "Kill Switch", text: "Your move in Kill Switch", url }); else { await navigator.clipboard.writeText(url); info = "Link copied. Paste it to the other player."; render(); } } catch (e) {} });
     on("copylink", async () => { sfx.tap(); try { await navigator.clipboard.writeText(gameLink()); info = "Link copied."; } catch (e) { info = "Select the link below and copy it."; } render(); });
-    on("scan", () => { sfx.tap(); scanMode = !scanMode; copyMode = false; sel = null; info = scanMode ? "Scan: tap a hidden AI piece to reveal it for good." : null; render(); });
+    on("scan", () => { sfx.tap(); scanMode = !scanMode; copyMode = false; sel = null; info = scanMode ? (me === "H" ? "Scan" : "Hack") + ": tap a hidden enemy piece to reveal it for good." : null; render(); });
     on("copybtn", () => { sfx.tap(); copyMode = !copyMode; render(); });
     app.querySelectorAll(".kr").forEach(el => el.addEventListener("click", () => { const t = el.dataset.type, side = el.dataset.side; sfx.tap(); info = explain({ side, type: t, str: el.dataset.str ? +el.dataset.str : 0 }); render(); }));
     on("sound", () => { SFX.on = !SFX.on; try { localStorage.setItem("ks-sound", SFX.on ? "on" : "off"); } catch (e) {} sfx.tap(); render(); });
@@ -684,7 +684,7 @@ if (params.has("sim")){
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
     H:  { S: "slides any distance", M: "fights as 3, removes backdoors", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
-    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", I: "every " + BAL.LEVEL_EVERY + " rounds: +1 to a piece you pick; grows to 9", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "every " + BAL.LEVEL_EVERY + " rounds: +1 to a piece you pick; grows to 9", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
     const alive = (side, t, str) => state.pieces.filter(p => p.side === side && p.type === t && (str == null || p.str === str)).length;
@@ -709,7 +709,7 @@ if (params.has("sim")){
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden${other(me) === "AI" ? ", get +1 over time" : ""}</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
       ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(p => `<span class="pc ${cls(other(me))}">${p.str}</span>`).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
-      <div class="kh n">A fight: higher number wins, same number both fall. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: a 9 (both fall), the auditor or virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw.${me === "H" ? " Scans: " + state.scans + " left." : ""}</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: a 9 (both fall), the auditor or virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
     </div>`;
   }
   function renderIntro(){
@@ -754,7 +754,7 @@ if (params.has("sim")){
     }
     if (phase !== "play" || state.turn !== me) return;
     if (scanMode){
-      if (p && p.side !== me && !p.revealed && state.scans > 0){ p.revealed = true; state.scans--; state.log = `Scan: ${name(p)} at ${sqName(p.r, p.c)}.`; state.history.push({ round: state.round, side: "H", text: state.log }); scanMode = false; info = null; sfx.reveal(); }
+      if (p && p.side !== me && !p.revealed && state.scans[me] > 0){ p.revealed = true; state.scans[me]--; state.log = `${me === "H" ? "Scan" : "Hack"}: ${name(p)} at ${sqName(p.r, p.c)}.`; state.history.push({ round: state.round, side: me, text: state.log }); scanMode = false; info = null; sfx.reveal(); }
       return render();
     }
     if (p && p.side === me){ sfx.tap(); sel = sel && sel.id === p.id ? null : p; copyMode = false; info = sel ? explain(sel) : null; return render(); }
