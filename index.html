@@ -173,7 +173,8 @@ const BLOCKED = new Set(["3,2","4,2","3,5","4,5"]);
 const SETUP_ROWS = { H: [5,6,7], AI: [0,1,2] }; // every square in these rows is filled, like Stratego
 // Tuning: everything that decides fairness is here.
 const BAL = {
-  LEVEL_EVERY: 3,   // every N rounds the AI side gives +1 to a piece of its choice at UP_MAX or lower (not the self-improver)
+  LEVEL_EVERY: 2,   // every N rounds the AI side gives +1 to a piece of its choice at UP_MAX or lower (not the self-improver or virus)
+  UP_FROM: 10,      // no +1s before this round: the opening is plain Stratego, then the AI takes off
   UP_MAX: 6,        // chosen +1s never touch a piece above this (so they top out at 7; only the self-improver reaches 8 and 9)
   RSI_EVERY: 8,     // the self-improver grows itself +1 every N rounds, no cap but MAX_STR
   MAX_STR: 9, SCANS: 2, COPIES: 2, MAX_ROUNDS: 100,
@@ -261,7 +262,7 @@ function strongest(s, side){ return Math.max(0, ...s.pieces.filter(p => p.side =
 function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, scans: { ...s.scans }, events: [], history: s.history.slice(-40) }; }
 const snap = x => ({ side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
 // which AI pieces may take the pending +1
-const upChoices = s => s.pieces.filter(x => x.side === "AI" && LEVELS_UP(x.type) && x.type !== "I" && x.str <= BAL.UP_MAX);
+const upChoices = s => s.pieces.filter(x => x.side === "AI" && LEVELS_UP(x.type) && x.type !== "I" && x.type !== "A" && x.str <= BAL.UP_MAX); // not the brain, not the virus
 function apply(s0, move){
   const s = clone(s0);
   if (move.up != null){ // the AI side spends its +1 on a piece; the turn does not change
@@ -328,7 +329,7 @@ function apply(s0, move){
       s.round++;
       if (s.rsi){
         const brain = s.pieces.find(x => x.type === "I" && x.side === "AI");
-        if ((s.round - 1) % BAL.LEVEL_EVERY === 0 && upChoices(s).length){ s.pendingUp = true; s.events.push({ kind: "upready" }); }
+        if (s.round >= BAL.UP_FROM && (s.round - 1) % BAL.LEVEL_EVERY === 0 && upChoices(s).length){ s.pendingUp = true; s.events.push({ kind: "upready" }); }
         if ((s.round - 1) % BAL.RSI_EVERY === 0 && brain.str < BAL.MAX_STR){
           brain.str++; s.events.push({ kind: "rsi" }); s.log = "The self-improver grew."; s.history.push({ round: s.round, side: "AI", text: "The 🧠 self-improver grew." });
         }
@@ -424,7 +425,7 @@ const ABOUT = {
   T: p => p.side === "H" ? "A honeypot. Can't move. An AI piece that attacks it switches to the human side." : "A backdoor. Can't move. A human piece that attacks it switches to the AI.",
   F: p => p.side === "H" ? "The datacenter. Can't move. If the AI reaches it, it can never be shut down: the humans lose." : "The AI's kill switch. Can't move. If the humans reach it, the AI is shut down.",
   R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
-  I: () => `The self-improver. Every ${BAL.LEVEL_EVERY} rounds the AI picks a piece at ${BAL.UP_MAX} or lower to get +1, and the self-improver grows itself every ${BAL.RSI_EVERY} rounds. Kill it to stop all growth. At 9 it is superintelligence: it glows red and can't hide.`,
+  I: () => `The self-improver. From round ${BAL.UP_FROM}, every ${BAL.LEVEL_EVERY} rounds the AI picks a piece at ${BAL.UP_MAX} or lower (not the virus) to get +1, and the self-improver grows itself every ${BAL.RSI_EVERY} rounds. Kill it to stop all growth. At 9 it is superintelligence: it glows red and can't hide.`,
 };
 // tiny synthesized sounds, no files
 const SFX = { ctx: null, on: true };
@@ -594,9 +595,9 @@ if (params.has("sim")){
   function render(opts = {}){
     if (phase === "intro") return renderIntro();
     const prev = snapshotRects();
-    const turnsToLevel = BAL.LEVEL_EVERY - ((state.round - 1) % BAL.LEVEL_EVERY);
+    const turnsToLevel = state.round < BAL.UP_FROM ? BAL.UP_FROM - state.round : BAL.LEVEL_EVERY - ((state.round - 1) % BAL.LEVEL_EVERY);
     const brainIn = BAL.RSI_EVERY - ((state.round - 1) % BAL.RSI_EVERY);
-    const pct = 100 * (1 - turnsToLevel / BAL.LEVEL_EVERY);
+    const pct = 100 * (1 - turnsToLevel / (state.round < BAL.UP_FROM ? BAL.UP_FROM - 1 : BAL.LEVEL_EVERY));
     let html = `<div class="left"><div class="top"><div class="t">KILL SWITCH</div><div class="stat">Round <b>${state.round}</b> · ${me === "H" ? "Scans" : "Hacks"} <b>${state.scans[me]}</b></div></div>
     <div class="lvl"><span>AI +${state.level}</span><div class="bar"><i style="width:${state.rsi ? pct : 0}%"></i></div><span>${!state.rsi ? "🧠 stopped" : state.pendingUp ? "+1 to give · 🧠 in " + brainIn : "+1 in " + turnsToLevel + " · 🧠 in " + brainIn}</span></div>
     <div class="boardwrap"><div class="zoom" id="zoom"><div class="board" id="board">`;
@@ -632,7 +633,7 @@ if (params.has("sim")){
     let logHtml;
     if (phase === "setup") logHtml = `<span class="you">Set up${me === "AI" ? " the AI" : ""}.</span> Tap a piece, then another to swap, or an empty square to move it. Then START.`;
     else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up and moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
-    else if (upMode()) logHtml = `<span class="you">Give +1.</span> Tap one of your pieces at ${BAL.UP_MAX} or lower (not the 🧠). Then move.`;
+    else if (upMode()) logHtml = `<span class="you">Give +1.</span> Tap one of your pieces at ${BAL.UP_MAX} or lower (not the 🧠 or 🦠). Then move.`;
     else if (info) logHtml = info;
     else if (state.turn !== me && !state.winner) logHtml = mode === "pass" ? `Waiting for <b>${theirs()}</b>.` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
     else if (!state.winner && /to move\.$/.test(state.log)) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then tap a lit square." : ""}`;
@@ -684,7 +685,7 @@ if (params.has("sim")){
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
     H:  { S: "slides any distance", M: "fights as 3, removes backdoors", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
-    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "every " + BAL.LEVEL_EVERY + " rounds: +1 to a piece you pick; grows to 9", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "from round " + BAL.UP_FROM + ", +1 every " + BAL.LEVEL_EVERY + " rounds to a piece you pick; grows to 9", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
     const alive = (side, t, str) => state.pieces.filter(p => p.side === side && p.type === t && (str == null || p.str === str)).length;
