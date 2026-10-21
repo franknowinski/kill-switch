@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kill Switch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0F14;--panel:#121923;--line:#223041;--line2:#2C3D52;--fg:#E6EDF3;--muted:#8A9BB0;
+  --blue:#5CC8FF;--blue-bg:#10263A;--ink:#06121C;
+  --amber:#F5A524;--amber-bg:#2A1C08;--amber-line:#6B4A12;
+  --red:#FF5C5C;--green:#3DDC84;
+  --display:"Chakra Petch",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);-webkit-tap-highlight-color:transparent}
+body{min-height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button{font:inherit;color:inherit;cursor:pointer}
+h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
+.top{display:flex;justify-content:space-between;align-items:center;padding:8px 16px 4px;gap:8px}
+.top .t{font-family:var(--display);font-size:20px;letter-spacing:1px;white-space:nowrap}
+.stat{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5}
+.stat b{color:var(--fg);font-size:14px;letter-spacing:0}
+.lvl{display:flex;align-items:center;gap:8px;padding:0 16px 6px}
+.lvl .bar{flex:1;height:8px;border-radius:4px;background:var(--panel);border:1px solid var(--amber-line);overflow:hidden}
+.lvl .bar i{display:block;height:100%;background:var(--amber);transition:width .3s}
+.lvl span{font-size:11px;letter-spacing:1px;color:var(--amber);text-transform:uppercase;white-space:nowrap}
+.boardwrap{position:relative;margin:0 16px}
+/* flat board; the .zoom layer scales around the fight square for the battle close-up */
+.zoom{position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1);will-change:transform}
+.board{position:relative;display:grid;grid-template-columns:repeat(8,1fr);gap:3px;aspect-ratio:1;user-select:none}
+.sq{position:relative;border-radius:7px;background:var(--panel);border:1px solid var(--line);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:clamp(14px,4.6vw,22px);min-width:0;padding:0;color:var(--fg)}
+.sq.block{background:#070A0E;border-color:#0f151d}
+.sq.h{touch-action:none}
+.sq.ai{color:var(--amber)}.sq.h{color:var(--blue)}
+.sq.can{box-shadow:inset 0 0 0 3px rgba(92,200,255,.55)}
+.sq.can.ai{box-shadow:inset 0 0 0 3px var(--red)}
+.sq.copy{box-shadow:inset 0 0 0 3px var(--green)}
+.sq.scan{box-shadow:inset 0 0 0 3px var(--green)}
+.sq.up{animation:pulseg 1.1s ease-in-out infinite}
+@keyframes pulseg{0%,100%{box-shadow:inset 0 0 0 3px rgba(61,220,132,.35)}50%{box-shadow:inset 0 0 0 3px rgba(61,220,132,.95)}}
+.sq.last{box-shadow:inset 0 0 0 2px rgba(255,255,255,.3)}
+.sq.over{background:#1a2a3a}
+/* the token: a card with a darker side under it and a soft shadow */
+.pz,.clone{position:absolute;inset:4% 7% 12% 7%;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:600;isolation:isolate;will-change:transform;transition:transform .15s,translate .15s,scale .15s;box-shadow:0 7px 10px rgba(0,0,0,.55);border-top-color:rgba(255,255,255,.22)!important}
+.pz::before,.clone::before{content:"";position:absolute;inset:-1px;border-radius:6px;z-index:-1;transform:translateY(5px);background:var(--side,#0a1826);border:1px solid var(--sideline,#163a55);border-bottom-width:2px}
+.sq.h .pz,.clone.h{background:linear-gradient(180deg,#143353,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue);--side:#0a1826;--sideline:#163a55}
+.sq.ai .pz,.clone.ai{background:linear-gradient(180deg,#3a2708,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);--side:#1a1105;--sideline:#4a3309}
+.sq.asi .pz{box-shadow:0 0 0 2px var(--red),0 0 14px rgba(255,92,92,.7)}
+.sq .q,.clone .q{color:var(--amber);opacity:.85}.sq.h .q,.clone.h .q{color:var(--blue)}
+.sq.sel .pz{translate:0 -5px;scale:1.12;box-shadow:0 12px 14px rgba(0,0,0,.55),0 0 18px rgba(92,200,255,.45)}
+.sq.h:not(.sel) .pz.idle{animation:breathe 2.8s ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes breathe{0%,100%{translate:0 0}50%{translate:0 -2px}}
+.sq .ic,.clone .ic{font-size:.85em;line-height:1}
+.sq .n,.clone .n{position:absolute;right:6%;bottom:-2%;font-size:.58em}
+.pz.drag{transition:none;pointer-events:none;scale:1.15;box-shadow:0 0 22px rgba(92,200,255,.5)}
+.sq.can{animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:inset 0 0 0 3px rgba(92,200,255,.35)}50%{box-shadow:inset 0 0 0 3px rgba(92,200,255,.9)}}
+.sq.can.ai{animation:pulser 1.1s ease-in-out infinite}
+@keyframes pulser{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,92,92,.4)}50%{box-shadow:inset 0 0 0 3px rgba(255,92,92,1)}}
+.pz.reveal,.clone.reveal{animation:flipin .45s ease-out}
+@keyframes flipin{0%{transform:rotateY(90deg) scale(.8)}60%{transform:rotateY(-15deg) scale(1.08)}100%{transform:none}}
+.sq.turned .pz{animation:turnflash .7s ease-out}
+@keyframes turnflash{0%{filter:brightness(1)}30%{filter:brightness(2.2) saturate(2)}100%{filter:brightness(1)}}
+.fx{position:absolute;inset:0;pointer-events:none;z-index:3}
+.clone{font-size:clamp(14px,4.6vw,22px)}
+.burst{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);background:#fff;box-shadow:0 0 0 0 rgba(245,165,36,.9),0 0 0 0 rgba(255,92,92,.7);animation:burst .45s ease-out forwards}
+.burst.big{animation-duration:.8s;--s:12}
+@keyframes burst{0%{opacity:1;transform:translate(-50%,-50%) scale(.4)}100%{opacity:0;transform:translate(-50%,-50%) scale(var(--s,6));box-shadow:0 0 0 14px rgba(245,165,36,0),0 0 0 26px rgba(255,92,92,0)}}
+.spark{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--amber);animation:spark .7s ease-out forwards}
+@keyframes spark{to{transform:translate(var(--dx),var(--dy));opacity:0}}
+.flash{position:fixed;inset:0;pointer-events:none;z-index:8;background:radial-gradient(circle,rgba(245,165,36,.4),transparent 70%);animation:flashout .6s ease-out forwards}
+.board.shake{animation:shake .4s}.board.shake.big{animation:shakebig .6s}
+@keyframes shakebig{0%,100%{transform:none}15%{transform:translate(-9px,4px)}30%{transform:translate(9px,-4px)}45%{transform:translate(-7px,2px)}60%{transform:translate(7px,-2px)}80%{transform:translate(-3px,0)}}
+.dots i{font-style:normal;animation:blink 1.2s infinite}.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,60%,100%{opacity:.2}30%{opacity:1}}
+body.won .board{animation:shake .5s}body.lost .board{animation:shake .5s}
+body.won::after,body.lost::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:8;animation:flashout 1.1s ease-out forwards}
+body.won::after{background:radial-gradient(circle,rgba(61,220,132,.35),transparent 70%)}
+body.lost::after{background:radial-gradient(circle,rgba(255,92,92,.4),transparent 70%)}
+@keyframes shake{0%,100%{transform:none}20%{transform:translate(-6px,2px)}40%{transform:translate(6px,-2px)}60%{transform:translate(-4px,0)}80%{transform:translate(4px,0)}}
+@keyframes flashout{from{opacity:1}to{opacity:0}}
+.ghost.sm{flex:0 0 52px}
+.msg{min-height:40px;margin:8px 16px 0;padding:8px 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-size:14px;line-height:1.4}
+.msg b{color:var(--amber)}
+.msg .you{color:var(--blue)}.msg .them{color:var(--amber)}
+body.me-ai .msg .you,body.me-ai .you{color:var(--amber)}body.me-ai .msg .them{color:var(--blue)}body.me-ai .msg b{color:var(--blue)}
+.link{margin:8px 16px 0;padding:8px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:10.5px;color:var(--muted);word-break:break-all;max-height:64px;overflow:auto;user-select:all}
+.row2{display:flex;gap:8px}.row2 .ghost{font-size:13px}
+.two p{color:var(--muted)}.two{display:flex;flex-direction:column;gap:8px}.two[hidden]{display:none}
+.paste{width:100%;min-height:64px;background:#0d131b;color:var(--fg);border:1px solid var(--line2);border-radius:10px;padding:8px;font:inherit;font-size:12px}
+.msg.over{border-width:2px;display:flex;flex-direction:column;gap:6px}
+.msg.over h1{font-size:24px}.msg.over.win{border-color:var(--green)}.msg.over.lose{border-color:var(--red)}
+.pc{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 5px;border-radius:6px;font-weight:600;font-size:13px;flex-shrink:0}
+.pc.h{background:var(--blue-bg);border:1px solid #1f4b6b;color:var(--blue)}
+.pc.ai{background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber)}
+.actions{display:flex;gap:10px;padding:8px 16px 4px}
+.ghost{flex:1;min-height:46px;border-radius:12px;border:1px solid var(--line2);background:transparent;font-family:var(--display);font-weight:700;letter-spacing:1px;font-size:15px}
+.ghost[aria-pressed="true"]{border-color:var(--green);color:var(--green);background:#0d2418}
+.ghost:disabled{opacity:.4}
+.primary{flex:1;min-height:52px;border-radius:14px;border:0;background:var(--blue);color:var(--ink);font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:1px}
+.overlay{position:fixed;inset:0;background:rgba(5,8,12,.94);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;z-index:5}
+.card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:20px 18px;display:flex;flex-direction:column;gap:12px;margin:auto}
+.card p{margin:0;font-size:14px;line-height:1.5}
+.rules{display:grid;gap:8px;margin:2px 0}
+.rule{display:flex;gap:10px;align-items:center;font-size:15px;line-height:1.35}
+.rule .k{width:40px;height:40px;flex-shrink:0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.rule .k.b{background:var(--blue-bg);border:1px solid #1f4b6b}
+.rule .k.a{background:var(--amber-bg);border:1px solid var(--amber-line)}
+.key{padding:10px 16px 28px;display:flex;flex-direction:column;gap:4px}
+.kh{font-family:var(--display);font-size:13px;letter-spacing:1.5px;text-transform:uppercase;margin:10px 0 2px;display:flex;align-items:center;gap:8px}
+.kh.b{color:var(--blue)}.kh.a{color:var(--amber)}.kh.n{color:var(--muted);text-transform:none;letter-spacing:0;font-family:var(--mono);font-size:12.5px;line-height:1.45;margin-top:14px}
+.kr{display:grid;grid-template-columns:auto minmax(72px,auto) 1fr auto;align-items:center;gap:8px;padding:5px 8px;border-radius:10px;background:#0d131b;border:1px solid #182230;font-size:13px;cursor:pointer}
+.kr .pc{min-width:30px;height:28px;font-size:15px;white-space:nowrap;padding:0 6px}
+.kr .pc.tok{position:relative;width:34px;padding:0}.kr .pc.tok .ic{font-size:15px}.kr .pc.tok .n{position:absolute;right:3px;bottom:0;font-size:9px;font-weight:700}
+.kr .lv{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#182230;color:var(--muted);font-size:10px;font-weight:500;letter-spacing:.5px;vertical-align:1px}
+.kr .kn{font-weight:600;white-space:nowrap}
+.kr .kp{color:var(--muted);font-size:12px;line-height:1.3}
+.kc{font-weight:600;font-size:13px;white-space:nowrap}.kc i{font-style:normal;color:var(--muted);font-weight:400;font-size:11px}
+.kr.gone{opacity:.35}.kr.gone .pc{filter:grayscale(1)}
+.ranks{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.ranks .kr{grid-template-columns:auto 1fr auto;padding:4px 8px}.ranks .kr .kp{display:none}
+.seen{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px;color:var(--muted);padding:2px 8px 4px}
+.seen .pc{min-width:24px;height:22px;font-size:12px}
+.eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+pre{white-space:pre-wrap;padding:16px;font-size:13px}
+/* battle card: the two numbers, big, at the moment of impact; the winner grows, the loser drops out */
+.vsc{position:fixed;z-index:9;pointer-events:none;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 24px 10px;border-radius:14px;background:#0E141Cf4;border:1px solid var(--line2);box-shadow:0 14px 36px rgba(0,0,0,.7);animation:vsin .14s ease-out}
+.vsc.below{transform:translate(-50%,0)}
+@keyframes vsin{from{opacity:0;scale:.7}}
+.vsc .row{display:flex;align-items:center;gap:14px}
+.vsc .pc{min-width:48px;height:46px;font-size:27px;border-radius:10px;transition:transform .22s cubic-bezier(.2,.8,.2,1),opacity .22s,filter .22s}
+.vsc .vt{font-size:11px;color:var(--muted);letter-spacing:1px}
+.vsc .res{font-family:var(--display);font-size:15px;letter-spacing:1.5px;min-height:18px;opacity:0;transition:opacity .15s}
+.vsc.done .res{opacity:1}
+.vsc .res.w{color:var(--green)}.vsc .res.l{color:var(--red)}.vsc .res.n{color:var(--muted)}
+.vsc .pc.won{transform:scale(1.3);box-shadow:0 0 0 2px var(--green),0 0 18px rgba(61,220,132,.6)}
+.vsc .pc.out{transform:scale(.7);opacity:.35;filter:grayscale(1)}
+.vsc.big{padding:18px 30px 12px;border-color:var(--amber)}.vsc.big .pc{min-width:62px;height:58px;font-size:36px}.vsc.big .res{font-size:19px}
+.vsc.fade{animation:vsout .28s ease-in forwards}.vsc.below.fade{animation:vsoutb .28s ease-in forwards}
+@keyframes vsout{to{opacity:0;transform:translate(-50%,-112%) scale(.94)}}
+@keyframes vsoutb{to{opacity:0;transform:translate(-50%,12%) scale(.94)}}
+/* alerts: level-ups and milestones slide in over the top of the board */
+.toasts{position:absolute;left:0;right:0;top:8px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:4}
+.toast{padding:7px 14px;border-radius:999px;background:#2A1C08;border:1px solid var(--amber);color:var(--amber);font-family:var(--display);font-size:13px;letter-spacing:1px;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:tin .25s ease-out, tout .5s ease-in forwards;animation-delay:0s,var(--hold,1.6s);white-space:nowrap}
+.toast.big{font-size:17px;padding:12px 20px;background:#3a0f0f;border-color:var(--red);color:#fff;--hold:3.2s}
+@keyframes tin{from{opacity:0;transform:translateY(-12px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes tout{to{opacity:0;transform:translateY(-10px)}}
+#app{display:flex;flex-direction:column;width:100%}
+@media (min-width:860px){
+  #app{flex-direction:row;align-items:flex-start;gap:32px;max-width:1140px;margin:0 auto;padding:20px 28px}
+  .left{flex:0 0 auto;width:min(560px,calc(100dvh - 160px));position:sticky;top:20px}
+  .right{flex:1;min-width:340px;max-width:480px}
+  .boardwrap{margin:0}.board{gap:4px}.pz,.clone{border-radius:8px}
+  .sq{font-size:24px;border-radius:9px}
+  .top{padding:0 0 6px}.lvl{padding:0 0 10px}
+  .top .t{font-size:24px}
+  .msg{margin:0 0 10px;font-size:15px}.link{margin:0 0 10px}
+  .actions{padding:0 0 10px}
+  .key{padding:14px 0 24px}.ranks{grid-template-columns:1fr 1fr 1fr}
+  .msg.over h1{font-size:28px}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ENGINE-START
+const COLS = 8, ROWS = 8;
+const BLOCKED = new Set(["3,2","4,2","3,5","4,5"]);
+const SETUP_ROWS = { H: [5,6,7], AI: [0,1,2] }; // every square in these rows is filled, like Stratego
+// Tuning: everything that decides fairness is here.
+const BAL = {
+  LEVEL_EVERY: 3,   // every N rounds the AI side gives +1 to a piece of its choice at UP_MAX or lower (not the self-improver)
+  UP_MAX: 6,        // chosen +1s never touch a piece above this (so they top out at 7; only the self-improver reaches 8 and 9)
+  RSI_EVERY: 8,     // the self-improver grows itself +1 every N rounds, no cap but MAX_STR
+  MAX_STR: 9, SCANS: 2, COPIES: 2, MAX_ROUNDS: 100,
+  AGI: 8, ASI: 9,   // milestone levels
+};
+// Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
+// M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (copies the friendly piece next to it),
+// A auditor (the spy: kills a piece at AGI level or above when attacking, else dies), I self-improver (drives the AI's growth;
+// grows itself), X fighter. P persuader was cut in v0.11.13; the engine still understands it.
+// 22 a side: flag, 3 traps, 3 sliders, 2 removers, scanners or AI specials, 10 or 11 fighters. Two front-row squares start empty.
+const ARMIES = {
+  H:  [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["A",2],["C",2],["C",2],
+       ["X",4],["X",4],["X",5],["X",5],["X",6],["X",7],["X",7],["X",8],["X",9]],
+  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["R",2],["I",2],
+       ["X",2],["X",2],["X",3],["X",3],["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",6]],
+};
+const GAPS = 2;
+const LEVELS_UP = t => t !== "F" && t !== "T";
+const COPYABLE = t => !["F","T","R","I"].includes(t);
+// where a piece likes to start: higher = further back
+const PLACE = { X: p => p.str, S: () => 1, M: () => 2, A: () => 4, C: () => 3, R: () => 4, P: () => 3, I: () => 6 };
+function rng(seed){ let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function shuffle(arr, r){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(r() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+function newGame(seed){
+  const r = rng(seed);
+  const pieces = []; let id = 0;
+  for (const side of ["H","AI"]){
+    const rows = SETUP_ROWS[side];
+    const back = side === "H" ? ROWS - 1 : 0;
+    const front = side === "H" ? Math.min(...rows) : Math.max(...rows);
+    const gapCols = shuffle([0,1,2,3,4,5,6,7], r).slice(0, GAPS);
+    const squares = []; for (const row of rows) for (let c = 0; c < COLS; c++) if (!(row === front && gapCols.includes(c))) squares.push([row,c]);
+    shuffle(squares, r);
+    const flagSq = squares.find(s => s[0] === back);
+    const rest = squares.filter(s => s !== flagSq);
+    const fwd = side === "H" ? -1 : 1;
+    const near = rest.filter(s => Math.abs(s[0]-flagSq[0]) + Math.abs(s[1]-flagSq[1]) === 1).sort((a, b) => (b[0] - flagSq[0]) * fwd - (a[0] - flagSq[0]) * fwd); // the square facing the enemy first
+    const far = rest.filter(s => !near.includes(s));
+    // strong pieces at the back, weak at the front, with some jitter
+    const depth = ([row]) => Math.abs(row - back);
+    far.sort((a, b) => (depth(a) + r() * 1.3) - (depth(b) + r() * 1.3));
+    const army = ARMIES[side].map(([type,str]) => ({ type, str }));
+    const flag = army.find(p => p.type === "F"), traps = army.filter(p => p.type === "T");
+    const others = army.filter(p => p.type !== "F" && p.type !== "T").sort((a, b) => (PLACE[b.type](b) + r() * 1.5) - (PLACE[a.type](a) + r() * 1.5));
+    const place = (p, [row,c]) => pieces.push({ id: id++, side, type: p.type, str: p.str, revealed: false, r: row, c });
+    place(flag, flagSq);
+    traps.forEach((t, i) => place(t, near[i] || far.shift()));
+    // the piece that matters most for the endgame always starts on the back row: your CTO, the AI's self-improver
+    const key = side === "H" ? others.reduce((m, p) => p.type === "X" && (!m || p.str > m.str) ? p : m, null) : others.find(p => p.type === "I");
+    if (key){ const bi = far.findIndex(sq => sq[0] === back); if (bi >= 0){ place(key, far.splice(bi, 1)[0]); others.splice(others.indexOf(key), 1); } }
+    others.forEach((p, i) => place(p, far[i]));
+  }
+  return { pieces, turn: "H", round: 1, level: 0, scans: BAL.SCANS, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, pendingUp: false };
+}
+const at = (s, r, c) => s.pieces.find(p => p.r === r && p.c === c);
+const inb = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS && !BLOCKED.has(r + "," + c);
+const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+const other = side => side === "H" ? "AI" : "H";
+const sqName = (r, c) => "abcdefgh"[c] + (r + 1);
+const neighbours = (s, p) => DIRS.map(([dr,dc]) => at(s, p.r + dr, p.c + dc)).filter(Boolean);
+function copySource(s, p){ return neighbours(s, p).filter(q => q.side === p.side && COPYABLE(q.type)).sort((a, b) => b.str - a.str)[0] || null; }
+function legalMoves(s, p){
+  if (p.type === "F" || p.type === "T") return [];
+  const out = [];
+  const canCopy = p.type === "R" && s.copies[p.side] > 0 && copySource(s, p);
+  for (const [dr,dc] of DIRS){
+    let r = p.r + dr, c = p.c + dc;
+    while (inb(r,c)){
+      const q = at(s, r, c);
+      if (q){ if (q.side !== p.side) out.push({ to: [r,c] }); break; }
+      out.push({ to: [r,c] });
+      if (canCopy) out.push({ to: [r,c], copy: true });
+      if (p.type !== "S") break;
+      r += dr; c += dc;
+    }
+  }
+  return out;
+}
+function sideMoves(s, side){
+  const out = [];
+  for (const p of s.pieces) if (p.side === side) for (const m of legalMoves(s, p)) out.push({ p, ...m });
+  return out;
+}
+function strongest(s, side){ return Math.max(0, ...s.pieces.filter(p => p.side === side && LEVELS_UP(p.type)).map(p => p.str)); }
+function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, events: [], history: s.history.slice(-40) }; }
+const snap = x => ({ side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
+// which AI pieces may take the pending +1
+const upChoices = s => s.pieces.filter(x => x.side === "AI" && LEVELS_UP(x.type) && x.type !== "I" && x.str <= BAL.UP_MAX);
+function apply(s0, move){
+  const s = clone(s0);
+  if (move.up != null){ // the AI side spends its +1 on a piece; the turn does not change
+    const x = s.pieces.find(y => y.id === move.up);
+    if (!x || !s.pendingUp || !upChoices(s).some(y => y.id === x.id)) return s;
+    x.str++; s.level++; s.pendingUp = false; s.last = s0.last;
+    s.events.push({ kind: "levelup", r: x.r, c: x.c, id: x.id });
+    s.log = "AI piece +1."; s.history.push({ round: s.round, side: "AI", text: "AI piece +1." });
+    return s;
+  }
+  const p = s.pieces.find(x => x.id === move.p.id);
+  const side = p.side;
+  const [r,c] = move.to;
+  const q = at(s, r, c);
+  const kill = x => { s.pieces = s.pieces.filter(y => y.id !== x.id); };
+  const convert = (x, to) => { x.side = to; x.revealed = true; x.seen = true; };
+  const from = sqName(p.r, p.c), to = sqName(r, c);
+  let line = "";
+  if (move.copy){
+    const src = copySource(s, p);
+    s.copies[side]--;
+    s.pieces.push({ id: Math.max(...s.pieces.map(x => x.id)) + 1, side, type: src.type, str: src.str, revealed: false, r, c });
+    p.revealed = true;
+    line = `${who(side)} replicator copied the piece next to it.`;
+    s.events.push({ kind: "copy", r, c });
+    s.history.push({ round: s.round, side, text: line });
+  }
+  else if (!q){
+    p.r = r; p.c = c;
+    s.history.push({ round: s.round, side, text: `${side === "H" || p.revealed ? name(p) : "AI piece"} ${from} → ${to}` });
+  }
+  else {
+    const ev = { kind: "fight", r, c, a: snap(p), d: snap(q), result: "", line: "" };
+    // a fight shows both pieces once; afterwards the board hides them again on both sides (bots remember via "seen"), except scans and a 9
+    p.seen = true; q.seen = true;
+    if (q.type === "F"){ kill(q); p.r = r; p.c = c; s.winner = side; ev.result = "flag"; line = side === "H" ? "Humans hit the kill switch." : "The AI reached the datacenter."; }
+    else if (q.type === "T"){
+      if (p.type === "M"){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} removed the ${ROLE[q.side][q.type]}.`; }
+      else { kill(q); convert(p, q.side); ev.result = "trapped"; line = `${name(p)} fell into a ${ROLE[q.side][q.type]} and switched sides.`; }
+    }
+    else if (p.type === "A"){
+      if (q.str >= BAL.AGI && LEVELS_UP(q.type)){ kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} took out ${name(q)}.`; }
+      else { kill(p); ev.result = "lose"; line = `${name(p)} lost: ${name(q)} is below ${BAL.AGI}.`; }
+    }
+    else if (p.str > q.str){
+      if (p.type === "P"){ convert(q, side); ev.result = "convert"; line = `${name(p)} turned ${name(q)}.`; }
+      else { kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} beats ${name(q)}.`; }
+    }
+    else if (p.str === q.str){ kill(p); kill(q); ev.result = "tie"; line = `${name(p)} and ${name(q)} both fall.`; }
+    else { kill(p); ev.result = "lose"; line = `${name(p)} loses to ${name(q)}.`; }
+    ev.line = line;
+    s.events.push(ev);
+    s.history.push({ round: s.round, side, text: line, a: ev.a, d: ev.d, result: ev.result, at: to });
+  }
+  for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `Scanner spotted ${name(e)} at ${sqName(e.r, e.c)}.` }); }
+  s.last = { from: [move.p.r, move.p.c], to: [r,c], side };
+  const hadRsi = s.rsi;
+  s.rsi = s.pieces.some(x => x.type === "I" && x.side === "AI");
+  if (!s.rsi) s.pendingUp = false;
+  if (hadRsi && !s.rsi && !s.winner){ line += " The AI can't improve itself anymore."; s.history.push({ round: s.round, side: "H", text: "The AI's self-improver is gone. No more +1s." }); }
+  s.log = line || (side === "H" ? "AI to move." : "Humans to move.");
+  if (!s.winner){
+    if (side === "AI"){
+      s.round++;
+      if (s.rsi){
+        const brain = s.pieces.find(x => x.type === "I" && x.side === "AI");
+        if ((s.round - 1) % BAL.LEVEL_EVERY === 0 && upChoices(s).length){ s.pendingUp = true; s.events.push({ kind: "upready" }); }
+        if ((s.round - 1) % BAL.RSI_EVERY === 0 && brain.str < BAL.MAX_STR){
+          brain.str++; s.events.push({ kind: "rsi" }); s.log = "The self-improver grew."; s.history.push({ round: s.round, side: "AI", text: "The 🧠 self-improver grew." });
+        }
+      }
+      const top = s.pieces.filter(x => x.side === "AI" && LEVELS_UP(x.type)).sort((a, b) => b.str - a.str)[0];
+      if (top && !s.agi && top.str >= BAL.AGI){ s.agi = true; s.events.push({ kind: "agi" }); s.log = "The AI has reached AGI."; s.history.push({ round: s.round, side: "AI", text: "The AI has reached AGI.", mile: true }); }
+      if (top && !s.asi && top.str >= BAL.ASI){ s.asi = true; top.revealed = true; s.events.push({ kind: "asi", r: top.r, c: top.c }); s.log = "The AI has reached superintelligence. It can't hide anymore."; s.history.push({ round: s.round, side: "AI", text: `Superintelligence at ${sqName(top.r, top.c)}.`, mile: true }); }
+      if (s.round > BAL.MAX_ROUNDS){ s.winner = "AI"; s.log = "Time ran out. The AI is too strong to stop."; }
+    }
+    s.turn = other(side);
+    if (!s.winner && sideMoves(s, s.turn).length === 0){ s.winner = other(s.turn); s.log = s.turn === "H" ? "The humans have nothing left that can move." : "The AI has nothing left that can move."; }
+  }
+  return s;
+}
+const who = side => side === "H" ? "Human" : "AI";
+const ROLE = {
+  H:  { S: "drone", M: "engineer", A: "auditor", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", X: "agent", T: "honeypot", F: "datacenter" },
+  AI: { S: "crawler", M: "hacker", A: "auditor", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", X: "agent", T: "backdoor", F: "kill switch" },
+};
+function name(p){ const t = ROLE[p.side][p.type]; return LEVELS_UP(p.type) ? `${who(p.side)} ${t} ${p.str}` : `${who(p.side)} ${t}`; }
+// Bot: plays either side using only enemy info it has seen (revealed, or met in a fight).
+const known = q => q.revealed || q.seen;
+function botUp(s, r){
+  const c = upChoices(s); if (!c.length) return null;
+  let best = null, bs = -Infinity;
+  for (const x of c){ const sc = x.str * 3 + x.r * 0.7 - (x.revealed ? 3 : 0) + r() * 2; if (sc > bs){ bs = sc; best = x; } }
+  return best;
+}
+function botMove(s, side, r){
+  if (side === "AI" && s.pendingUp){ const x = botUp(s, r); if (x) return { up: x.id }; }
+  const moves = sideMoves(s, side);
+  if (!moves.length) return null;
+  const fwd = side === "H" ? -1 : 1;
+  const enemyBack = side === "H" ? 0 : ROWS - 1;
+  const topEnemy = strongest(s, other(side));
+  let best = null, bestScore = -Infinity;
+  for (const m of moves){
+    const p = m.p, [tr,tc] = m.to, q = at(s, tr, tc);
+    let sc = r() * 2;
+    if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 10 + src.str * 4 : -50; }
+    else if (q){
+      if (p.type === "A") sc += known(q) && q.str >= BAL.AGI && LEVELS_UP(q.type) ? 200 : -150;
+      else if (known(q)){
+        if (q.type === "F") sc += 1000;
+        else if (q.type === "T") sc += p.type === "M" ? 80 : -1000;
+        else if (q.type === "I" && p.str > q.str) sc += 300;
+        else if (p.str > q.str) sc += 60 + q.str * 4 + (p.type === "P" ? 25 : 0);
+        else if (p.str === q.str) sc += -4;
+        else sc += -120;
+      } else {
+        sc += p.type === "S" ? 8 : (p.str - 3) * 6;
+        if (tr === enemyBack) sc += 12;
+        if (p.str >= 5 || p.type === "R" || p.type === "P") sc -= 8;
+        if (p.type === "M") sc += 4;
+      }
+    } else {
+      if (p.type === "A" || p.type === "C") sc -= 2;
+      if (p.type === "I") sc -= 30;
+      sc += (tr - p.r) * fwd * 3;
+      if (p.type === "S" && Math.abs(tr - p.r) + Math.abs(tc - p.c) > 1) sc -= 2;
+      for (const [dr,dc] of DIRS){ const e = at(s, tr+dr, tc+dc); if (e && e.side !== side && known(e) && LEVELS_UP(e.type) && e.str > p.str) sc -= 15; }
+      if (p.type === "R" && s.copies[side] > 0){ let bestN = 0; for (const [dr,dc] of DIRS){ const e = at(s, tr+dr, tc+dc); if (e && e.side === side && COPYABLE(e.type)) bestN = Math.max(bestN, e.str); } sc += bestN * 2; }
+      if (s.last && s.last.side === side && s.last.to[0] === p.r && s.last.to[1] === p.c && s.last.from[0] === tr && s.last.from[1] === tc) sc -= 10;
+    }
+    if (sc > bestScore){ bestScore = sc; best = m; }
+  }
+  return best;
+}
+function simulate(games, seed0 = 1){
+  let h = 0, ai = 0, rounds = 0, agi = 0, asi = 0, rsiDead = 0;
+  for (let g = 0; g < games; g++){
+    let s = newGame(seed0 + g); const r = rng(seed0 * 7919 + g);
+    while (!s.winner){ const m = botMove(s, s.turn, r); if (!m) break; s = apply(s, m); }
+    if (s.winner === "H") h++; else ai++;
+    rounds += s.round; if (s.agi) agi++; if (s.asi) asi++; if (!s.rsi) rsiDead++;
+  }
+  return { games, humanWins: h, aiWins: ai, avgRounds: Math.round(rounds / games), agiGames: agi, asiGames: asi, brainKilled: rsiDead };
+}
+// ENGINE-END
+if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, simulate, rng, BAL, ARMIES };
+</script>
+<script>
+const ICON = {
+  H:  { F: "🏢", T: "🍯", S: "🛸", M: "🔧", A: "🔍", C: "📡", R: "🧬", P: "🗣", I: "🧠", X: "" },
+  AI: { F: "🛑", T: "🚪", S: "🕷", M: "💻", A: "🔍", C: "📡", R: "🧬", P: "🗣", I: "🧠", X: "" },
+};
+const ABOUT = {
+  X: p => `Fights: higher number wins, same number kills both. ${p.side === "H" && p.str === 9 ? "The CTO. The only thing that can stop a 9: both fall." : ""}`,
+  S: () => "Slides any distance in a straight line. Scouts, and hits the back row.",
+  M: p => p.side === "H" ? "Fights as a 3, and is the only piece that walks through a backdoor safely, removing it." : "Fights as a 3, and walks through honeypots safely, removing them.",
+  A: () => `The auditor. Kills an ${BAL.AGI} or a 9 if it attacks it: AGI or superintelligence. Loses to anything else, so scan first.`,
+  C: () => "Reveals every hidden enemy piece next to it, every turn. Keep it escorted.",
+  T: p => p.side === "H" ? "A honeypot. Can't move. An AI piece that attacks it switches to the human side." : "A backdoor. Can't move. A human piece that attacks it switches to the AI.",
+  F: p => p.side === "H" ? "The datacenter. Can't move. If the AI reaches it, it can never be shut down: the humans lose." : "The AI's kill switch. Can't move. If the humans reach it, the AI is shut down.",
+  R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
+  I: () => `The self-improver. Every ${BAL.LEVEL_EVERY} rounds the AI picks a piece at ${BAL.UP_MAX} or lower to get +1, and the self-improver grows itself every ${BAL.RSI_EVERY} rounds. Kill it to stop all growth. At 9 it is superintelligence: it glows red and can't hide.`,
+};
+// tiny synthesized sounds, no files
+const SFX = { ctx: null, on: true };
+try { SFX.on = localStorage.getItem("ks-sound") !== "off"; } catch (e) {}
+function tone(freq, dur, type = "square", gain = 0.08, when = 0, slide = null){
+  if (!SFX.on) return;
+  try {
+    if (!SFX.ctx) SFX.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = SFX.ctx, t0 = ctx.currentTime + when;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+const sfx = {
+  tap: () => tone(660, 0.05, "square", 0.04),
+  move: () => tone(440, 0.07, "triangle", 0.06, 0, 520),
+  hit: () => { tone(120, 0.18, "sawtooth", 0.12, 0, 50); tone(900, 0.04, "square", 0.05); },
+  win: () => { tone(523, 0.08, "square", 0.06); tone(784, 0.12, "square", 0.06, 0.08); },
+  lose: () => { tone(330, 0.1, "square", 0.06); tone(220, 0.18, "square", 0.06, 0.1); },
+  reveal: () => tone(880, 0.12, "sine", 0.07, 0, 1320),
+  level: () => { tone(392, 0.1, "triangle", 0.07); tone(494, 0.14, "triangle", 0.07, 0.1); },
+  big: () => { tone(196, 0.5, "sawtooth", 0.09); tone(233, 0.5, "sawtooth", 0.07, 0.05); tone(294, 0.6, "sawtooth", 0.07, 0.1); },
+  gameWin: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, "square", 0.07, i * 0.12)),
+  gameLose: () => { tone(220, 0.6, "sawtooth", 0.09, 0, 110); tone(165, 0.8, "sawtooth", 0.07, 0.1, 80); },
+};
+const app = document.getElementById("app");
+const params = new URLSearchParams(location.search);
+if (params.has("sim")){
+  const res = simulate(Number(params.get("sim")) || 200);
+  app.innerHTML = `<pre>${JSON.stringify({ ...res, BAL }, null, 2)}</pre>`;
+} else {
+  let state, phase = "intro", sel = null, scanMode = false, copyMode = false, info = null, busy = false;
+  let me = "H";          // the side this screen plays
+  let mode = "solo";     // solo: the bot plays the other side. pass: two players, the state travels in a link
+  const SIDE_WORD = { H: "Human", AI: "AI" };
+  const theirs = () => SIDE_WORD[other(me)];
+  // pass-the-link: the whole game state in the URL hash (hidden pieces included; fine between friends, not for strangers)
+  function encState(s){
+    const o = { v: 1, pu: s.pendingUp ? 1 : 0, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, lv: s.level, sc: s.scans, cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
+    return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function decState(code){
+    const o = JSON.parse(decodeURIComponent(escape(atob(code.replace(/-/g, "+").replace(/_/g, "/")))));
+    if (o.v !== 1) throw new Error("version");
+    return { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, level: o.lv, scans: o.sc, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: !!o.asi, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns, pendingUp: !!o.pu };
+  }
+  // two-player links point at the public copy of the game, so they open anywhere (the artifact viewer has no real address of its own)
+  const PUBLIC_URL = "https://franknowinski.github.io/kill-switch/";
+  const onDev = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  function gameLink(){ return (onDev ? location.href.split("#")[0].split("?")[0] : PUBLIC_URL) + "#g=" + encState(state); }
+  function codeFrom(text){ const m = String(text || "").match(/g=([A-Za-z0-9_-]+)/); return m ? m[1] : String(text || "").trim(); }
+  function loadLink(text){
+    try { state = decState(codeFrom(text)); } catch (e) { info = "That link didn't work. Paste the whole link you were sent."; return render(); }
+    mode = "pass"; sel = null; scanMode = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map();
+    me = state.needSetup || state.turn;
+    phase = state.needSetup ? "setup" : state.winner ? "over" : "play";
+    document.body.classList.toggle("me-ai", me === "AI");
+    render();
+  }
+  let shown = new Set();        // piece ids whose face was visible at the last render (for the reveal flip)
+  let prevSides = new Map();    // id -> side at the last render (for the switched-sides flip)
+  const seed = Number(params.get("seed")) || (Date.now() % 1e9);
+  const bot = rng(seed ^ 0xBEEF);
+  const FAST = params.has("over") || params.has("fast");
+  // camera: the board scales around the fight square for the close-up; re-applied without transition after every re-render
+  let camState = null; // { scale, ox, oy }
+  const CAM_OUT = 220; // ms, the quick pull-back after a fight
+  function applyCam(immediate){
+    const zoom = document.getElementById("zoom"); if (!zoom) return;
+    zoom.style.transition = immediate ? "none" : camState ? "" : `transform ${CAM_OUT}ms ease-out`;
+    if (camState){ zoom.style.transformOrigin = camState.ox + "% " + camState.oy + "%"; zoom.style.transform = "scale(" + camState.scale + ")"; }
+    else zoom.style.transform = "";
+    if (immediate){ void zoom.offsetWidth; zoom.style.transition = ""; }
+  }
+  function camIn(r, c, tier){ camState = { scale: [1.12, 1.28, 1.4][tier], ox: (c + .5) * 12.5, oy: (r + .5) * 12.5 }; applyCam(false); }
+  function camOut(){ camState = null; applyCam(false); }
+  // pointer handling: tap, or drag an own piece and drop it on a lit square
+  let ptr = null, dragEl = null;
+  // the dragged piece's centre decides the drop: the nearest legal square, as soon as it is nearer than the piece's own square
+  function dropTarget(from, dx, dy){
+    const src = app.querySelector(`.sq[data-r="${from.r}"][data-c="${from.c}"]`); if (!src) return null;
+    const cx = src.offsetLeft + src.offsetWidth / 2 + dx, cy = src.offsetTop + src.offsetHeight / 2 + dy;
+    const cands = phase === "setup" ? [...app.querySelectorAll(".sq")].filter(q => !q.disabled && SETUP_ROWS[me].includes(+q.dataset.r)) : [...app.querySelectorAll(".sq.can,.sq.copy")];
+    let best = null, bd = Math.hypot(dx, dy);
+    for (const q of cands){ if (q === src) continue; const d = Math.hypot(q.offsetLeft + q.offsetWidth / 2 - cx, q.offsetTop + q.offsetHeight / 2 - cy); if (d < bd){ bd = d; best = q; } }
+    return best;
+  }
+  function bindPointer(){
+    const board = document.getElementById("board"); if (!board) return;
+    board.addEventListener("pointerdown", e => {
+      const sq = e.target.closest(".sq"); if (!sq || sq.disabled || busy) return;
+      ptr = { r: +sq.dataset.r, c: +sq.dataset.c, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
+    });
+  }
+  window.addEventListener("pointermove", e => {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
+    if (!ptr.moved){
+      if (Math.hypot(dx, dy) < 8) return;
+      const p = at(state, ptr.r, ptr.c);
+      const can = p && p.side === me && !scanMode && !upMode() && (phase === "setup" || (phase === "play" && state.turn === me));
+      if (!can){ ptr = null; return; }
+      ptr.moved = true;
+      if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; render(); }
+      dragEl = app.querySelector(`.sq[data-id="${p.id}"] .pz`); if (dragEl) dragEl.classList.add("drag");
+      sfx.tap();
+    }
+    if (dragEl){
+      dragEl.style.translate = `${dx}px ${dy}px`;
+      app.querySelectorAll(".sq.over").forEach(x => x.classList.remove("over"));
+      const t = dropTarget(ptr, dx, dy); if (t) t.classList.add("over");
+    }
+    e.preventDefault();
+  }, { passive: false });
+  window.addEventListener("pointerup", e => {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    const was = ptr; ptr = null;
+    if (!was.moved) return tap(was.r, was.c);
+    app.querySelectorAll(".sq.over").forEach(x => x.classList.remove("over"));
+    const dx = e.clientX - was.x, dy = e.clientY - was.y;
+    const t = dropTarget(was, dx, dy), el = dragEl; dragEl = null;
+    if (t){
+      const src = app.querySelector(`.sq[data-r="${was.r}"][data-c="${was.c}"]`);
+      const fromX = dx - (t.offsetLeft - src.offsetLeft), fromY = dy - (t.offsetTop - src.offsetTop);
+      const id = sel && sel.id;
+      if (el) el.style.translate = "";
+      tap(+t.dataset.r, +t.dataset.c);
+      const nel = id != null ? app.querySelector(`.sq[data-id="${id}"] .pz`) : null;
+      if (nel && !busy){ nel.getAnimations().forEach(a => a.cancel()); nel.animate([{ translate: `${fromX}px ${fromY}px` }, { translate: "0 0" }], { duration: 180, easing: "ease-out" }); }
+    } else if (el){ el.classList.remove("drag"); el.style.translate = ""; }
+  });
+  window.addEventListener("pointercancel", () => { ptr = null; if (dragEl){ dragEl.classList.remove("drag"); dragEl.style.translate = ""; dragEl = null; } });
+  function start(m = "solo", side = "H"){
+    mode = m; me = side; document.body.classList.toggle("me-ai", me === "AI");
+    state = newGame(seed + Math.floor(Math.random()*1e6)); phase = "setup"; sel = null; scanMode = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map();
+    if (mode === "pass"){ state.pass = true; state.needSetup = "AI"; }
+    render();
+  }
+  // after START: solo as the AI means the bot (humans) moves first; two player means the other side sets up and moves first
+  function begin(){
+    sfx.win();
+    if (mode === "pass"){
+      if (me === "H"){ state.needSetup = "AI"; state.turn = "AI"; phase = "handoff"; }   // the humans set up first and hand over
+      else { state.needSetup = null; state.turn = "AI"; phase = "play"; }                 // the AI side sets up second and moves first
+      return render();
+    }
+    phase = "play"; render();
+    if (state.turn !== me) setTimeout(botTurn, 500);
+  }
+  const cls = s => s === "H" ? "h" : "ai";
+  function chip(x){ return `<span class="pc ${cls(x.side)}">${x.type === "X" ? x.str : ICON[x.side][x.type] + (LEVELS_UP(x.type) ? " " + x.str : "")}</span>`; }
+  function faceHtml(p){
+    if (p.type === "X") return `<span>${p.str}</span>`;
+    return `<span class="ic">${ICON[p.side][p.type]}</span>` + (LEVELS_UP(p.type) ? `<span class="n">${p.str}</span>` : "");
+  }
+  function pieceHtml(p, show){ return `<div class="pz${p.side === me && p.id % 3 === 0 ? " idle" : ""}" style="--d:-${(p.id * 7) % 28 / 10}s">${show ? faceHtml(p) : `<span class="q">?</span>`}</div>`; }
+  const color = t => t.replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), '<span class="you">Your</span>').replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
+  // FLIP: remember where every piece was drawn, then slide it from there after a re-render
+  function snapshotRects(){
+    const m = new Map();
+    app.querySelectorAll(".sq[data-id]").forEach(el => m.set(el.dataset.id, { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth }));
+    return m;
+  }
+  function render(opts = {}){
+    if (phase === "intro") return renderIntro();
+    const prev = snapshotRects();
+    const turnsToLevel = BAL.LEVEL_EVERY - ((state.round - 1) % BAL.LEVEL_EVERY);
+    const brainIn = BAL.RSI_EVERY - ((state.round - 1) % BAL.RSI_EVERY);
+    const pct = 100 * (1 - turnsToLevel / BAL.LEVEL_EVERY);
+    let html = `<div class="left"><div class="top"><div class="t">KILL SWITCH</div><div class="stat">Round <b>${state.round}</b> · ${me === "H" ? `Scans <b>${state.scans}</b>` : `Copies <b>${state.copies.AI}</b>`}</div></div>
+    <div class="lvl"><span>AI +${state.level}</span><div class="bar"><i style="width:${state.rsi ? pct : 0}%"></i></div><span>${!state.rsi ? "🧠 stopped" : state.pendingUp ? "+1 to give · 🧠 in " + brainIn : "+1 in " + turnsToLevel + " · 🧠 in " + brainIn}</span></div>
+    <div class="boardwrap"><div class="zoom" id="zoom"><div class="board" id="board">`;
+    const cans = sel ? legalMoves(state, sel) : [];
+    const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
+    const rowOrder = me === "H" ? [...Array(ROWS).keys()] : [...Array(ROWS).keys()].reverse(); // my side at the bottom
+    for (const r of rowOrder) for (let c = 0; c < COLS; c++){
+      const p = at(state, r, c);
+      const k = ["sq"];
+      if (BLOCKED.has(r+","+c)) k.push("block");
+      let inner = "", idAttr = "";
+      if (p){
+        k.push(cls(p.side));
+        const show = p.side === me || p.revealed || phase === "over";
+        if (!show) k.push("hid");
+        if (p.side === "AI" && p.revealed && p.str >= BAL.ASI) k.push("asi");
+        inner = pieceHtml(p, show);
+        idAttr = ` data-id="${p.id}"`;
+        if (show){ nowShown.add(String(p.id)); if (!shown.has(String(p.id)) && prev.has(String(p.id))) flips.push(String(p.id)); }
+        nowSides.set(String(p.id), p.side);
+        if (prevSides.has(String(p.id)) && prevSides.get(String(p.id)) !== p.side) turns.push(String(p.id));
+      }
+      if (sel && sel.r === r && sel.c === c) k.push("sel");
+      if (phase === "setup" && sel && !p && SETUP_ROWS[me].includes(r) && !BLOCKED.has(r+","+c)) k.push("can");
+      const mv = cans.filter(m => m.to[0] === r && m.to[1] === c);
+      if (mv.length) k.push(mv.some(m => m.copy) && copyMode ? "copy" : "can");
+      if (scanMode && p && p.side !== me && !p.revealed) k.push("scan");
+      if (upMode() && p && upChoices(state).some(x => x.id === p.id)) k.push("up");
+      if (state.last && state.last.to[0] === r && state.last.to[1] === c) k.push("last");
+      html += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED.has(r+","+c) ? "disabled" : ""}>${inner}</button>`;
+    }
+    html += `</div><div class="fx" id="fx"></div></div><div class="toasts" id="toasts"></div></div></div><div class="right">`;
+    let logHtml;
+    if (phase === "setup") logHtml = `<span class="you">Set up${me === "AI" ? " the AI" : ""}.</span> Tap a piece, then another to swap, or an empty square to move it. Then START.`;
+    else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up and moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
+    else if (upMode()) logHtml = `<span class="you">Give +1.</span> Tap one of your pieces at ${BAL.UP_MAX} or lower (not the 🧠). Then move.`;
+    else if (info) logHtml = info;
+    else if (state.turn !== me && !state.winner) logHtml = mode === "pass" ? `Waiting for <b>${theirs()}</b>.` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
+    else if (!state.winner && /to move\.$/.test(state.log)) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then tap a lit square." : ""}`;
+    else logHtml = color(state.log);
+    if (phase === "over"){
+      const win = state.winner === me;
+      const lm = state.last ? `Last move: ${state.last.side === me ? "you" : theirs()}, ${sqName(...state.last.from)} → ${sqName(...state.last.to)}.` : "";
+      html += `<div class="msg over ${win ? "win" : "lose"}"><h1>${state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT"}${win ? " · YOU WIN" : " · YOU LOSE"}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${state.round} · AI +${state.level}</div></div>`;
+    } else html += `<div class="msg">${logHtml}</div>`;
+    html += `<div class="actions">`;
+    if (phase === "setup") html += `<button class="ghost" id="shuffle">SHUFFLE</button><button class="primary" id="go">START</button>`;
+    else if (phase === "handoff") html += `<button class="primary" id="share">SEND LINK</button><button class="ghost" id="copylink">COPY</button>`;
+    else if (phase === "play"){
+      if (me === "H") html += `<button class="ghost" id="scan" aria-pressed="${scanMode}" ${state.scans && state.turn === me ? "" : "disabled"}>SCAN (${state.scans})</button>`;
+      if (sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel)) html += `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>`;
+      html += `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart">↻</button>`;
+    }
+    else if (phase === "over") html += `<button class="primary" id="again">PLAY AGAIN</button>`;
+    html += `</div>`;
+    if (phase === "handoff") html += `<div class="link" id="linkbox">${gameLink()}</div>`;
+    html += listHtml() + `</div>`;
+    app.innerHTML = html;
+    // slide moved pieces from where they were
+    if (!FAST && prev.size){
+      app.querySelectorAll(".sq[data-id]").forEach(el => {
+        const id = el.dataset.id, was = prev.get(id);
+        if (!was || (opts.skip && opts.skip.has(id))) return;
+        const now = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth };
+        const dx = was.left - now.left, dy = was.top - now.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        const dist = Math.hypot(dx, dy) / now.width;
+        el.querySelector(".pz").animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }], { duration: Math.min(420, 140 + dist * 70), easing: "cubic-bezier(.2,.8,.2,1)" });
+      });
+      for (const id of flips){ const el = app.querySelector(`.sq[data-id="${id}"] .pz`); if (el) el.classList.add("reveal"); }
+      for (const id of turns){ const el = app.querySelector(`.sq[data-id="${id}"]`); if (el) el.classList.add("turned"); }
+    }
+    shown = nowShown; prevSides = nowSides;
+    applyCam(true);
+    bindPointer();
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
+    on("shuffle", () => { sfx.tap(); start(mode, me); }); on("go", begin); on("again", () => { phase = "intro"; render(); }); on("restart", () => { phase = "intro"; render(); });
+    on("share", async () => { const url = gameLink(); sfx.tap(); try { if (navigator.share) await navigator.share({ title: "Kill Switch", text: "Your move in Kill Switch", url }); else { await navigator.clipboard.writeText(url); info = "Link copied. Paste it to the other player."; render(); } } catch (e) {} });
+    on("copylink", async () => { sfx.tap(); try { await navigator.clipboard.writeText(gameLink()); info = "Link copied."; } catch (e) { info = "Select the link below and copy it."; } render(); });
+    on("scan", () => { sfx.tap(); scanMode = !scanMode; copyMode = false; sel = null; info = scanMode ? "Scan: tap a hidden AI piece to reveal it for good." : null; render(); });
+    on("copybtn", () => { sfx.tap(); copyMode = !copyMode; render(); });
+    app.querySelectorAll(".kr").forEach(el => el.addEventListener("click", () => { const t = el.dataset.type, side = el.dataset.side; sfx.tap(); info = explain({ side, type: t, str: el.dataset.str ? +el.dataset.str : 0 }); render(); }));
+    on("sound", () => { SFX.on = !SFX.on; try { localStorage.setItem("ks-sound", SFX.on ? "on" : "off"); } catch (e) {} sfx.tap(); render(); });
+  }
+  // the key: what each piece is, what it does in three words, and how many are left
+  const POWER = {
+    H:  { S: "slides any distance", M: "fights as 3, removes backdoors", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", I: "every " + BAL.LEVEL_EVERY + " rounds: +1 to a piece you pick; grows to 9", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+  };
+  function listHtml(){
+    const alive = (side, t, str) => state.pieces.filter(p => p.side === side && p.type === t && (str == null || p.str === str)).length;
+    const total = (side, t, str) => ARMIES[side].filter(([tt, ss]) => tt === t && (str == null || ss === str)).length;
+    const krow = (side, t, str) => {
+      const n = alive(side, t, str), m = total(side, t, str);
+      const lvl = t === "X" ? str : ARMIES[side].find(([tt]) => tt === t)[1];
+      const ch = t === "X" ? `<span class="pc ${cls(side)}">${str}</span>` : `<span class="pc tok ${cls(side)}"><span class="ic">${ICON[side][t]}</span>${LEVELS_UP(t) ? `<span class="n">${lvl}</span>` : ""}</span>`;
+      const nm = t === "X" ? (side === "H" && str === 9 ? "CTO" : "agent") : ROLE[side][t];
+      const tag = t !== "X" && LEVELS_UP(t) ? `<span class="lv">lvl ${lvl}</span>` : "";
+      return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${tag}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "stops a 9: both fall" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
+    };
+    const myRanks = [...new Set(ARMIES[me].filter(([t]) => t === "X").map(([, n]) => n))].sort((a, b) => b - a);
+    const specials = side => ["S","M","A","C","I","R","T","F"].filter(t => ARMIES[side].some(([tt]) => tt === t));
+    const aiHidden = state.pieces.filter(p => p.side !== me && p.type === "X" && !p.revealed).length;
+    const aiSeen = state.pieces.filter(p => p.side !== me && p.type === "X" && p.revealed).sort((a, b) => b.str - a.str);
+    return `<div class="key">
+      <div class="kh ${cls(me) === "h" ? "b" : "a"}">Your pieces <span class="kc">${state.pieces.filter(p => p.side === me).length}<i> of ${ARMIES[me].length} left</i></span></div>
+      <div class="ranks">${myRanks.map(n => krow(me, "X", n)).join("")}</div>
+      ${specials(me).map(t => krow(me, t)).join("")}
+      <div class="kh ${cls(me) === "h" ? "a" : "b"}">${theirs()} pieces <span class="kc">${state.pieces.filter(p => p.side !== me).length}<i> of ${ARMIES[other(me)].length} left</i></span></div>
+      <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden${other(me) === "AI" ? ", get +1 over time" : ""}</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
+      ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(p => `<span class="pc ${cls(other(me))}">${p.str}</span>`).join("")}</div>` : ""}
+      ${specials(other(me)).map(t => krow(other(me), t)).join("")}
+      <div class="kh n">A fight: higher number wins, same number both fall. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: your 9 (both fall), the auditor attacking it, or a honeypot. Scanned pieces stay face up; after a fight you have to remember what you saw.${me === "H" ? " Scans: " + state.scans + " left." : ""}</div>
+    </div>`;
+  }
+  function renderIntro(){
+    app.innerHTML = `<div class="overlay"><div class="card">
+      <div class="eyebrow">Stratego, but the AI gets smarter</div><h1>KILL SWITCH</h1>
+      <div class="rules">
+        <div class="rule"><div class="k b">🛑</div><div>Reach the AI's <b>kill switch</b> to win.</div></div>
+        <div class="rule"><div class="k a">🏢</div><div>Keep the AI off your <b>datacenter</b>.</div></div>
+        <div class="rule"><div class="k a">?</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
+        <div class="rule"><div class="k a">🧠</div><div>Its pieces <b>get +1 over time</b>, and its 🧠 grows toward superintelligence. Kill the 🧠 to stop it.</div></div>
+      </div>
+      <p class="eyebrow">Tap or drag a piece to where it goes.</p>
+      <button class="primary" id="play">PLAY</button>
+      <div class="row2"><button class="ghost" id="playai">PLAY AS THE AI</button><button class="ghost" id="two">TWO PLAYER</button></div>
+      <div class="two" id="twobox" hidden><p>Two player works by passing a link back and forth. Start a game and send the link, or paste the link you were sent.</p>
+        <button class="ghost" id="newpass">NEW GAME · I'M THE HUMANS</button>
+        <textarea class="paste" id="paste" placeholder="Paste the link you were sent"></textarea><button class="ghost" id="openpass">OPEN LINK</button></div></div></div>`;
+    document.getElementById("play").addEventListener("click", () => { sfx.win(); start("solo", "H"); });
+    document.getElementById("playai").addEventListener("click", () => { sfx.win(); start("solo", "AI"); });
+    document.getElementById("two").addEventListener("click", () => { sfx.tap(); document.getElementById("twobox").hidden = false; });
+    document.getElementById("newpass").addEventListener("click", () => { sfx.win(); start("pass", "H"); });
+    document.getElementById("openpass").addEventListener("click", () => { sfx.tap(); loadLink(document.getElementById("paste").value); });
+  }
+  function explain(p){
+    const n = LEVELS_UP(p.type) ? `${ROLE[p.side][p.type]} ${p.str}` : ROLE[p.side][p.type];
+    return `<span class="${p.side === me ? "you" : "them"}">${n[0].toUpperCase() + n.slice(1)}.</span> ${ABOUT[p.type](p)}${p.side === me && sel && legalMoves(state, p).length ? " Lit squares are where it can go; red means a fight." : ""}`;
+  }
+  const upMode = () => phase === "play" && me === "AI" && state.turn === "AI" && state.pendingUp && !state.winner;
+  function tap(r, c){
+    if (busy) return;
+    const p = at(state, r, c);
+    if (upMode()){
+      if (p && upChoices(state).some(x => x.id === p.id)){ const before = state; state = apply(state, { up: p.id }); sel = null; info = null; sfx.level(); afterMove(before); }
+      return;
+    }
+    if (phase === "setup"){
+      if (sel && !p && SETUP_ROWS[me].includes(r) && !BLOCKED.has(r+","+c)){ sfx.move(); sel.r = r; sel.c = c; sel = null; return render(); }
+      if (!p || p.side !== me) return;
+      if (!sel){ sfx.tap(); sel = p; return render(); }
+      if (sel.id !== p.id){ sfx.move(); const t = [sel.r, sel.c]; sel.r = p.r; sel.c = p.c; p.r = t[0]; p.c = t[1]; }
+      sel = null; return render();
+    }
+    if (phase !== "play" || state.turn !== me) return;
+    if (scanMode){
+      if (p && p.side !== me && !p.revealed && state.scans > 0){ p.revealed = true; state.scans--; state.log = `Scan: ${name(p)} at ${sqName(p.r, p.c)}.`; state.history.push({ round: state.round, side: "H", text: state.log }); scanMode = false; info = null; sfx.reveal(); }
+      return render();
+    }
+    if (p && p.side === me){ sfx.tap(); sel = sel && sel.id === p.id ? null : p; copyMode = false; info = sel ? explain(sel) : null; return render(); }
+    if (p && p.side !== me && p.revealed && !sel){ sfx.tap(); info = explain(p); return render(); }
+    if (sel){
+      const mv = legalMoves(state, sel).find(m => m.to[0] === r && m.to[1] === c && !!m.copy === copyMode);
+      if (mv){ const before = state; state = apply(state, { p: sel, ...mv }); sel = null; copyMode = false; info = null; afterMove(before).then(() => { if (state.winner) return; if (mode === "pass"){ phase = "handoff"; render(); } else setTimeout(botTurn, FAST ? 0 : 420); }); }
+    }
+  }
+  const wait = ms => new Promise(res => setTimeout(res, ms));
+  const trace = k => { if (params.has("trace")) (window.__trace = window.__trace || []).push([k, Math.round(performance.now())]); }; // ?trace=1: fight timeline for testing
+  // an animation's finished promise only settles while the page is visible; never let a fight hang on it
+  const fin = (a, ms) => Promise.race([a.finished.catch(() => {}), wait(ms + 80)]);
+  function rectOf(r, c){ const el = app.querySelector(`.sq[data-r="${r}"][data-c="${c}"]`); return el ? { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight } : null; }
+  function cloneAt(p, rect, show){
+    const fx = document.getElementById("fx"); if (!fx) return null;
+    const el = document.createElement("div"); el.className = `clone ${cls(p.side)}`;
+    const in7 = rect.width * .07;
+    el.style.left = (rect.left + in7) + "px"; el.style.top = (rect.top + in7) + "px"; el.style.width = (rect.width - 2 * in7) + "px"; el.style.height = (rect.height - 2 * in7) + "px";
+    el.innerHTML = show ? faceHtml(p) : `<span class="q">?</span>`;
+    fx.appendChild(el); return el;
+  }
+  // the attacker lunges into the defender; the loser shakes and shrinks away; then the board re-renders.
+  // Bigger ranks, bigger fight: poke (1-3), clash (4-6), showdown (7+) by the higher rank in the fight.
+  function fightTier(a, d){ const m = Math.max(a.type === "X" || LEVELS_UP(a.type) ? a.str : 0, d.type === "X" || LEVELS_UP(d.type) ? d.str : 0); return m >= 7 ? 2 : m >= 4 ? 1 : 0; }
+  function sparks(x, y){ const fx = document.getElementById("fx"); for (let i = 0; i < 14; i++){ const s = document.createElement("div"); s.className = "spark"; const ang = Math.random() * Math.PI * 2, d = 30 + Math.random() * 50; s.style.left = x + "px"; s.style.top = y + "px"; s.style.setProperty("--dx", Math.cos(ang) * d + "px"); s.style.setProperty("--dy", Math.sin(ang) * d + "px"); s.style.animationDelay = (Math.random() * .1) + "s"; fx.appendChild(s); setTimeout(() => s.remove(), 900); } }
+  function shakeBoard(big){ const b = document.getElementById("board"); if (!b) return; b.classList.remove("shake", "big"); void b.offsetWidth; b.classList.add("shake"); if (big) b.classList.add("big"); }
+  let lastCard = null;
+  async function animateFight(before, ev){
+    const a = before.pieces.find(x => x.r === state.last.from[0] && x.c === state.last.from[1]);
+    const d = before.pieces.find(x => x.r === ev.r && x.c === ev.c);
+    const ra = rectOf(a.r, a.c), rd = rectOf(ev.r, ev.c);
+    if (!ra || !rd) return;
+    const tier = fightTier(a, d);
+    const sqA = app.querySelector(`.sq[data-r="${a.r}"][data-c="${a.c}"]`), sqD = app.querySelector(`.sq[data-r="${ev.r}"][data-c="${ev.c}"]`);
+    const ca = cloneAt(a, ra, a.side === me || a.revealed), cd = cloneAt(d, rd, d.side === me || d.revealed);
+    for (const sq of [sqA, sqD]){ const pz = sq && sq.querySelector(".pz"); if (pz) pz.style.visibility = "hidden"; }
+    const dx = rd.left - ra.left, dy = rd.top - ra.top;
+    if (tier === 2) await wait(200);
+    const lunge = [160, 200, 420][tier];
+    await fin(ca.animate([{ transform: "none" }, { transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }], { duration: lunge, easing: tier === 2 ? "ease-in" : "cubic-bezier(.4,0,1,1)", fill: "forwards" }), lunge);
+    sfx.hit(); if (tier === 2) sfx.big();
+    const fx = document.getElementById("fx");
+    const bx = rd.left + rd.width / 2, by = rd.top + rd.height / 2;
+    const burst = document.createElement("div"); burst.className = "burst" + (tier === 2 ? " big" : ""); burst.style.left = bx + "px"; burst.style.top = by + "px";
+    fx.appendChild(burst); setTimeout(() => burst.remove(), 900);
+    if (tier >= 1) shakeBoard(tier === 2);
+    if (tier === 2){ sparks(bx, by); const fl = document.createElement("div"); fl.className = "flash"; document.body.appendChild(fl); setTimeout(() => fl.remove(), 700); }
+    // reveal the hidden one at the moment of impact
+    if (!(a.side === me || a.revealed)) { ca.innerHTML = faceHtml(a); ca.classList.add("reveal"); }
+    if (!(d.side === me || d.revealed)) { cd.innerHTML = faceHtml(d); cd.classList.add("reveal"); }
+    const card = vsCard(ev, tier); lastCard = card;
+    if (tier === 2) await wait(300); // freeze on impact
+    setTimeout(() => vsResolve(card, ev), [520, 560, 700][tier]); // long enough to read both numbers first
+    const r = ev.result;
+    const aDies = r === "lose" || r === "tie", dDies = r === "win" || r === "flag" || r === "defuse" || r === "tie";
+    const dur = [260, 320, 600][tier];
+    const anims = [];
+    if (dDies) anims.push(fin(cd.animate([{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "scale(.3) rotate(20deg) translateZ(60px)", opacity: 0 }], { duration: dur, easing: "ease-in", fill: "forwards" }), dur));
+    else cd.animate([{ transform: "translateX(0)" }, { transform: "translateX(-5px)" }, { transform: "translateX(5px)" }, { transform: "none" }], { duration: 220 });
+    if (aDies) anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx * 0.4}px,${dy * 0.4}px) scale(.3) rotate(-20deg) translateZ(60px)`, opacity: 0 }], { duration: dur, easing: "ease-in", fill: "forwards" }), dur));
+    else if (r === "trapped") anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12) rotateY(180deg)` }], { duration: 300, fill: "forwards" }), 300));
+    else anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx}px,${dy}px) scale(1)` }], { duration: 160, easing: "ease-out", fill: "forwards" }), 160));
+    await Promise.all(anims);
+    const you = a.side === me;
+    const good = r === "tie" ? null : r === "trapped" ? !you : (!aDies) === you;
+    if (good === true) sfx.win(); else if (good === false) sfx.lose();
+    ca.remove(); cd.remove();
+    return new Set([String(a.id), String(d.id)]);
+  }
+  async function afterMove(before){
+    info = null;
+    const events = state.events;
+    if (state.winner) phase = "over";
+    const fight = events.find(e => e.kind === "fight");
+    let skip = null;
+    if (fight && !FAST){ busy = true; skip = await animateFight(before, fight); }
+    else if (!FAST && state.last && !events.some(e => e.kind === "copy")) sfx.move();
+    render({ skip });
+    if (FAST) return;
+    if (fight){ if (lastCard && lastCard.done && !params.has("hold")) await lastCard.done; lastCard = null; camOut(); trace("zoom out"); await wait(CAM_OUT + 40); busy = false; trace("board free, AI may move"); }
+    for (const e of events){
+      if (e.kind === "reveal") sfx.reveal();
+      if (e.kind === "levelup"){ toast(me === "AI" ? "+1 given" : "+1 · the AI made a piece stronger"); sfx.level(); }
+      if (e.kind === "rsi"){ toast("🧠 the self-improver grew"); sfx.level(); }
+      if (e.kind === "agi"){ toast("THE AI HAS REACHED AGI", true); sfx.big(); }
+      if (e.kind === "asi"){ toast("SUPERINTELLIGENCE · it can't hide now", true); sfx.big(); }
+    }
+    if (state.winner){
+      const win = state.winner === me;
+      document.body.classList.add(win ? "won" : "lost"); setTimeout(() => document.body.classList.remove("won", "lost"), 1200);
+      win ? sfx.gameWin() : sfx.gameLose();
+    }
+  }
+  function toast(text, big){
+    const box = document.getElementById("toasts"); if (!box) return;
+    const el = document.createElement("div"); el.className = "toast" + (big ? " big" : ""); el.textContent = text;
+    if (params.has("hold")) el.style.setProperty("--hold", "999s");
+    box.appendChild(el); setTimeout(() => el.remove(), params.has("hold") ? 1e9 : big ? 3800 : 2200);
+  }
+  // the battle card: shown at impact with both pieces face up; resolve() marks the winner; it fades on its own
+  function vsCard(ev, tier){
+    const sq = app.querySelector(`.sq[data-r="${ev.r}"][data-c="${ev.c}"]`); if (!sq) return null;
+    const b = sq.getBoundingClientRect();
+    const el = document.createElement("div"); el.className = "vsc" + (tier === 2 ? " big" : "");
+    if (b.top < 150){ el.classList.add("below"); el.style.top = (b.bottom + 6) + "px"; } else el.style.top = (b.top - 6) + "px";
+    el.innerHTML = `<div class="row">${chip(ev.a).replace("pc ", "pc a ")}<span class="vt">vs</span>${chip(ev.d).replace("pc ", "pc d ")}</div><div class="res"></div>`;
+    document.body.appendChild(el); trace("card: both numbers");
+    const half = el.offsetWidth / 2 + 8;
+    el.style.left = Math.min(Math.max(b.left + b.width / 2, half), window.innerWidth - half) + "px";
+    const life = params.has("hold") ? 1e9 : [1500, 1700, 2100][tier];
+    el.done = new Promise(res => setTimeout(() => { trace("card fades"); el.classList.add("fade"); setTimeout(() => el.remove(), 300); res(); }, Math.min(life, 1e7)));
+    return el;
+  }
+  function vsResolve(el, ev){
+    if (!el) return;
+    const a = ev.a, r = ev.result, you = a.side === me;
+    const aWins = r === "win" || r === "flag" || r === "defuse" || r === "convert";
+    const good = r === "tie" ? null : r === "trapped" ? !you : aWins === you;
+    const word = r === "tie" ? "BOTH FALL" : r === "flag" ? (you ? "SHUT DOWN" : "IT GOT OUT") : r === "trapped" ? "SWITCHED SIDES" : r === "convert" ? "TURNED" : r === "defuse" ? "REMOVED" : good ? "YOU WIN" : "YOU LOSE";
+    el.querySelector(".pc.a").classList.add(r === "tie" || r === "lose" || r === "trapped" ? "out" : "won");
+    el.querySelector(".pc.d").classList.add(r === "tie" || aWins ? "out" : "won");
+    const res = el.querySelector(".res"); res.textContent = word; res.className = "res " + (good === null ? "n" : good ? "w" : "l");
+    el.classList.add("done"); trace("card: winner shown");
+  }
+  function botTurn(){
+    if (mode !== "solo" || state.turn === me || state.winner) return;
+    const m = botMove(state, other(me), bot);
+    if (!m) return afterMove(state);
+    const before = state; state = apply(state, m);
+    afterMove(before).then(() => { if (m.up != null && !state.winner) setTimeout(botTurn, 700); }); // a +1 first, then the move
+  }
+  if (params.has("over")){ start(); phase = "play"; while (!state.winner){ const m = botMove(state, state.turn, bot); if (!m) break; state = apply(state, m); } phase = "over"; render(); }
+  else if (params.has("battle") || params.has("until")){
+    const want = params.get("until") || "fight";
+    start(); phase = "play"; let n = 0, before = state;
+    while (!state.winner && n++ < 400){ const m = botMove(state, state.turn, bot); if (!m) break; before = state; state = apply(state, m); if (state.events.some(e => e.kind === want)) break; }
+    const after = state; state = before; render(); state = after; afterMove(before);
+  }
+  else if (params.has("play")) start("solo", params.get("side") === "AI" ? "AI" : "H");
+  else if (params.has("g") || /[#&]g=/.test(location.hash)) loadLink(params.get("g") || location.hash);
+  else render();
+}
+</script>
+</body>
+</html>
