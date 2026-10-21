@@ -181,14 +181,14 @@ const BAL = {
 };
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
 // M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (copies the friendly piece next to it),
-// A auditor (the spy: kills a piece at AGI level or above when attacking, else dies), I self-improver (drives the AI's growth;
+// A auditor / virus (the spy: kills a piece at AGI level or above when attacking, else dies; both sides have one), I self-improver (drives the AI's growth;
 // grows itself), X fighter. P persuader was cut in v0.11.13; the engine still understands it.
 // 22 a side: flag, 3 traps, 3 sliders, 2 removers, scanners or AI specials, 10 or 11 fighters. Two front-row squares start empty.
 const ARMIES = {
   H:  [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["A",2],["C",2],["C",2],
        ["X",4],["X",4],["X",5],["X",5],["X",6],["X",7],["X",7],["X",8],["X",9]],
-  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["R",2],["I",2],
-       ["X",2],["X",2],["X",3],["X",3],["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",6]],
+  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["R",2],["I",2],["A",2],
+       ["X",2],["X",3],["X",3],["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",6]],
 };
 const GAPS = 2;
 const LEVELS_UP = t => t !== "F" && t !== "T";
@@ -346,7 +346,7 @@ function apply(s0, move){
 const who = side => side === "H" ? "Human" : "AI";
 const ROLE = {
   H:  { S: "drone", M: "engineer", A: "auditor", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", X: "agent", T: "honeypot", F: "datacenter" },
-  AI: { S: "crawler", M: "hacker", A: "auditor", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", X: "agent", T: "backdoor", F: "kill switch" },
+  AI: { S: "crawler", M: "hacker", A: "virus", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", X: "agent", T: "backdoor", F: "kill switch" },
 };
 function name(p){ const t = ROLE[p.side][p.type]; return LEVELS_UP(p.type) ? `${who(p.side)} ${t} ${p.str}` : `${who(p.side)} ${t}`; }
 // Bot: plays either side using only enemy info it has seen (revealed, or met in a fight).
@@ -413,13 +413,13 @@ if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, s
 <script>
 const ICON = {
   H:  { F: "🏢", T: "🍯", S: "🛸", M: "🔧", A: "🔍", C: "📡", R: "🧬", P: "🗣", I: "🧠", X: "" },
-  AI: { F: "🛑", T: "🚪", S: "🕷", M: "💻", A: "🔍", C: "📡", R: "🧬", P: "🗣", I: "🧠", X: "" },
+  AI: { F: "🛑", T: "🚪", S: "🕷", M: "💻", A: "🦠", C: "📡", R: "🧬", P: "🗣", I: "🧠", X: "" },
 };
 const ABOUT = {
   X: p => `Fights: higher number wins, same number kills both. ${p.side === "H" && p.str === 9 ? "The CTO. The only thing that can stop a 9: both fall." : ""}`,
   S: () => "Slides any distance in a straight line. Scouts, and hits the back row.",
   M: p => p.side === "H" ? "Fights as a 3, and is the only piece that walks through a backdoor safely, removing it." : "Fights as a 3, and walks through honeypots safely, removing them.",
-  A: () => `The auditor. Kills an ${BAL.AGI} or a 9 if it attacks it: AGI or superintelligence. Loses to anything else, so scan first.`,
+  A: p => p.side === "H" ? `The auditor. Kills an ${BAL.AGI} or a 9 if it attacks it: AGI or superintelligence. Loses to anything else, so scan first.` : `The virus. Kills an ${BAL.AGI} or a 9 if it attacks it: the humans' top agents. Loses to anything else, so remember where their big numbers are.`,
   C: () => "Reveals every hidden enemy piece next to it, every turn. Keep it escorted.",
   T: p => p.side === "H" ? "A honeypot. Can't move. An AI piece that attacks it switches to the human side." : "A backdoor. Can't move. A human piece that attacks it switches to the AI.",
   F: p => p.side === "H" ? "The datacenter. Can't move. If the AI reaches it, it can never be shut down: the humans lose." : "The AI's kill switch. Can't move. If the humans reach it, the AI is shut down.",
@@ -684,7 +684,7 @@ if (params.has("sim")){
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
     H:  { S: "slides any distance", M: "fights as 3, removes backdoors", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
-    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", I: "every " + BAL.LEVEL_EVERY + " rounds: +1 to a piece you pick; grows to 9", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", I: "every " + BAL.LEVEL_EVERY + " rounds: +1 to a piece you pick; grows to 9", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
     const alive = (side, t, str) => state.pieces.filter(p => p.side === side && p.type === t && (str == null || p.str === str)).length;
@@ -709,7 +709,7 @@ if (params.has("sim")){
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden${other(me) === "AI" ? ", get +1 over time" : ""}</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
       ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(p => `<span class="pc ${cls(other(me))}">${p.str}</span>`).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
-      <div class="kh n">A fight: higher number wins, same number both fall. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: your 9 (both fall), the auditor attacking it, or a honeypot. Scanned pieces stay face up; after a fight you have to remember what you saw.${me === "H" ? " Scans: " + state.scans + " left." : ""}</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: a 9 (both fall), the auditor or virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw.${me === "H" ? " Scans: " + state.scans + " left." : ""}</div>
     </div>`;
   }
   function renderIntro(){
