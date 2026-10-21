@@ -15,7 +15,7 @@
   --display:"Chakra Petch",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 body{min-height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 button{font:inherit;color:inherit;cursor:pointer}
 h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
@@ -30,10 +30,9 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .boardwrap{position:relative;margin:0 16px}
 /* flat board; the .zoom layer scales around the fight square for the battle close-up */
 .zoom{position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1);will-change:transform}
-.board{position:relative;display:grid;grid-template-columns:repeat(8,1fr);gap:3px;aspect-ratio:1;user-select:none}
+.board{position:relative;display:grid;grid-template-columns:repeat(8,1fr);gap:3px;aspect-ratio:1;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none}
 .sq{position:relative;border-radius:7px;background:var(--panel);border:1px solid var(--line);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:clamp(14px,4.6vw,22px);min-width:0;padding:0;color:var(--fg)}
 .sq.block{background:#070A0E;border-color:#0f151d}
-.sq.h{touch-action:none}
 .sq.ai{color:var(--amber)}.sq.h{color:var(--blue)}
 .sq.can{box-shadow:inset 0 0 0 3px rgba(92,200,255,.55)}
 .sq.can.ai{box-shadow:inset 0 0 0 3px var(--red)}
@@ -181,15 +180,15 @@ const BAL = {
   AGI: 8, ASI: 9,   // milestone levels
 };
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
-// M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (copies the friendly piece next to it),
+// M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (cut in v0.11.27: nobody understood it; the engine still understands it),
 // A auditor / virus (the spy: kills a piece at AGI level or above when attacking, else dies; both sides have one), I self-improver (drives the AI's growth;
 // grows itself), X fighter. P persuader was cut in v0.11.13; the engine still understands it.
-// 22 a side: flag, 3 traps, 3 sliders, 2 removers, scanners or AI specials, 10 or 11 fighters. Two front-row squares start empty.
+// 22 a side: flag, 3 traps, 3 sliders, 2 or 3 removers, scanners, specials, 9 fighters. Two front-row squares start empty.
 const ARMIES = {
   H:  [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["A",2],["C",2],["C",2],
        ["X",4],["X",4],["X",5],["X",5],["X",6],["X",7],["X",7],["X",8],["X",9]],
-  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["R",2],["I",2],["A",2],["C",2],["C",2],
-       ["X",3],["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",6]],
+  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["I",2],["A",2],["C",2],["C",2],
+       ["X",3],["X",4],["X",4],["X",5],["X",5],["X",5],["X",6],["X",6],["X",6]],
 };
 const GAPS = 2;
 const LEVELS_UP = t => t !== "F" && t !== "T";
@@ -198,37 +197,88 @@ const COPYABLE = t => !["F","T","R","I"].includes(t);
 const PLACE = { X: p => p.str, S: () => 1, M: () => 2, A: () => 4, C: () => 3, R: () => 4, P: () => 3, I: () => 6 };
 function rng(seed){ let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function shuffle(arr, r){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(r() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
-function newGame(seed){
+// Lineups: five per side, written back row first. Letters are piece types, digits fighters by strength (the nearest
+// free number if that one is used up), "." an empty front square. Each is applied straight or mirrored, so a lineup's name
+// doesn't give the whole setup away. The CTO and the self-improver stay on the back row in all of them.
+const FORMATIONS = {
+  H: [
+    { name: "Fortress", hint: "Datacenter in the corner, walled in.", rows: ["FT89C57S", "T7MA6MC4", "S54.MTS."] },
+    { name: "Keep", hint: "Datacenter in the middle, big numbers around it.", rows: ["S4TF798T", "5M7TSACM", "4C.6M5.S"] },
+    { name: "Spearhead", hint: "Top agents up front. Attack early.", rows: ["FT9C4ST4", "T5CM6MSA", ".5877MS."] },
+    { name: "Wall", hint: "Honeypots across the back, two fake flags.", rows: ["TFT98S7T", "M7MC6ACS", "54S.5M4."] },
+    { name: "Bluff", hint: "Traps where a flag would be. The flag is elsewhere.", rows: ["T5S8C9TF", "4M7ACM6T", "S54.MS7."] },
+  ],
+  AI: [
+    { name: "Fortress", hint: "Kill switch in the corner, walled in.", rows: ["FT6IC56S", "T6MA5MC4", "S43.5TS."] },
+    { name: "Keep", hint: "Kill switch in the middle, big numbers around it.", rows: ["S6TFTI6C", "5M5T6AC4", "4S.5M3.S"] },
+    { name: "Spearhead", hint: "Top agents up front. Attack early.", rows: ["FT4C3STI", "T54M5ASS", ".666C5M."] },
+    { name: "Wall", hint: "Backdoors across the back, two fake switches.", rows: ["TFTSIC6T", "M6MC5A6S", "54S.534."] },
+    { name: "Bluff", hint: "Traps where a switch would be. The switch is elsewhere.", rows: ["T5S6CITF", "4M6ACM5T", "S43.5S6."] },
+  ],
+};
+const FORM_ROWS = side => side === "H" ? [7,6,5] : [0,1,2]; // back, middle, front
+function formationSpots(side, f, mine, mirror){
+  const pool = mine.slice(), spots = new Map(), digits = [];
+  f.rows.forEach((row, i) => [...row].forEach((ch, c) => {
+    if (ch === ".") return;
+    const sq = [FORM_ROWS(side)[i], mirror ? COLS - 1 - c : c];
+    if (/\d/.test(ch)){ digits.push({ n: +ch, sq }); return; }
+    const k = pool.findIndex(p => p.type === ch); if (k < 0) throw new Error("lineup " + f.name + ": no " + ch + " left");
+    spots.set(pool.splice(k, 1)[0], sq);
+  }));
+  if (pool.some(p => p.type !== "X") || pool.length !== digits.length) throw new Error("lineup " + f.name + ": piece count");
+  for (const exact of [true, false]) for (const d of digits){
+    if (d.done) continue;
+    let bi = -1, bd = 99; pool.forEach((p, k) => { const dd = Math.abs(p.str - d.n); if (dd < bd && (!exact || dd === 0)){ bd = dd; bi = k; } });
+    if (bi >= 0){ spots.set(pool.splice(bi, 1)[0], d.sq); d.done = true; }
+  }
+  return spots;
+}
+// a random spread: flag on the back row with traps around it, strong pieces at the back, weak at the front, with some jitter
+function randomSpots(side, mine, r){
+  const spots = new Map();
+  const rows = SETUP_ROWS[side];
+  const back = side === "H" ? ROWS - 1 : 0;
+  const front = side === "H" ? Math.min(...rows) : Math.max(...rows);
+  const gapCols = shuffle([0,1,2,3,4,5,6,7], r).slice(0, GAPS);
+  const squares = []; for (const row of rows) for (let c = 0; c < COLS; c++) if (!(row === front && gapCols.includes(c))) squares.push([row,c]);
+  shuffle(squares, r);
+  const flagSq = squares.find(sq => sq[0] === back);
+  const rest = squares.filter(sq => sq !== flagSq);
+  const fwd = side === "H" ? -1 : 1;
+  const near = rest.filter(sq => Math.abs(sq[0]-flagSq[0]) + Math.abs(sq[1]-flagSq[1]) === 1).sort((a, b) => (b[0] - flagSq[0]) * fwd - (a[0] - flagSq[0]) * fwd); // the square facing the enemy first
+  const far = rest.filter(sq => !near.includes(sq));
+  const depth = ([row]) => Math.abs(row - back);
+  far.sort((a, b) => (depth(a) + r() * 1.3) - (depth(b) + r() * 1.3));
+  const flag = mine.find(p => p.type === "F"), traps = mine.filter(p => p.type === "T");
+  const others = mine.filter(p => p.type !== "F" && p.type !== "T").sort((a, b) => (PLACE[b.type](b) + r() * 1.5) - (PLACE[a.type](a) + r() * 1.5));
+  spots.set(flag, flagSq);
+  traps.forEach((t, k) => spots.set(t, near[k] || far.shift()));
+  // the piece that matters most for the endgame always starts on the back row: your CTO, the AI's self-improver
+  const key = side === "H" ? others.reduce((m, p) => p.type === "X" && (!m || p.str > m.str) ? p : m, null) : others.find(p => p.type === "I");
+  if (key){ const bi = far.findIndex(sq => sq[0] === back); if (bi >= 0){ spots.set(key, far.splice(bi, 1)[0]); others.splice(others.indexOf(key), 1); } }
+  others.forEach((p, k) => spots.set(p, far[k]));
+  return spots;
+}
+// place one side again: form is an index into FORMATIONS[side], or null for a random spread
+function layoutSide(s, side, form, r){
+  const mine = s.pieces.filter(p => p.side === side), mirror = r() < .5;
+  const spots = form == null ? randomSpots(side, mine, r) : formationSpots(side, FORMATIONS[side][form], mine, mirror);
+  for (const [p, [row, c]] of spots){ p.r = row; p.c = c; }
+  s.forms[side] = form; s.mirror[side] = mirror;
+  return s;
+}
+// forms: { H, AI } lineup indexes (null = random spread); a side left out gets one of its lineups at random
+function newGame(seed, forms = {}){
   const r = rng(seed);
   const pieces = []; let id = 0;
-  for (const side of ["H","AI"]){
-    const rows = SETUP_ROWS[side];
-    const back = side === "H" ? ROWS - 1 : 0;
-    const front = side === "H" ? Math.min(...rows) : Math.max(...rows);
-    const gapCols = shuffle([0,1,2,3,4,5,6,7], r).slice(0, GAPS);
-    const squares = []; for (const row of rows) for (let c = 0; c < COLS; c++) if (!(row === front && gapCols.includes(c))) squares.push([row,c]);
-    shuffle(squares, r);
-    const flagSq = squares.find(s => s[0] === back);
-    const rest = squares.filter(s => s !== flagSq);
-    const fwd = side === "H" ? -1 : 1;
-    const near = rest.filter(s => Math.abs(s[0]-flagSq[0]) + Math.abs(s[1]-flagSq[1]) === 1).sort((a, b) => (b[0] - flagSq[0]) * fwd - (a[0] - flagSq[0]) * fwd); // the square facing the enemy first
-    const far = rest.filter(s => !near.includes(s));
-    // strong pieces at the back, weak at the front, with some jitter
-    const depth = ([row]) => Math.abs(row - back);
-    far.sort((a, b) => (depth(a) + r() * 1.3) - (depth(b) + r() * 1.3));
-    const army = ARMIES[side].map(([type,str]) => ({ type, str }));
-    const flag = army.find(p => p.type === "F"), traps = army.filter(p => p.type === "T");
-    const others = army.filter(p => p.type !== "F" && p.type !== "T").sort((a, b) => (PLACE[b.type](b) + r() * 1.5) - (PLACE[a.type](a) + r() * 1.5));
-    const place = (p, [row,c]) => pieces.push({ id: id++, side, type: p.type, str: p.str, revealed: false, r: row, c });
-    place(flag, flagSq);
-    traps.forEach((t, i) => place(t, near[i] || far.shift()));
-    // the piece that matters most for the endgame always starts on the back row: your CTO, the AI's self-improver
-    const key = side === "H" ? others.reduce((m, p) => p.type === "X" && (!m || p.str > m.str) ? p : m, null) : others.find(p => p.type === "I");
-    if (key){ const bi = far.findIndex(sq => sq[0] === back); if (bi >= 0){ place(key, far.splice(bi, 1)[0]); others.splice(others.indexOf(key), 1); } }
-    others.forEach((p, i) => place(p, far[i]));
-  }
-  return { pieces, turn: "H", round: 1, level: 0, scans: { H: BAL.SCANS, AI: BAL.SCANS }, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, pendingUp: false };
+  for (const side of ["H","AI"]) for (const [type, str] of ARMIES[side]) pieces.push({ id: id++, side, type, str, revealed: false, r: -1, c: -1 });
+  const s = { pieces, turn: "H", round: 1, level: 0, scans: { H: BAL.SCANS, AI: BAL.SCANS }, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, pendingUp: false, forms: {}, mirror: {} };
+  for (const side of ["H","AI"]) layoutSide(s, side, forms[side] === undefined ? Math.floor(r() * FORMATIONS[side].length) : forms[side], r);
+  return s;
 }
+// every lineup must place exactly the army, or the game is broken from the first screen
+for (const side of ["H","AI"]) FORMATIONS[side].forEach((f, k) => formationSpots(side, f, ARMIES[side].map(([type, str], id) => ({ id, side, type, str })), k % 2 === 1));
 const at = (s, r, c) => s.pieces.find(p => p.r === r && p.c === c);
 const inb = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS && !BLOCKED.has(r + "," + c);
 const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
@@ -409,7 +459,7 @@ function simulate(games, seed0 = 1){
   return { games, humanWins: h, aiWins: ai, avgRounds: Math.round(rounds / games), agiGames: agi, asiGames: asi, brainKilled: rsiDead };
 }
 // ENGINE-END
-if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, simulate, rng, BAL, ARMIES };
+if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, simulate, rng, BAL, ARMIES, FORMATIONS, layoutSide };
 </script>
 <script>
 const ICON = {
@@ -516,6 +566,17 @@ if (params.has("sim")){
     for (const q of cands){ if (q === src) continue; const d = Math.hypot(q.offsetLeft + q.offsetWidth / 2 - cx, q.offsetTop + q.offsetHeight / 2 - cy); if (d < bd){ bd = d; best = q; } }
     return best;
   }
+  // select in place while a drag starts: a full render() would replace the square under the finger, and iOS then stops
+  // sending that touch's pointer events (they go to the detached node), so the drag silently dies
+  function lightMoves(){
+    app.querySelectorAll(".sq.sel,.sq.can,.sq.copy").forEach(q => q.classList.remove("sel", "can", "copy"));
+    const src = app.querySelector(`.sq[data-r="${sel.r}"][data-c="${sel.c}"]`); if (src) src.classList.add("sel");
+    const lit = phase === "setup"
+      ? [...app.querySelectorAll(".sq")].filter(q => !q.disabled && !q.dataset.id && SETUP_ROWS[me].includes(+q.dataset.r))
+      : legalMoves(state, sel).map(m => app.querySelector(`.sq[data-r="${m.to[0]}"][data-c="${m.to[1]}"]`));
+    lit.forEach(q => q && q.classList.add("can"));
+    const msg = app.querySelector(".msg"); if (msg && info) msg.innerHTML = info;
+  }
   function bindPointer(){
     const board = document.getElementById("board"); if (!board) return;
     board.addEventListener("pointerdown", e => {
@@ -532,7 +593,7 @@ if (params.has("sim")){
       const can = p && p.side === me && !scanMode && !upMode() && (phase === "setup" || (phase === "play" && state.turn === me));
       if (!can){ ptr = null; return; }
       ptr.moved = true;
-      if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; render(); }
+      if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; lightMoves(); }
       dragEl = app.querySelector(`.sq[data-id="${p.id}"] .pz`); if (dragEl) dragEl.classList.add("drag");
       sfx.tap();
     }
@@ -631,7 +692,7 @@ if (params.has("sim")){
     }
     html += `</div><div class="fx" id="fx"></div></div><div class="toasts" id="toasts"></div></div></div><div class="right">`;
     let logHtml;
-    if (phase === "setup") logHtml = `<span class="you">Set up${me === "AI" ? " the AI" : ""}.</span> Tap a piece, then another to swap, or an empty square to move it. Then START.`;
+    if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Tap two pieces to swap them, or try the next lineup. Then START.`; }
     else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up, then moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
     else if (upMode()) logHtml = `<span class="you">Give +1.</span> Tap one of your pieces at ${BAL.UP_MAX} or lower (not the 🧠 or 🦠). Then move.`;
     else if (info) logHtml = info;
@@ -644,7 +705,7 @@ if (params.has("sim")){
       html += `<div class="msg over ${win ? "win" : "lose"}"><h1>${state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT"}${win ? " · YOU WIN" : " · YOU LOSE"}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${state.round} · AI +${state.level}</div></div>`;
     } else html += `<div class="msg">${logHtml}</div>`;
     html += `<div class="actions">`;
-    if (phase === "setup") html += `<button class="ghost" id="shuffle">SHUFFLE</button><button class="primary" id="go">START</button>`;
+    if (phase === "setup") html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
     else if (phase === "handoff") html += `<button class="primary" id="share">SEND LINK</button><button class="ghost" id="copylink">COPY</button>`;
     else if (phase === "play"){
       html += `<button class="ghost" id="scan" aria-pressed="${scanMode}" ${state.scans[me] && state.turn === me ? "" : "disabled"}>${me === "H" ? "SCAN" : "HACK"} (${state.scans[me]})</button>`;
@@ -674,7 +735,7 @@ if (params.has("sim")){
     applyCam(true);
     bindPointer();
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
-    on("shuffle", () => { sfx.tap(); start(mode, me); }); on("go", begin); on("again", () => { phase = "intro"; render(); }); on("restart", () => { phase = "intro"; render(); });
+    on("lineup", () => { sfx.tap(); const cur = state.forms[me], n = FORMATIONS[me].length; layoutSide(state, me, cur == null ? 0 : cur + 1 >= n ? null : cur + 1, Math.random); sel = null; render(); }); on("go", begin); on("again", () => { phase = "intro"; render(); }); on("restart", () => { phase = "intro"; render(); });
     on("share", async () => { const url = gameLink(); sfx.tap(); try { if (navigator.share) await navigator.share({ title: "Kill Switch", text: "Your move in Kill Switch", url }); else { await navigator.clipboard.writeText(url); info = "Link copied. Paste it to the other player."; render(); } } catch (e) {} });
     on("copylink", async () => { sfx.tap(); try { await navigator.clipboard.writeText(gameLink()); info = "Link copied."; } catch (e) { info = "Select the link below and copy it."; } render(); });
     on("scan", () => { sfx.tap(); scanMode = !scanMode; copyMode = false; sel = null; info = scanMode ? (me === "H" ? "Scan" : "Hack") + ": tap a hidden enemy piece to reveal it for good." : null; render(); });
