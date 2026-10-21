@@ -564,15 +564,15 @@ if (params.has("sim")){
   function start(m = "solo", side = "H"){
     mode = m; me = side; document.body.classList.toggle("me-ai", me === "AI");
     state = newGame(seed + Math.floor(Math.random()*1e6)); phase = "setup"; sel = null; scanMode = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map();
-    if (mode === "pass"){ state.pass = true; state.needSetup = "AI"; }
+    if (mode === "pass"){ state.pass = true; state.needSetup = other(side); }
     render();
   }
   // after START: solo as the AI means the bot (humans) moves first; two player means the other side sets up and moves first
   function begin(){
     sfx.win();
     if (mode === "pass"){
-      if (me === "H"){ state.needSetup = "AI"; state.turn = "AI"; phase = "handoff"; }   // the humans set up first and hand over
-      else { state.needSetup = null; state.turn = "AI"; phase = "play"; }                 // the AI side sets up second and moves first
+      if (state.needSetup === me){ state.needSetup = null; state.turn = me; phase = "play"; }   // second to set up moves first
+      else { state.needSetup = other(me); state.turn = other(me); phase = "handoff"; }        // the creator hands over
       return render();
     }
     phase = "play"; render();
@@ -632,7 +632,7 @@ if (params.has("sim")){
     html += `</div><div class="fx" id="fx"></div></div><div class="toasts" id="toasts"></div></div></div><div class="right">`;
     let logHtml;
     if (phase === "setup") logHtml = `<span class="you">Set up${me === "AI" ? " the AI" : ""}.</span> Tap a piece, then another to swap, or an empty square to move it. Then START.`;
-    else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up and moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
+    else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up, then moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
     else if (upMode()) logHtml = `<span class="you">Give +1.</span> Tap one of your pieces at ${BAL.UP_MAX} or lower (not the 🧠 or 🦠). Then move.`;
     else if (info) logHtml = info;
     else if (state.turn !== me && !state.winner) logHtml = mode === "pass" ? `Waiting for <b>${theirs()}</b>.` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
@@ -726,12 +726,13 @@ if (params.has("sim")){
       <button class="primary" id="play">PLAY</button>
       <div class="row2"><button class="ghost" id="playai">PLAY AS THE AI</button><button class="ghost" id="two">TWO PLAYER</button></div>
       <div class="two" id="twobox" hidden><p>Two player works by passing a link back and forth. Start a game and send the link, or paste the link you were sent.</p>
-        <button class="ghost" id="newpass">NEW GAME · I'M THE HUMANS</button>
+        <div class="row2"><button class="ghost" id="newpass">NEW · I'M THE HUMANS</button><button class="ghost" id="newpassai">NEW · I'M THE AI</button></div>
         <textarea class="paste" id="paste" placeholder="Paste the link you were sent"></textarea><button class="ghost" id="openpass">OPEN LINK</button></div></div></div>`;
     document.getElementById("play").addEventListener("click", () => { sfx.win(); start("solo", "H"); });
     document.getElementById("playai").addEventListener("click", () => { sfx.win(); start("solo", "AI"); });
     document.getElementById("two").addEventListener("click", () => { sfx.tap(); document.getElementById("twobox").hidden = false; });
     document.getElementById("newpass").addEventListener("click", () => { sfx.win(); start("pass", "H"); });
+    document.getElementById("newpassai").addEventListener("click", () => { sfx.win(); start("pass", "AI"); });
     document.getElementById("openpass").addEventListener("click", () => { sfx.tap(); loadLink(document.getElementById("paste").value); });
   }
   function explain(p){
