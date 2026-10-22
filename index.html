@@ -123,22 +123,23 @@ body.me-ai .msg .you,body.me-ai .you{color:var(--amber)}body.me-ai .msg .them{co
 .seen .pc{min-width:24px;height:22px;font-size:12px}
 .eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
 pre{white-space:pre-wrap;padding:16px;font-size:13px}
-/* battle card: the two numbers, big, at the moment of impact; the winner grows, the loser drops out */
-.vsc{position:fixed;z-index:9;pointer-events:none;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 24px 10px;border-radius:14px;background:#0E141Cf4;border:1px solid var(--line2);box-shadow:0 14px 36px rgba(0,0,0,.7);animation:vsin .14s ease-out}
-.vsc.below{transform:translate(-50%,0)}
-@keyframes vsin{from{opacity:0;scale:.7}}
-.vsc .row{display:flex;align-items:center;gap:14px}
-.vsc .pc{min-width:48px;height:46px;font-size:27px;border-radius:10px;transition:transform .22s cubic-bezier(.2,.8,.2,1),opacity .22s,filter .22s}
+/* battle card: the two pieces, big, at the moment of impact; always the same size, centred over the half of the board away from the fight */
+.vsc{position:fixed;z-index:9;pointer-events:none;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:min(300px,calc(100vw - 32px));padding:16px 16px 12px;border-radius:16px;background:#0E141C;border:1px solid var(--line2);box-shadow:0 14px 36px rgba(0,0,0,.7);animation:vsin .14s ease-out}
+@keyframes vsin{from{opacity:0;scale:.85}}
+.vsc .row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;justify-items:center;gap:10px;width:100%}
+.vsc .side{min-width:0;max-width:100%;display:flex;flex-direction:column;align-items:center;gap:5px;transition:opacity .22s,filter .22s,transform .22s cubic-bezier(.2,.8,.2,1)}
+.vsc .pc{width:84px;min-width:0;height:64px;padding:0;gap:4px;font-size:30px;border-radius:12px;transition:box-shadow .22s}
+.vsc .pc .n{font-size:30px}.vsc .pc .i{font-size:24px}
+.vsc .nm{font-size:11px;line-height:1.35;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:center;overflow-wrap:anywhere}.vsc .nm b{display:block;font-weight:600;color:var(--fg)}
 .vsc .vt{font-size:11px;color:var(--muted);letter-spacing:1px}
-.vsc .res{font-family:var(--display);font-size:15px;letter-spacing:1.5px;min-height:18px;opacity:0;transition:opacity .15s}
+.vsc .res{font-family:var(--display);font-size:17px;letter-spacing:1.5px;min-height:20px;opacity:0;transition:opacity .15s}
 .vsc.done .res{opacity:1}
 .vsc .res.w{color:var(--green)}.vsc .res.l{color:var(--red)}.vsc .res.n{color:var(--muted)}
-.vsc .pc.won{transform:scale(1.3);box-shadow:0 0 0 2px var(--green),0 0 18px rgba(61,220,132,.6)}
-.vsc .pc.out{transform:scale(.7);opacity:.35;filter:grayscale(1)}
-.vsc.big{padding:18px 30px 12px;border-color:var(--amber)}.vsc.big .pc{min-width:62px;height:58px;font-size:36px}.vsc.big .res{font-size:19px}
-.vsc.fade{animation:vsout .28s ease-in forwards}.vsc.below.fade{animation:vsoutb .28s ease-in forwards}
-@keyframes vsout{to{opacity:0;transform:translate(-50%,-112%) scale(.94)}}
-@keyframes vsoutb{to{opacity:0;transform:translate(-50%,12%) scale(.94)}}
+.vsc .side.won{transform:scale(1.06)}.vsc .side.won .pc{box-shadow:0 0 0 2px var(--green),0 0 16px rgba(61,220,132,.55)}
+.vsc .side.out{opacity:.45;filter:grayscale(1);transform:scale(.94)}
+.vsc.big{border-color:var(--amber)}.vsc.big .res{font-size:20px}
+.vsc.fade{animation:vsout .28s ease-in forwards}
+@keyframes vsout{to{opacity:0;transform:translate(-50%,-50%) scale(.94)}}
 /* alerts: level-ups and milestones slide in over the top of the board */
 .toasts{position:absolute;left:0;right:0;top:8px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:4}
 .toast{padding:7px 14px;border-radius:999px;background:#2A1C08;border:1px solid var(--amber);color:var(--amber);font-family:var(--display);font-size:13px;letter-spacing:1px;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:tin .25s ease-out, tout .5s ease-in forwards;animation-delay:0s,var(--hold,1.6s);white-space:nowrap}
@@ -184,7 +185,7 @@ const ARMIES = {
   H:  [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["A",2],["C",2],["C",2],
        ["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",7],["X",8],["X",9]],
   AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["I",2],["A",2],["C",2],["C",2],["K",3],
-       ["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",7],["X",7]],
+       ["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",7],["X",8]],
 };
 const GAPS = 2;
 const LEVELS_UP = t => t !== "F" && t !== "T";
@@ -370,7 +371,7 @@ function apply(s0, move){
           brain.str++; s.events.push({ kind: "rsi" }); s.log = "The self-improver grew."; s.history.push({ round: s.round, side: "AI", text: "The 🧠 self-improver grew." });
         }
       }
-      const top = s.pieces.filter(x => x.side === "AI" && LEVELS_UP(x.type)).sort((a, b) => b.str - a.str)[0];
+      const top = s.pieces.find(x => x.type === "I" && x.side === "AI"); // the milestones are the 🧠's: the AI's 8 fighter starts at AGI strength, the 🧠 has to get there
       if (top && !s.agi && top.str >= BAL.AGI){ s.agi = true; s.events.push({ kind: "agi" }); s.log = "The AI has reached AGI."; s.history.push({ round: s.round, side: "AI", text: "The AI has reached AGI.", mile: true }); }
       if (top && !s.asi && top.str >= BAL.ASI){ s.asi = true; top.revealed = true; s.events.push({ kind: "asi", r: top.r, c: top.c }); s.log = "The AI has reached superintelligence. It can't hide anymore."; s.history.push({ round: s.round, side: "AI", text: `Superintelligence at ${sqName(top.r, top.c)}.`, mile: true }); }
       if (s.round > BAL.MAX_ROUNDS){ s.winner = "D"; s.log = `Round ${BAL.MAX_ROUNDS} is over and nobody got through. A draw.`; }
@@ -753,7 +754,7 @@ if (params.has("sim")){
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
       ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(p => `<span class="pc ${cls(other(me))}">${p.str}</span>`).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
-      <div class="kh n">A fight: higher number wins, same number both fall. Pieces never level up; only the AI's 🧠 grows. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: a 9 (both fall), the ✂️ power cut or 🦠 virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. Pieces never level up; only the AI's 🧠 grows. The 🧠 at ${BAL.AGI} is AGI; at 9 it is superintelligence and can't hide. What stops a 9: a 9 (both fall), the ✂️ power cut or 🦠 virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
     </div>`;
   }
   function renderIntro(){
@@ -898,14 +899,25 @@ if (params.has("sim")){
   }
   // the battle card: shown at impact with both pieces face up; resolve() marks the winner; it fades on its own
   function vsCard(ev, tier){
-    const sq = app.querySelector(`.sq[data-r="${ev.r}"][data-c="${ev.c}"]`); if (!sq) return null;
-    const b = sq.getBoundingClientRect();
+    const wrap = app.querySelector(".boardwrap"); if (!wrap) return null;
+    const b = wrap.getBoundingClientRect();
     const el = document.createElement("div"); el.className = "vsc" + (tier === 2 ? " big" : "");
-    if (b.top < 150){ el.classList.add("below"); el.style.top = (b.bottom + 6) + "px"; } else el.style.top = (b.top - 6) + "px";
-    el.innerHTML = `<div class="row">${chip(ev.a).replace("pc ", "pc a ")}<span class="vt">vs</span>${chip(ev.d).replace("pc ", "pc d ")}</div><div class="res"></div>`;
+    const side = (x, k) => `<div class="side ${k}"><span class="pc ${cls(x.side)}">${x.type === "X" ? `<b class="n">${x.str}</b>` : `<span class="i">${ICON[x.side][x.type]}</span>${LEVELS_UP(x.type) ? `<b class="n">${x.str}</b>` : ""}`}</span><span class="nm"><b>${x.side === me ? "you" : theirs()}</b>${x.type === "X" ? (x.side === "H" && x.str === 9 ? "CTO" : "agent") : ROLE[x.side][x.type]}</span></div>`;
+    el.innerHTML = `<div class="row">${side(ev.a, "a")}<span class="vt">vs</span>${side(ev.d, "d")}</div><div class="res"></div>`;
+    // centre it over the half of the board the fight is not in (on screen: the AI player sees the board flipped),
+    // so the fight square stays visible, and keep the whole card inside the viewport
+    const sq = app.querySelector(`.sq[data-r="${ev.r}"][data-c="${ev.c}"]`), q = sq ? sq.getBoundingClientRect() : b;
+    const fightHigh = q.top + q.height / 2 < b.top + b.height / 2;
+    el.style.left = (b.left + b.width / 2) + "px";
     document.body.appendChild(el); trace("card: both numbers");
-    const half = el.offsetWidth / 2 + 8;
-    el.style.left = Math.min(Math.max(b.left + b.width / 2, half), window.innerWidth - half) + "px";
+    const h = el.offsetHeight / 2 + 8;
+    const clamp = y => Math.min(Math.max(y, h), window.innerHeight - h);
+    let y = clamp(b.top + b.height * (fightHigh ? 0.72 : 0.28));
+    if (y - h < q.bottom && y + h > q.top){ // the board is scrolled part off screen and the clamp put it on the fight: use the bigger gap
+      const above = q.top, below = window.innerHeight - q.bottom;
+      y = clamp(below >= above ? q.bottom + below / 2 : above / 2);
+    }
+    el.style.top = y + "px";
     const life = params.has("hold") ? 1e9 : [1500, 1700, 2100][tier];
     el.done = new Promise(res => setTimeout(() => { trace("card fades"); el.classList.add("fade"); setTimeout(() => el.remove(), 300); res(); }, Math.min(life, 1e7)));
     return el;
@@ -916,8 +928,8 @@ if (params.has("sim")){
     const aWins = r === "win" || r === "flag" || r === "defuse" || r === "convert";
     const good = r === "tie" ? null : r === "trapped" ? !you : aWins === you;
     const word = r === "tie" ? "BOTH FALL" : r === "flag" ? (you ? "SHUT DOWN" : "IT GOT OUT") : r === "trapped" ? "SWITCHED SIDES" : r === "convert" ? "TURNED" : r === "defuse" ? "REMOVED" : good ? "YOU WIN" : "YOU LOSE";
-    el.querySelector(".pc.a").classList.add(r === "tie" || r === "lose" || r === "trapped" ? "out" : "won");
-    el.querySelector(".pc.d").classList.add(r === "tie" || aWins ? "out" : "won");
+    el.querySelector(".side.a").classList.add(r === "tie" || r === "lose" || r === "trapped" ? "out" : "won");
+    el.querySelector(".side.d").classList.add(r === "tie" || aWins ? "out" : "won");
     const res = el.querySelector(".res"); res.textContent = word; res.className = "res " + (good === null ? "n" : good ? "w" : "l");
     el.classList.add("done"); trace("card: winner shown");
   }
@@ -931,7 +943,7 @@ if (params.has("sim")){
   if (params.has("over")){ start(); phase = "play"; while (!state.winner){ const m = botMove(state, state.turn, bot); if (!m) break; state = apply(state, m); } phase = "over"; render(); }
   else if (params.has("battle") || params.has("until")){
     const want = params.get("until") || "fight";
-    start(); phase = "play"; let n = 0, before = state;
+    start("solo", params.get("side") === "AI" ? "AI" : "H"); phase = "play"; let n = 0, before = state; // &side=AI views it as the AI
     while (!state.winner && n++ < 400){ const m = botMove(state, state.turn, bot); if (!m) break; before = state; state = apply(state, m); if (state.events.some(e => e.kind === want)) break; }
     const after = state; state = before; render(); state = after; afterMove(before);
   }
