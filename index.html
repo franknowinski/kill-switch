@@ -345,7 +345,7 @@ function apply(s0, move){
   }
   else if (!q){
     p.r = r; p.c = c;
-    s.history.push({ round: s.round, side, text: `${side === "H" || p.revealed ? name(p) : "AI piece"} ${from} → ${to}` });
+    s.history.push({ round: s.round, side, text: `${side === "H" || p.revealed ? name(asSeenBy(p, "H")) : "AI piece"} ${from} → ${to}` });
   }
   else {
     const ev = { kind: "fight", r, c, a: snap(p), d: snap(q), result: "", line: "" };
@@ -394,6 +394,7 @@ function apply(s0, move){
       if (s.round > BAL.MAX_ROUNDS){ s.winner = "D"; s.log = `Round ${BAL.MAX_ROUNDS} is over and nobody got through. A draw.`; }
     }
     s.turn = other(side);
+    if (s.pendingUp[s.turn] && !upChoices(s, s.turn).length) s.pendingUp[s.turn] = false; // the other side's move took every piece that could take it
     if (!s.winner && sideMoves(s, s.turn).length === 0){ s.winner = other(s.turn); s.log = s.turn === "H" ? "The humans have nothing left that can move." : "The AI has nothing left that can move."; }
   }
   return s;
@@ -746,7 +747,8 @@ if (params.has("sim")){
     on("copylink", async () => { sfx.tap(); try { await navigator.clipboard.writeText(gameLink()); info = "Link copied."; } catch (e) { info = "Select the link below and copy it."; } render(); });
     on("scan", () => { sfx.tap(); scanMode = !scanMode; copyMode = false; sel = null; info = scanMode ? (me === "H" ? "Scan" : "Hack") + ": tap a hidden enemy piece to reveal it for good." : null; render(); });
     on("copybtn", () => { sfx.tap(); copyMode = !copyMode; render(); });
-    app.querySelectorAll(".kr").forEach(el => el.addEventListener("click", () => { const t = el.dataset.type, side = el.dataset.side; sfx.tap(); info = explain({ side, type: t, str: el.dataset.str ? +el.dataset.str : 0 }); render(); }));
+    // a key row explains a piece type, so it is never disguised (seen: true)
+    app.querySelectorAll(".kr").forEach(el => el.addEventListener("click", () => { const t = el.dataset.type, side = el.dataset.side; sfx.tap(); info = explain({ side, type: t, str: el.dataset.str ? +el.dataset.str : (ARMIES[side].find(([tt]) => tt === t) || [0, 0])[1], seen: true }); render(); }));
     on("sound", () => { SFX.on = !SFX.on; try { localStorage.setItem("ks-sound", SFX.on ? "on" : "off"); } catch (e) {} sfx.tap(); render(); });
   }
   // the key: what each piece is, what it does in three words, and how many are left
@@ -805,11 +807,11 @@ if (params.has("sim")){
     document.getElementById("openpass").addEventListener("click", () => { sfx.tap(); loadLink(document.getElementById("paste").value); });
   }
   function explain(p){
-    const n = LEVELS_UP(p.type) ? `${ROLE[p.side][p.type]} ${p.str}` : ROLE[p.side][p.type];
     p = face(p);
+    const n = LEVELS_UP(p.type) ? `${ROLE[p.side][p.type]} ${p.str}` : ROLE[p.side][p.type];
     return `<span class="${p.side === me ? "you" : "them"}">${n[0].toUpperCase() + n.slice(1)}.</span> ${ABOUT[p.type](p)}${p.side === me && sel && legalMoves(state, p).length ? " Lit squares are where it can go; red means a fight." : ""}`;
   }
-  const upMode = () => phase === "play" && state.turn === me && state.pendingUp[me] && !state.winner;
+  const upMode = () => phase === "play" && state.turn === me && state.pendingUp[me] && !state.winner && upChoices(state, me).length > 0;
   function tap(r, c){
     if (busy) return;
     const p = at(state, r, c);
