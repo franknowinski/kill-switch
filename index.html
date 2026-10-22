@@ -176,7 +176,7 @@ const BAL = {
 };
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
 // M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (cut in v0.11.27: nobody understood it; the engine still understands it),
-// A auditor / virus (the spy: kills a piece at AGI level or above when attacking, else dies; both sides have one), I self-improver (drives the AI's growth;
+// A power cut / virus (the spy: kills a piece at AGI level or above when attacking, else dies; both sides have one), I self-improver (drives the AI's growth;
 // grows itself), K deepfake (the AI's bluff: fights as its number, but a scan or scanner sees a 7 until a fight shows it), X fighter.
 // P persuader was cut in v0.11.13; the engine still understands it.
 // 22 a side: flag, 3 traps, 3 sliders, 2 or 3 removers, scanners, specials, 9 fighters. Two front-row squares start empty.
@@ -382,7 +382,7 @@ function apply(s0, move){
 }
 const who = side => side === "H" ? "Human" : "AI";
 const ROLE = {
-  H:  { S: "drone", M: "engineer", A: "auditor", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "honeypot", F: "datacenter" },
+  H:  { S: "drone", M: "engineer", A: "power cut", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "honeypot", F: "datacenter" },
   AI: { S: "crawler", M: "hacker", A: "virus", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "backdoor", F: "kill switch" },
 };
 function name(p){ const t = ROLE[p.side][p.type]; return LEVELS_UP(p.type) ? `${who(p.side)} ${t} ${p.str}` : `${who(p.side)} ${t}`; }
@@ -442,14 +442,14 @@ if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, s
 </script>
 <script>
 const ICON = {
-  H:  { F: "🏢", T: "🍯", S: "🛸", M: "🔧", A: "🔍", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
+  H:  { F: "🏢", T: "🍯", S: "🛸", M: "🔧", A: "✂️", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
   AI: { F: "🛑", T: "🚪", S: "🕷", M: "💻", A: "🦠", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
 };
 const ABOUT = {
   X: p => `Fights: higher number wins, same number kills both. ${p.side === "H" && p.str === 9 ? "The CTO. The only thing that can stop a 9: both fall." : ""}`,
   S: () => "Slides any distance in a straight line. Scouts, and hits the back row.",
   M: p => p.side === "H" ? "Fights as a 3, and is the only piece that walks through a backdoor safely, removing it." : "Fights as a 3, and walks through honeypots safely, removing them.",
-  A: p => p.side === "H" ? `The auditor. Kills an ${BAL.AGI} or a 9 if it attacks it: AGI or superintelligence. Loses to anything else, so scan first.` : `The virus. Kills an ${BAL.AGI} or a 9 if it attacks it: the humans' top agents. Loses to anything else, so remember where their big numbers are.`,
+  A: p => p.side === "H" ? `The power cut. Pulls the plug on the AI's compute: kills an ${BAL.AGI} or a 9 if it attacks it, AGI or superintelligence. Loses to anything else, so scan first.` : `The virus. Kills an ${BAL.AGI} or a 9 if it attacks it: the humans' top agents. Loses to anything else, so remember where their big numbers are.`,
   C: () => "Reveals every hidden enemy piece next to it, every turn. Keep it escorted.",
   T: p => p.side === "H" ? "A honeypot. Can't move. An AI piece that attacks it switches to the human side." : "A backdoor. Can't move. A human piece that attacks it switches to the AI.",
   F: p => p.side === "H" ? "The datacenter. Can't move. If the AI reaches it, it can never be shut down: the humans lose." : "The AI's kill switch. Can't move. If the humans reach it, the AI is shut down.",
@@ -753,7 +753,7 @@ if (params.has("sim")){
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
       ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(p => `<span class="pc ${cls(other(me))}">${p.str}</span>`).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
-      <div class="kh n">A fight: higher number wins, same number both fall. Pieces never level up; only the AI's 🧠 grows. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: a 9 (both fall), the auditor or virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. Pieces never level up; only the AI's 🧠 grows. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: a 9 (both fall), the ✂️ power cut or 🦠 virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
     </div>`;
   }
   function renderIntro(){
