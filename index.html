@@ -38,8 +38,6 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .sq.can.ai{box-shadow:inset 0 0 0 3px var(--red)}
 .sq.copy{box-shadow:inset 0 0 0 3px var(--green)}
 .sq.scan{box-shadow:inset 0 0 0 3px var(--green)}
-.sq.up{animation:pulseg 1.1s ease-in-out infinite}
-@keyframes pulseg{0%,100%{box-shadow:inset 0 0 0 3px rgba(61,220,132,.35)}50%{box-shadow:inset 0 0 0 3px rgba(61,220,132,.95)}}
 .sq.last{box-shadow:inset 0 0 0 2px rgba(255,255,255,.3)}
 .sq.over{background:#1a2a3a}
 /* the token: a card with a darker side under it and a soft shadow */
@@ -172,9 +170,6 @@ const BLOCKED = new Set(["3,2","4,2","3,5","4,5"]);
 const SETUP_ROWS = { H: [5,6,7], AI: [0,1,2] }; // every square in these rows is filled, like Stratego
 // Tuning: everything that decides fairness is here.
 const BAL = {
-  LEVEL_EVERY: 10,  // every N rounds each side gives +1 to a piece of its choice at UP_MAX or lower (the AI only while its self-improver lives)
-  UP_FROM: 10,      // the first +1s come at this round
-  UP_MAX: 6,        // chosen +1s never touch a piece above this (so they top out at 7; only the self-improver reaches 8 and 9)
   RSI_EVERY: 8,     // the self-improver grows itself +1 every N rounds, no cap but MAX_STR
   MAX_STR: 9, SCANS: 2, COPIES: 2, MAX_ROUNDS: 100, // past MAX_ROUNDS the game is a draw
   AGI: 8, ASI: 9,   // milestone levels
@@ -274,7 +269,7 @@ function newGame(seed, forms = {}){
   const r = rng(seed);
   const pieces = []; let id = 0;
   for (const side of ["H","AI"]) for (const [type, str] of ARMIES[side]) pieces.push({ id: id++, side, type, str, revealed: false, r: -1, c: -1 });
-  const s = { pieces, turn: "H", round: 1, level: 0, hlevel: 0, scans: { H: BAL.SCANS, AI: BAL.SCANS }, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, pendingUp: { H: false, AI: false }, forms: {}, mirror: {} };
+  const s = { pieces, turn: "H", round: 1, scans: { H: BAL.SCANS, AI: BAL.SCANS }, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, forms: {}, mirror: {} };
   for (const side of ["H","AI"]) layoutSide(s, side, forms[side] === undefined ? Math.floor(r() * FORMATIONS[side].length) : forms[side], r);
   return s;
 }
@@ -310,22 +305,12 @@ function sideMoves(s, side){
   return out;
 }
 function strongest(s, side){ return Math.max(0, ...s.pieces.filter(p => p.side === side && LEVELS_UP(p.type)).map(p => p.str)); }
-function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, scans: { ...s.scans }, pendingUp: { ...s.pendingUp }, events: [], history: s.history.slice(-40) }; }
+function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, scans: { ...s.scans }, events: [], history: s.history.slice(-40) }; }
 const snap = x => ({ side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
-// which of a side's pieces may take its pending +1: not the brain, the spies or the deepfake
-const upChoices = (s, side) => s.pieces.filter(x => x.side === side && LEVELS_UP(x.type) && !["I","A","K"].includes(x.type) && x.str <= BAL.UP_MAX);
 // what `viewer` knows a piece to be: a deepfake looks like a 7 to the other side until a fight shows what it is
 const asSeenBy = (q, viewer) => q.type === "K" && q.side !== viewer && !q.seen ? { ...q, type: "X", str: 7 } : q;
 function apply(s0, move){
   const s = clone(s0);
-  if (move.up != null){ // the side to move spends its +1 on a piece; the turn does not change
-    const x = s.pieces.find(y => y.id === move.up);
-    if (!x || x.side !== s.turn || !s.pendingUp[x.side] || !upChoices(s, x.side).some(y => y.id === x.id)) return s;
-    x.str++; if (x.side === "AI") s.level++; else s.hlevel++; s.pendingUp[x.side] = false; s.last = s0.last;
-    s.events.push({ kind: "levelup", r: x.r, c: x.c, id: x.id, side: x.side });
-    s.log = `${who(x.side)} piece +1.`; s.history.push({ round: s.round, side: x.side, text: s.log });
-    return s;
-  }
   const p = s.pieces.find(x => x.id === move.p.id);
   const side = p.side;
   const [r,c] = move.to;
@@ -374,14 +359,11 @@ function apply(s0, move){
   s.last = { from: [move.p.r, move.p.c], to: [r,c], side };
   const hadRsi = s.rsi;
   s.rsi = s.pieces.some(x => x.type === "I" && x.side === "AI");
-  if (!s.rsi) s.pendingUp.AI = false;
-  if (hadRsi && !s.rsi && !s.winner){ line += " The AI can't improve itself anymore."; s.history.push({ round: s.round, side: "H", text: "The AI's self-improver is gone. No more +1s." }); }
+  if (hadRsi && !s.rsi && !s.winner){ line += " The AI can't improve itself anymore."; s.history.push({ round: s.round, side: "H", text: "The AI's self-improver is gone. The AI stops growing." }); }
   s.log = line || (side === "H" ? "AI to move." : "Humans to move.");
   if (!s.winner){
     if (side === "AI"){
       s.round++;
-      if (s.round >= BAL.UP_FROM && (s.round - BAL.UP_FROM) % BAL.LEVEL_EVERY === 0)
-        for (const sd of ["H","AI"]) if ((sd === "H" || s.rsi) && upChoices(s, sd).length){ s.pendingUp[sd] = true; s.events.push({ kind: "upready", side: sd }); }
       if (s.rsi){
         const brain = s.pieces.find(x => x.type === "I" && x.side === "AI");
         if ((s.round - 1) % BAL.RSI_EVERY === 0 && brain.str < BAL.MAX_STR){
@@ -394,7 +376,6 @@ function apply(s0, move){
       if (s.round > BAL.MAX_ROUNDS){ s.winner = "D"; s.log = `Round ${BAL.MAX_ROUNDS} is over and nobody got through. A draw.`; }
     }
     s.turn = other(side);
-    if (s.pendingUp[s.turn] && !upChoices(s, s.turn).length) s.pendingUp[s.turn] = false; // the other side's move took every piece that could take it
     if (!s.winner && sideMoves(s, s.turn).length === 0){ s.winner = other(s.turn); s.log = s.turn === "H" ? "The humans have nothing left that can move." : "The AI has nothing left that can move."; }
   }
   return s;
@@ -407,14 +388,7 @@ const ROLE = {
 function name(p){ const t = ROLE[p.side][p.type]; return LEVELS_UP(p.type) ? `${who(p.side)} ${t} ${p.str}` : `${who(p.side)} ${t}`; }
 // Bot: plays either side using only enemy info it has seen (revealed, or met in a fight).
 const known = q => q.revealed || q.seen;
-function botUp(s, side, r){
-  const c = upChoices(s, side); if (!c.length) return null;
-  let best = null, bs = -Infinity;
-  for (const x of c){ const sc = x.str * 3 + (side === "AI" ? x.r : ROWS - 1 - x.r) * 0.7 - (x.revealed ? 3 : 0) + r() * 2; if (sc > bs){ bs = sc; best = x; } }
-  return best;
-}
 function botMove(s, side, r){
-  if (s.pendingUp[side]){ const x = botUp(s, side, r); if (x) return { up: x.id }; }
   const moves = sideMoves(s, side);
   if (!moves.length) return null;
   const fwd = side === "H" ? -1 : 1;
@@ -480,7 +454,7 @@ const ABOUT = {
   T: p => p.side === "H" ? "A honeypot. Can't move. An AI piece that attacks it switches to the human side." : "A backdoor. Can't move. A human piece that attacks it switches to the AI.",
   F: p => p.side === "H" ? "The datacenter. Can't move. If the AI reaches it, it can never be shut down: the humans lose." : "The AI's kill switch. Can't move. If the humans reach it, the AI is shut down.",
   R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
-  I: () => `The self-improver. It grows itself +1 every ${BAL.RSI_EVERY} rounds, and the AI only gets its +1 every ${BAL.LEVEL_EVERY} rounds while it lives. Kill it to stop all AI growth. At 9 it is superintelligence: it glows red and can't hide.`,
+  I: () => `The self-improver. It grows itself +1 every ${BAL.RSI_EVERY} rounds. Kill it to stop the AI growing. At 9 it is superintelligence: it glows red and can't hide.`,
   K: () => `The deepfake. Fights as a 3, but a scan or a scanner sees it as a 7. A fight shows what it really is.`,
 };
 // tiny synthesized sounds, no files
@@ -523,13 +497,13 @@ if (params.has("sim")){
   const theirs = () => SIDE_WORD[other(me)];
   // pass-the-link: the whole game state in the URL hash (hidden pieces included; fine between friends, not for strangers)
   function encState(s){
-    const o = { v: 1, pu: (s.pendingUp.AI ? 1 : 0) | (s.pendingUp.H ? 2 : 0), hl: s.hlevel, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, lv: s.level, sc: [s.scans.H, s.scans.AI], cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
+    const o = { v: 1, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, sc: [s.scans.H, s.scans.AI], cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
     return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
   function decState(code){
     const o = JSON.parse(decodeURIComponent(escape(atob(code.replace(/-/g, "+").replace(/_/g, "/")))));
     if (o.v !== 1) throw new Error("version");
-    return { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, level: o.lv, hlevel: o.hl || 0, scans: { H: o.sc[0], AI: o.sc[1] }, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: !!o.asi, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns, pendingUp: { AI: !!(o.pu & 1), H: !!(o.pu & 2) } };
+    return { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, scans: { H: o.sc[0], AI: o.sc[1] }, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: !!o.asi, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns };
   }
   // two-player links point at the public copy of the game, so they open anywhere (the artifact viewer has no real address of its own)
   const PUBLIC_URL = "https://franknowinski.github.io/kill-switch/";
@@ -596,7 +570,7 @@ if (params.has("sim")){
     if (!ptr.moved){
       if (Math.hypot(dx, dy) < 8) return;
       const p = at(state, ptr.r, ptr.c);
-      const can = p && p.side === me && !scanMode && !upMode() && (phase === "setup" || (phase === "play" && state.turn === me));
+      const can = p && p.side === me && !scanMode && (phase === "setup" || (phase === "play" && state.turn === me));
       if (!can){ ptr = null; return; }
       ptr.moved = true;
       if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; lightMoves(); }
@@ -663,11 +637,12 @@ if (params.has("sim")){
   function render(opts = {}){
     if (phase === "intro") return renderIntro();
     const prev = snapshotRects();
-    const turnsToLevel = state.round < BAL.UP_FROM ? BAL.UP_FROM - state.round : BAL.LEVEL_EVERY - ((state.round - BAL.UP_FROM) % BAL.LEVEL_EVERY);
     const brainIn = BAL.RSI_EVERY - ((state.round - 1) % BAL.RSI_EVERY);
-    const pct = 100 * (1 - turnsToLevel / (state.round < BAL.UP_FROM ? BAL.UP_FROM - 1 : BAL.LEVEL_EVERY));
+    const brain = state.pieces.find(x => x.type === "I" && x.side === "AI");
+    const grows = state.rsi && brain && brain.str < BAL.MAX_STR; // a 🧠 at MAX_STR never grows again
+    const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : 0;
     let html = `<div class="left"><div class="top"><div class="t">KILL SWITCH</div><div class="stat">Round <b>${state.round}</b> · ${me === "H" ? "Scans" : "Hacks"} <b>${state.scans[me]}</b></div></div>
-    <div class="lvl"><span>+1 each</span><div class="bar"><i style="width:${pct}%"></i></div><span>${state.pendingUp[me] && state.turn === me ? "+1 to give" : "in " + turnsToLevel} · ${state.rsi ? "🧠 in " + brainIn : "🧠 stopped"}</span></div>
+    <div class="lvl"><span>🧠 grows</span><div class="bar"><i style="width:${pct}%"></i></div><span>${grows ? "in " + brainIn : state.rsi ? "maxed" : "stopped"}</span></div>
     <div class="boardwrap"><div class="zoom" id="zoom"><div class="board" id="board">`;
     const cans = sel ? legalMoves(state, sel) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
@@ -693,7 +668,6 @@ if (params.has("sim")){
       const mv = cans.filter(m => m.to[0] === r && m.to[1] === c);
       if (mv.length) k.push(mv.some(m => m.copy) && copyMode ? "copy" : "can");
       if (scanMode && p && p.side !== me && !p.revealed) k.push("scan");
-      if (upMode() && p && upChoices(state, me).some(x => x.id === p.id)) k.push("up");
       if (state.last && state.last.to[0] === r && state.last.to[1] === c) k.push("last");
       html += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED.has(r+","+c) ? "disabled" : ""}>${inner}</button>`;
     }
@@ -701,7 +675,6 @@ if (params.has("sim")){
     let logHtml;
     if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Tap two pieces to swap them, or try the next lineup. Then START.`; }
     else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up, then moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
-    else if (upMode()) logHtml = `<span class="you">Give +1.</span> Tap one of your pieces at ${BAL.UP_MAX} or lower (${me === "AI" ? "not the 🧠, 🦠 or 🎭" : "not the 🔍"}). Then move.`;
     else if (info) logHtml = info;
     else if (state.turn !== me && !state.winner) logHtml = mode === "pass" ? `Waiting for <b>${theirs()}</b>.` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
     else if (!state.winner && /to move\.$/.test(state.log)) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then tap a lit square." : ""}`;
@@ -709,7 +682,7 @@ if (params.has("sim")){
     if (phase === "over"){
       const win = state.winner === me, draw = state.winner === "D";
       const lm = state.last ? `Last move: ${state.last.side === me ? "you" : theirs()}, ${sqName(...state.last.from)} → ${sqName(...state.last.to)}.` : "";
-      html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)} · +1s: humans ${state.hlevel}, AI ${state.level}</div></div>`;
+      html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}</div></div>`;
     } else html += `<div class="msg">${logHtml}</div>`;
     html += `<div class="actions">`;
     if (phase === "setup") html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
@@ -754,7 +727,7 @@ if (params.has("sim")){
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
     H:  { S: "slides any distance", M: "fights as 3, removes backdoors", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
-    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 9, powers AI +1s", K: "fights as 3, scans see a 7", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 9 on its own", K: "fights as 3, scans see a 7", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
     const alive = (side, t, str) => state.pieces.filter(p => p.side === side && p.type === t && (str == null || p.str === str)).length;
@@ -780,7 +753,7 @@ if (params.has("sim")){
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
       ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(p => `<span class="pc ${cls(other(me))}">${p.str}</span>`).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
-      <div class="kh n">A fight: higher number wins, same number both fall. Every ${BAL.LEVEL_EVERY} rounds each side gives one piece +1. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: a 9 (both fall), the auditor or virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. Pieces never level up; only the AI's 🧠 grows. An ${BAL.AGI} is AGI. A 9 is superintelligence and can't hide. What stops a 9: a 9 (both fall), the auditor or virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
     </div>`;
   }
   function renderIntro(){
@@ -790,7 +763,6 @@ if (params.has("sim")){
         <div class="rule"><div class="k b">🛑</div><div>Reach the AI's <b>kill switch</b> to win.</div></div>
         <div class="rule"><div class="k a">🏢</div><div>Keep the AI off your <b>datacenter</b>.</div></div>
         <div class="rule"><div class="k a">?</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
-        <div class="rule"><div class="k b">+1</div><div>Every ${BAL.LEVEL_EVERY} rounds <b>each side</b> gives a piece +1.</div></div>
         <div class="rule"><div class="k a">🧠</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> to stop the AI growing.</div></div>
       </div>
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
@@ -811,14 +783,9 @@ if (params.has("sim")){
     const n = LEVELS_UP(p.type) ? `${ROLE[p.side][p.type]} ${p.str}` : ROLE[p.side][p.type];
     return `<span class="${p.side === me ? "you" : "them"}">${n[0].toUpperCase() + n.slice(1)}.</span> ${ABOUT[p.type](p)}${p.side === me && sel && legalMoves(state, p).length ? " Lit squares are where it can go; red means a fight." : ""}`;
   }
-  const upMode = () => phase === "play" && state.turn === me && state.pendingUp[me] && !state.winner && upChoices(state, me).length > 0;
   function tap(r, c){
     if (busy) return;
     const p = at(state, r, c);
-    if (upMode()){
-      if (p && upChoices(state, me).some(x => x.id === p.id)){ const before = state; state = apply(state, { up: p.id }); sel = null; info = null; sfx.level(); afterMove(before); }
-      return;
-    }
     if (phase === "setup"){
       if (sel && !p && SETUP_ROWS[me].includes(r) && !BLOCKED.has(r+","+c)){ sfx.move(); sel.r = r; sel.c = c; sel = null; return render(); }
       if (!p || p.side !== me) return;
@@ -913,7 +880,6 @@ if (params.has("sim")){
     if (fight){ if (lastCard && lastCard.done && !params.has("hold")) await lastCard.done; lastCard = null; camOut(); trace("zoom out"); await wait(CAM_OUT + 40); busy = false; trace("board free, AI may move"); }
     for (const e of events){
       if (e.kind === "reveal") sfx.reveal();
-      if (e.kind === "levelup"){ toast(e.side === me ? "+1 given" : `+1 · the ${e.side === "AI" ? "AI" : "humans"} made a piece stronger`); sfx.level(); }
       if (e.kind === "rsi"){ toast("🧠 the self-improver grew"); sfx.level(); }
       if (e.kind === "agi"){ toast("THE AI HAS REACHED AGI", true); sfx.big(); }
       if (e.kind === "asi"){ toast("SUPERINTELLIGENCE · it can't hide now", true); sfx.big(); }
@@ -960,7 +926,7 @@ if (params.has("sim")){
     const m = botMove(state, other(me), bot);
     if (!m) return afterMove(state);
     const before = state; state = apply(state, m);
-    afterMove(before).then(() => { if (m.up != null && !state.winner) setTimeout(botTurn, 700); }); // a +1 first, then the move
+    afterMove(before);
   }
   if (params.has("over")){ start(); phase = "play"; while (!state.winner){ const m = botMove(state, state.turn, bot); if (!m) break; state = apply(state, m); } phase = "over"; render(); }
   else if (params.has("battle") || params.has("until")){
