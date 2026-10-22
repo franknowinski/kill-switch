@@ -16,7 +16,7 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
-body{min-height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+body{min-height:100dvh;display:flex;flex-direction:column;overflow-x:clip;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 button{font:inherit;color:inherit;cursor:pointer}
 h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .top{display:flex;justify-content:space-between;align-items:center;padding:8px 16px 4px;gap:8px}
@@ -40,6 +40,12 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .sq.scan{box-shadow:inset 0 0 0 3px var(--green)}
 .sq.last{box-shadow:inset 0 0 0 2px rgba(255,255,255,.3)}
 .sq.over{background:#1a2a3a}
+/* ⚡ the power station: a faint bolt on the square; it lights up once the 🧠 is a 10 */
+.sq.power::after{content:"⚡";position:absolute;font-size:.8em;opacity:.35;pointer-events:none}
+.sq.power[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;z-index:2}
+.sq.power.live{background:#2a2208;border-color:#8a6d12}.sq.power.live::after{opacity:1;animation:bolt 1.2s ease-in-out infinite}
+@keyframes bolt{50%{filter:drop-shadow(0 0 6px #ffd84a)}}
+.primary.cutbtn{background:#ffd84a;color:#1a1405;box-shadow:0 0 18px rgba(255,216,74,.45)}
 /* the token: a card with a darker side under it and a soft shadow */
 .pz,.clone{position:absolute;inset:4% 7% 12% 7%;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:600;isolation:isolate;will-change:transform;transition:transform .15s,translate .15s,scale .15s;box-shadow:0 7px 10px rgba(0,0,0,.55);border-top-color:rgba(255,255,255,.22)!important}
 .pz::before,.clone::before{content:"";position:absolute;inset:-1px;border-radius:6px;z-index:-1;transform:translateY(5px);background:var(--side,#0a1826);border:1px solid var(--sideline,#163a55);border-bottom-width:2px}
@@ -109,16 +115,16 @@ body.me-ai .msg .you,body.me-ai .you{color:var(--amber)}body.me-ai .msg .them{co
 .key{padding:10px 16px 28px;display:flex;flex-direction:column;gap:4px}
 .kh{font-family:var(--display);font-size:13px;letter-spacing:1.5px;text-transform:uppercase;margin:10px 0 2px;display:flex;align-items:center;gap:8px}
 .kh.b{color:var(--blue)}.kh.a{color:var(--amber)}.kh.n{color:var(--muted);text-transform:none;letter-spacing:0;font-family:var(--mono);font-size:12.5px;line-height:1.45;margin-top:14px}
-.kr{display:grid;grid-template-columns:auto minmax(72px,auto) 1fr auto;align-items:center;gap:8px;padding:5px 8px;border-radius:10px;background:#0d131b;border:1px solid #182230;font-size:13px;cursor:pointer}
+.kr{display:grid;grid-template-columns:auto minmax(72px,auto) minmax(0,1fr) auto;align-items:center;gap:8px;padding:5px 8px;border-radius:10px;background:#0d131b;border:1px solid #182230;font-size:13px;cursor:pointer}
 .kr .pc{min-width:30px;height:28px;font-size:15px;white-space:nowrap;padding:0 6px}
 .kr .pc.tok{position:relative;width:34px;padding:0}.kr .pc.tok .ic{font-size:15px}.kr .pc.tok .n{position:absolute;right:3px;bottom:0;font-size:9px;font-weight:700}
 .kr .lv{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#182230;color:var(--muted);font-size:10px;font-weight:500;letter-spacing:.5px;vertical-align:1px}
 .kr .kn{font-weight:600;white-space:nowrap}
-.kr .kp{color:var(--muted);font-size:12px;line-height:1.3}
+.kr .kp{color:var(--muted);font-size:12px;line-height:1.3;min-width:0;overflow-wrap:anywhere}
 .kc{font-weight:600;font-size:13px;white-space:nowrap}.kc i{font-style:normal;color:var(--muted);font-weight:400;font-size:11px}
 .kr.gone{opacity:.35}.kr.gone .pc{filter:grayscale(1)}
 .ranks{display:grid;grid-template-columns:1fr 1fr;gap:4px}
-.ranks .kr{grid-template-columns:auto 1fr auto;padding:4px 8px}.ranks .kr .kp{display:none}
+.ranks .kr{grid-template-columns:auto minmax(0,1fr) auto;padding:4px 8px}.ranks .kr .kn{min-width:0;overflow:hidden;text-overflow:ellipsis}.ranks .kr .kp{display:none}
 .seen{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px;color:var(--muted);padding:2px 8px 4px}
 .seen .pc{min-width:24px;height:22px;font-size:12px}
 .eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
@@ -142,8 +148,9 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 @keyframes vsout{to{opacity:0;transform:translate(-50%,-50%) scale(.94)}}
 /* alerts: level-ups and milestones slide in over the top of the board */
 .toasts{position:absolute;left:0;right:0;top:8px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:4}
-.toast{padding:7px 14px;border-radius:999px;background:#2A1C08;border:1px solid var(--amber);color:var(--amber);font-family:var(--display);font-size:13px;letter-spacing:1px;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:tin .25s ease-out, tout .5s ease-in forwards;animation-delay:0s,var(--hold,1.6s);white-space:nowrap}
+.toast{padding:7px 14px;border-radius:999px;background:#2A1C08;border:1px solid var(--amber);color:var(--amber);font-family:var(--display);font-size:13px;letter-spacing:1px;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:tin .25s ease-out, tout .5s ease-in forwards;animation-delay:0s,var(--hold,1.6s);max-width:calc(100vw - 32px);text-align:center;text-wrap:balance}
 .toast.big{font-size:17px;padding:12px 20px;background:#3a0f0f;border-color:var(--red);color:#fff;--hold:3.2s}
+.toast.cut{background:#2a2208;border-color:#ffd84a;color:#ffd84a}
 @keyframes tin{from{opacity:0;transform:translateY(-12px) scale(.9)}to{opacity:1;transform:none}}
 @keyframes tout{to{opacity:0;transform:translateY(-10px)}}
 #app{display:flex;flex-direction:column;width:100%}
@@ -171,21 +178,25 @@ const BLOCKED = new Set(["3,2","4,2","3,5","4,5"]);
 const SETUP_ROWS = { H: [5,6,7], AI: [0,1,2] }; // every square in these rows is filled, like Stratego
 // Tuning: everything that decides fairness is here.
 const BAL = {
-  RSI_EVERY: 8,     // the self-improver grows itself +1 every N rounds, no cap but MAX_STR
-  MAX_STR: 9, SCANS: 2, COPIES: 2, MAX_ROUNDS: 100, // past MAX_ROUNDS the game is a draw
-  AGI: 8, ASI: 9,   // milestone levels
+  RSI_EVERY: 7,     // the 🧠 self-improver grows itself +1 every N rounds while it lives, up to MAX_STR
+  MAX_STR: 10, SCANS: 2, COPIES: 2, MAX_ROUNDS: 100, // past MAX_ROUNDS the game is a draw
+  AGI: 8, ASI: 10,  // the 🧠's milestones: AGI at 8, superintelligence at 10
+  SPY_MIN: 8, SPY_MAX: 9, // the whistleblower / virus kills a piece this strong when it attacks it, and loses to anything else
+  CUT_TO: 8,        // cutting the power at ⚡ drops the 10 to this, for good
 };
+const POWER_SQ = [3, 3]; // ⚡ the power station: the central lane between the lakes, on the AI's side of the gap
+const onPower = (r, c) => r === POWER_SQ[0] && c === POWER_SQ[1];
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
 // M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (cut in v0.11.27: nobody understood it; the engine still understands it),
-// A power cut / virus (the spy: kills a piece at AGI level or above when attacking, else dies; both sides have one), I self-improver (drives the AI's growth;
-// grows itself), K deepfake (the AI's bluff: fights as its number, but a scan or scanner sees a 7 until a fight shows it), X fighter.
+// A whistleblower / virus (the spy: kills an 8 or 9 when attacking, else dies; both sides have one), I self-improver (grows itself
+// to 10, superintelligence), K deepfake (the AI's bluff: fights as its number, but a scan or scanner sees a 7 until a fight shows it), X fighter.
 // P persuader was cut in v0.11.13; the engine still understands it.
 // 22 a side: flag, 3 traps, 3 sliders, 2 or 3 removers, scanners, specials, 9 fighters. Two front-row squares start empty.
 const ARMIES = {
-  H:  [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["A",2],["C",2],["C",2],
+  H:  [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["A",1],["C",2],["C",2],
        ["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",7],["X",8],["X",9]],
   AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["I",2],["A",2],["C",2],["C",2],["K",3],
-       ["X",4],["X",4],["X",5],["X",5],["X",6],["X",6],["X",7],["X",8]],
+       ["X",3],["X",4],["X",4],["X",5],["X",5],["X",7],["X",7],["X",8]],
 };
 const GAPS = 2;
 const LEVELS_UP = t => t !== "F" && t !== "T";
@@ -270,7 +281,7 @@ function newGame(seed, forms = {}){
   const r = rng(seed);
   const pieces = []; let id = 0;
   for (const side of ["H","AI"]) for (const [type, str] of ARMIES[side]) pieces.push({ id: id++, side, type, str, revealed: false, r: -1, c: -1 });
-  const s = { pieces, turn: "H", round: 1, scans: { H: BAL.SCANS, AI: BAL.SCANS }, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, forms: {}, mirror: {} };
+  const s = { pieces, turn: "H", round: 1, scans: { H: BAL.SCANS, AI: BAL.SCANS }, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, cut: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, forms: {}, mirror: {} };
   for (const side of ["H","AI"]) layoutSide(s, side, forms[side] === undefined ? Math.floor(r() * FORMATIONS[side].length) : forms[side], r);
   return s;
 }
@@ -298,14 +309,19 @@ function legalMoves(s, p){
       r += dr; c += dc;
     }
   }
+  if (canCut(s, p)) out.push({ to: [p.r, p.c], cut: true });
   return out;
 }
+const brainOf = s => s.pieces.find(x => x.type === "I" && x.side === "AI");
+const isSuper = p => p.type === "I" && p.str >= BAL.ASI;
+const isCTO = p => p.side === "H" && p.type === "X" && p.str === 9;
+// the humans' CTO on ⚡ while the 🧠 is a 10 can spend its turn to cut the power
+function canCut(s, p){ const b = brainOf(s); return !s.cut && !!b && isSuper(b) && isCTO(p) && onPower(p.r, p.c); }
 function sideMoves(s, side){
   const out = [];
   for (const p of s.pieces) if (p.side === side) for (const m of legalMoves(s, p)) out.push({ p, ...m });
   return out;
 }
-function strongest(s, side){ return Math.max(0, ...s.pieces.filter(p => p.side === side && LEVELS_UP(p.type)).map(p => p.str)); }
 function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, scans: { ...s.scans }, events: [], history: s.history.slice(-40) }; }
 const snap = x => ({ side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
 // what `viewer` knows a piece to be: a deepfake looks like a 7 to the other side until a fight shows what it is
@@ -320,7 +336,13 @@ function apply(s0, move){
   const convert = (x, to) => { x.side = to; x.revealed = true; x.seen = true; };
   const from = sqName(p.r, p.c), to = sqName(r, c);
   let line = "";
-  if (move.copy){
+  if (move.cut){
+    const b = brainOf(s); b.str = BAL.CUT_TO; s.cut = true;
+    line = `The CTO cut the power at ⚡. The 🧠 drops to ${BAL.CUT_TO} for good.`;
+    s.events.push({ kind: "cut", r: b.r, c: b.c });
+    s.history.push({ round: s.round, side, text: line, mile: true });
+  }
+  else if (move.copy){
     const src = copySource(s, p);
     s.copies[side]--;
     s.pieces.push({ id: Math.max(...s.pieces.map(x => x.id)) + 1, side, type: src.type, str: src.str, revealed: false, r, c });
@@ -340,11 +362,12 @@ function apply(s0, move){
     if (q.type === "F"){ kill(q); p.r = r; p.c = c; s.winner = side; ev.result = "flag"; line = side === "H" ? "Humans hit the kill switch." : "The AI reached the datacenter."; }
     else if (q.type === "T"){
       if (p.type === "M"){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} removed the ${ROLE[q.side][q.type]}.`; }
-      else { kill(q); convert(p, q.side); ev.result = "trapped"; line = `${name(p)} fell into a ${ROLE[q.side][q.type]} and switched sides.`; }
+      else if (isSuper(p)){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} saw through the ${ROLE[q.side][q.type]} and removed it.`; }
+      else { kill(q); p.r = r; p.c = c; convert(p, q.side); ev.result = "trapped"; line = `${name(p)} fell into a ${ROLE[q.side][q.type]} and switched sides.`; } // it moves onto the trap's square
     }
     else if (p.type === "A"){
-      if (q.str >= BAL.AGI && LEVELS_UP(q.type)){ kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} took out ${name(q)}.`; }
-      else { kill(p); ev.result = "lose"; line = `${name(p)} lost: ${name(q)} is below ${BAL.AGI}.`; }
+      if (q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX && LEVELS_UP(q.type)){ kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} took out ${name(q)}.`; }
+      else { kill(p); ev.result = "lose"; line = `${name(p)} lost: ${name(q)} isn't an ${BAL.SPY_MIN} or ${BAL.SPY_MAX}.`; }
     }
     else if (p.str > q.str){
       if (p.type === "P"){ convert(q, side); ev.result = "convert"; line = `${name(p)} turned ${name(q)}.`; }
@@ -359,19 +382,19 @@ function apply(s0, move){
   for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `Scanner spotted ${name(asSeenBy(e, sc.side))} at ${sqName(e.r, e.c)}.` }); }
   s.last = { from: [move.p.r, move.p.c], to: [r,c], side };
   const hadRsi = s.rsi;
-  s.rsi = s.pieces.some(x => x.type === "I" && x.side === "AI");
+  s.rsi = !!brainOf(s);
   if (hadRsi && !s.rsi && !s.winner){ line += " The AI can't improve itself anymore."; s.history.push({ round: s.round, side: "H", text: "The AI's self-improver is gone. The AI stops growing." }); }
   s.log = line || (side === "H" ? "AI to move." : "Humans to move.");
   if (!s.winner){
     if (side === "AI"){
       s.round++;
       if (s.rsi){
-        const brain = s.pieces.find(x => x.type === "I" && x.side === "AI");
-        if ((s.round - 1) % BAL.RSI_EVERY === 0 && brain.str < BAL.MAX_STR){
+        const brain = brainOf(s);
+        if ((s.round - 1) % BAL.RSI_EVERY === 0 && brain.str < BAL.MAX_STR && !s.cut){
           brain.str++; s.events.push({ kind: "rsi" }); s.log = "The self-improver grew."; s.history.push({ round: s.round, side: "AI", text: "The 🧠 self-improver grew." });
         }
       }
-      const top = s.pieces.find(x => x.type === "I" && x.side === "AI"); // the milestones are the 🧠's: the AI's 8 fighter starts at AGI strength, the 🧠 has to get there
+      const top = brainOf(s); // the milestones are the 🧠's: the AI's 8 fighter starts at AGI strength, the 🧠 has to get there
       if (top && !s.agi && top.str >= BAL.AGI){ s.agi = true; s.events.push({ kind: "agi" }); s.log = "The AI has reached AGI."; s.history.push({ round: s.round, side: "AI", text: "The AI has reached AGI.", mile: true }); }
       if (top && !s.asi && top.str >= BAL.ASI){ s.asi = true; top.revealed = true; s.events.push({ kind: "asi", r: top.r, c: top.c }); s.log = "The AI has reached superintelligence. It can't hide anymore."; s.history.push({ round: s.round, side: "AI", text: `Superintelligence at ${sqName(top.r, top.c)}.`, mile: true }); }
       if (s.round > BAL.MAX_ROUNDS){ s.winner = "D"; s.log = `Round ${BAL.MAX_ROUNDS} is over and nobody got through. A draw.`; }
@@ -383,7 +406,7 @@ function apply(s0, move){
 }
 const who = side => side === "H" ? "Human" : "AI";
 const ROLE = {
-  H:  { S: "drone", M: "engineer", A: "power cut", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "honeypot", F: "datacenter" },
+  H:  { S: "drone", M: "engineer", A: "whistleblower", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "honeypot", F: "datacenter" },
   AI: { S: "crawler", M: "hacker", A: "virus", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "backdoor", F: "kill switch" },
 };
 function name(p){ const t = ROLE[p.side][p.type]; return LEVELS_UP(p.type) ? `${who(p.side)} ${t} ${p.str}` : `${who(p.side)} ${t}`; }
@@ -394,17 +417,24 @@ function botMove(s, side, r){
   if (!moves.length) return null;
   const fwd = side === "H" ? -1 : 1;
   const enemyBack = side === "H" ? 0 : ROWS - 1;
-  const topEnemy = strongest(s, other(side));
+  const brain = brainOf(s), ten = brain && isSuper(brain) ? brain : null; // a live 10: the humans race the CTO to ⚡, the AI guards it
+  const toPower = (rr, cc) => Math.abs(rr - POWER_SQ[0]) + Math.abs(cc - POWER_SQ[1]);
   let best = null, bestScore = -Infinity;
   for (const m of moves){
-    const p = m.p, [tr,tc] = m.to, q0 = at(s, tr, tc), q = q0 && asSeenBy(q0, side);
+    const p = m.p, [tr,tc] = m.to, q0 = m.cut ? null : at(s, tr, tc), q = q0 && asSeenBy(q0, side);
     let sc = r() * 2;
-    if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 10 + src.str * 4 : -50; }
+    if (ten){
+      if (isCTO(p)) sc += (toPower(p.r, p.c) - toPower(tr, tc)) * 20 + (onPower(tr, tc) ? 40 : 0);
+      if (side === "AI" && p !== ten && p.type !== "S"){ if (onPower(tr, tc) && !q) sc += 15; if (onPower(p.r, p.c)) sc -= 15; }
+      if (side === "AI" && q && onPower(tr, tc) && (isSuper(p) || p.type === "A")) sc += 40; // whatever stands on ⚡ is probably the CTO: send what beats a 9
+    }
+    if (m.cut) sc += 900; // below taking a known kill switch (+1000): winning beats cutting
+    else if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 10 + src.str * 4 : -50; }
     else if (q){
-      if (p.type === "A") sc += known(q) && q.str >= BAL.AGI && LEVELS_UP(q.type) ? 200 : -150;
+      if (p.type === "A") sc += known(q) && q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX && LEVELS_UP(q.type) ? 200 : -150;
       else if (known(q)){
         if (q.type === "F") sc += 1000;
-        else if (q.type === "T") sc += p.type === "M" ? 80 : -1000;
+        else if (q.type === "T") sc += p.type === "M" || isSuper(p) ? 80 : -1000;
         else if (q.type === "I" && p.str > q.str) sc += 300;
         else if (p.str > q.str) sc += 60 + q.str * 4 + (p.type === "P" ? 25 : 0);
         else if (p.str === q.str) sc += -4;
@@ -414,10 +444,11 @@ function botMove(s, side, r){
         if (tr === enemyBack) sc += 12;
         if (p.str >= 5 || p.type === "R" || p.type === "P") sc -= 8;
         if (p.type === "M") sc += 4;
+        if (isSuper(p)) sc += 40; // nothing hidden can beat a 10
       }
     } else {
       if (p.type === "A" || p.type === "C") sc -= 2;
-      if (p.type === "I") sc -= 30;
+      if (p.type === "I" && !isSuper(p)) sc -= 30;
       sc += (tr - p.r) * fwd * 3;
       if (p.type === "S" && Math.abs(tr - p.r) + Math.abs(tc - p.c) > 1) sc -= 2;
       for (const [dr,dc] of DIRS){ const e0 = at(s, tr+dr, tc+dc), e = e0 && asSeenBy(e0, side); if (e && e.side !== side && known(e) && LEVELS_UP(e.type) && e.str > p.str) sc -= 15; }
@@ -429,33 +460,33 @@ function botMove(s, side, r){
   return best;
 }
 function simulate(games, seed0 = 1){
-  let h = 0, ai = 0, draws = 0, rounds = 0, agi = 0, asi = 0, rsiDead = 0;
+  let h = 0, ai = 0, draws = 0, rounds = 0, agi = 0, asi = 0, rsiDead = 0, cuts = 0;
   for (let g = 0; g < games; g++){
     let s = newGame(seed0 + g); const r = rng(seed0 * 7919 + g);
     while (!s.winner){ const m = botMove(s, s.turn, r); if (!m) break; s = apply(s, m); }
     if (s.winner === "H") h++; else if (s.winner === "D") draws++; else ai++;
-    rounds += s.round; if (s.agi) agi++; if (s.asi) asi++; if (!s.rsi) rsiDead++;
+    rounds += s.round; if (s.agi) agi++; if (s.asi) asi++; if (!s.rsi) rsiDead++; if (s.cut) cuts++;
   }
-  return { games, humanWins: h, aiWins: ai, draws, avgRounds: Math.round(rounds / games), agiGames: agi, asiGames: asi, brainKilled: rsiDead };
+  return { games, humanWins: h, aiWins: ai, draws, avgRounds: Math.round(rounds / games), agiGames: agi, asiGames: asi, brainKilled: rsiDead, powerCut: cuts };
 }
 // ENGINE-END
 if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, simulate, rng, BAL, ARMIES, FORMATIONS, layoutSide };
 </script>
 <script>
 const ICON = {
-  H:  { F: "🏢", T: "🍯", S: "🛸", M: "🔧", A: "✂️", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
+  H:  { F: "🏢", T: "🍯", S: "🛸", M: "🔧", A: "📢", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
   AI: { F: "🛑", T: "🚪", S: "🕷", M: "💻", A: "🦠", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
 };
 const ABOUT = {
-  X: p => `Fights: higher number wins, same number kills both. ${p.side === "H" && p.str === 9 ? "The CTO. The only thing that can stop a 9: both fall." : ""}`,
+  X: p => `Fights: higher number wins, same number kills both. ${p.side === "H" && p.str === 9 ? "The CTO. If the AI reaches superintelligence, stand on ⚡ and cut the power." : ""}`,
   S: () => "Slides any distance in a straight line. Scouts, and hits the back row.",
   M: p => p.side === "H" ? "Fights as a 3, and is the only piece that walks through a backdoor safely, removing it." : "Fights as a 3, and walks through honeypots safely, removing them.",
-  A: p => p.side === "H" ? `The power cut. Pulls the plug on the AI's compute: kills an ${BAL.AGI} or a 9 if it attacks it, AGI or superintelligence. Loses to anything else, so scan first.` : `The virus. Kills an ${BAL.AGI} or a 9 if it attacks it: the humans' top agents. Loses to anything else, so remember where their big numbers are.`,
+  A: p => p.side === "H" ? `The whistleblower. Fights as a 1, but exposes an AI ${BAL.SPY_MIN} or ${BAL.SPY_MAX} it attacks and takes it out. Can't touch a 10. Loses to anything else, so scan first.` : `The virus. Kills an ${BAL.SPY_MIN} or ${BAL.SPY_MAX} if it attacks it: the humans' top agents. Loses to anything else, so remember where their big numbers are.`,
   C: () => "Reveals every hidden enemy piece next to it, every turn. Keep it escorted.",
   T: p => p.side === "H" ? "A honeypot. Can't move. An AI piece that attacks it switches to the human side." : "A backdoor. Can't move. A human piece that attacks it switches to the AI.",
   F: p => p.side === "H" ? "The datacenter. Can't move. If the AI reaches it, it can never be shut down: the humans lose." : "The AI's kill switch. Can't move. If the humans reach it, the AI is shut down.",
   R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
-  I: () => `The self-improver. It grows itself +1 every ${BAL.RSI_EVERY} rounds. Kill it to stop the AI growing. At 9 it is superintelligence: it glows red and can't hide.`,
+  I: () => `The self-improver. It grows itself +1 every ${BAL.RSI_EVERY} rounds. Kill it to stop the AI growing. At ${BAL.AGI} it is AGI; at ${BAL.ASI} superintelligence: it can't hide, beats everything and sees through honeypots, until the humans' CTO cuts the power at ⚡ (it drops to ${BAL.CUT_TO} for good and never grows again).`,
   K: () => `The deepfake. Fights as a 3, but a scan or a scanner sees it as a 7. A fight shows what it really is.`,
 };
 // tiny synthesized sounds, no files
@@ -498,13 +529,15 @@ if (params.has("sim")){
   const theirs = () => SIDE_WORD[other(me)];
   // pass-the-link: the whole game state in the URL hash (hidden pieces included; fine between friends, not for strangers)
   function encState(s){
-    const o = { v: 1, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, sc: [s.scans.H, s.scans.AI], cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
+    const o = { v: 1, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, sc: [s.scans.H, s.scans.AI], cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, cu: s.cut ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
     return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
   function decState(code){
     const o = JSON.parse(decodeURIComponent(escape(atob(code.replace(/-/g, "+").replace(/_/g, "/")))));
     if (o.v !== 1) throw new Error("version");
-    return { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, scans: { H: o.sc[0], AI: o.sc[1] }, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: !!o.asi, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns };
+    const s = { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, scans: { H: o.sc[0], AI: o.sc[1] }, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: false, cut: !!o.cu, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns };
+    s.asi = !!o.asi && !!brainOf(s) && brainOf(s).str >= BAL.ASI; // links from before v0.16 called a 9 superintelligence; the alert and reveal now come at 10
+    return s;
   }
   // two-player links point at the public copy of the game, so they open anywhere (the artifact viewer has no real address of its own)
   const PUBLIC_URL = "https://franknowinski.github.io/kill-switch/";
@@ -554,7 +587,7 @@ if (params.has("sim")){
     const src = app.querySelector(`.sq[data-r="${sel.r}"][data-c="${sel.c}"]`); if (src) src.classList.add("sel");
     const lit = phase === "setup"
       ? [...app.querySelectorAll(".sq")].filter(q => !q.disabled && !q.dataset.id && SETUP_ROWS[me].includes(+q.dataset.r))
-      : legalMoves(state, sel).map(m => app.querySelector(`.sq[data-r="${m.to[0]}"][data-c="${m.to[1]}"]`));
+      : legalMoves(state, sel).filter(m => !m.cut).map(m => app.querySelector(`.sq[data-r="${m.to[0]}"][data-c="${m.to[1]}"]`));
     lit.forEach(q => q && q.classList.add("can"));
     const msg = app.querySelector(".msg"); if (msg && info) msg.innerHTML = info;
   }
@@ -639,19 +672,22 @@ if (params.has("sim")){
     if (phase === "intro") return renderIntro();
     const prev = snapshotRects();
     const brainIn = BAL.RSI_EVERY - ((state.round - 1) % BAL.RSI_EVERY);
-    const brain = state.pieces.find(x => x.type === "I" && x.side === "AI");
-    const grows = state.rsi && brain && brain.str < BAL.MAX_STR; // a 🧠 at MAX_STR never grows again
-    const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : 0;
+    const brain = brainOf(state);
+    const grows = state.rsi && brain && brain.str < BAL.MAX_STR && !state.cut; // a 🧠 at MAX_STR, or with the power cut, never grows again
+    const live = !!(brain && isSuper(brain)); // a 10 on the board: ⚡ lights up
+    const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : live ? 100 : 0;
+    const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? "power cut" : "superintelligent";
     let html = `<div class="left"><div class="top"><div class="t">KILL SWITCH</div><div class="stat">Round <b>${state.round}</b> · ${me === "H" ? "Scans" : "Hacks"} <b>${state.scans[me]}</b></div></div>
-    <div class="lvl"><span>🧠 grows</span><div class="bar"><i style="width:${pct}%"></i></div><span>${grows ? "in " + brainIn : state.rsi ? "maxed" : "stopped"}</span></div>
+    <div class="lvl"><span>🧠 grows</span><div class="bar"><i style="width:${pct}%"></i></div><span>${barText}</span></div>
     <div class="boardwrap"><div class="zoom" id="zoom"><div class="board" id="board">`;
-    const cans = sel ? legalMoves(state, sel) : [];
+    const cans = sel ? legalMoves(state, sel).filter(m => !m.cut) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
     const rowOrder = me === "H" ? [...Array(ROWS).keys()] : [...Array(ROWS).keys()].reverse(); // my side at the bottom
     for (const r of rowOrder) for (let c = 0; c < COLS; c++){
       const p = at(state, r, c);
       const k = ["sq"];
       if (BLOCKED.has(r+","+c)) k.push("block");
+      if (onPower(r, c)){ k.push("power"); if (live) k.push("live"); }
       let inner = "", idAttr = "";
       if (p){
         k.push(cls(p.side));
@@ -678,13 +714,16 @@ if (params.has("sim")){
     else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up, then moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
     else if (info) logHtml = info;
     else if (state.turn !== me && !state.winner) logHtml = mode === "pass" ? `Waiting for <b>${theirs()}</b>.` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
+    else if (!state.winner && state.turn === me && state.pieces.some(x => x.side === me && canCut(state, x))) logHtml = `<span class="you">Your CTO is on ⚡.</span> Cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. Or make another move.`;
     else if (!state.winner && /to move\.$/.test(state.log)) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then tap a lit square." : ""}`;
     else logHtml = color(state.log);
     if (phase === "over"){
       const win = state.winner === me, draw = state.winner === "D";
-      const lm = state.last ? `Last move: ${state.last.side === me ? "you" : theirs()}, ${sqName(...state.last.from)} → ${sqName(...state.last.to)}.` : "";
+      const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ` + (state.last.from[0] === state.last.to[0] && state.last.from[1] === state.last.to[1] ? `cut the power at ${sqName(...state.last.to)}.` : `${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`);
       html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}</div></div>`;
     } else html += `<div class="msg">${logHtml}</div>`;
+    const cto = phase === "play" && state.turn === me && !busy && state.pieces.find(x => x.side === me && canCut(state, x));
+    if (cto) html += `<div class="actions"><button class="primary cutbtn" id="cut">⚡ CUT THE POWER</button></div>`;
     html += `<div class="actions">`;
     if (phase === "setup") html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
     else if (phase === "handoff") html += `<button class="primary" id="share">SEND LINK</button><button class="ghost" id="copylink">COPY</button>`;
@@ -720,6 +759,7 @@ if (params.has("sim")){
     on("share", async () => { const url = gameLink(); sfx.tap(); try { if (navigator.share) await navigator.share({ title: "Kill Switch", text: "Your move in Kill Switch", url }); else { await navigator.clipboard.writeText(url); info = "Link copied. Paste it to the other player."; render(); } } catch (e) {} });
     on("copylink", async () => { sfx.tap(); try { await navigator.clipboard.writeText(gameLink()); info = "Link copied."; } catch (e) { info = "Select the link below and copy it."; } render(); });
     on("scan", () => { sfx.tap(); scanMode = !scanMode; copyMode = false; sel = null; info = scanMode ? (me === "H" ? "Scan" : "Hack") + ": tap a hidden enemy piece to reveal it for good." : null; render(); });
+    on("cut", () => { const cto = state.pieces.find(x => x.side === me && canCut(state, x)); if (cto) play({ p: cto, to: [cto.r, cto.c], cut: true }); });
     on("copybtn", () => { sfx.tap(); copyMode = !copyMode; render(); });
     // a key row explains a piece type, so it is never disguised (seen: true)
     app.querySelectorAll(".kr").forEach(el => el.addEventListener("click", () => { const t = el.dataset.type, side = el.dataset.side; sfx.tap(); info = explain({ side, type: t, str: el.dataset.str ? +el.dataset.str : (ARMIES[side].find(([tt]) => tt === t) || [0, 0])[1], seen: true }); render(); }));
@@ -727,8 +767,8 @@ if (params.has("sim")){
   }
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
-    H:  { S: "slides any distance", M: "fights as 3, removes backdoors", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
-    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 9 on its own", K: "fights as 3, scans see a 7", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+    H:  { S: "slides any distance", M: "fights as 3, removes backdoors", A: "1; kills an 8 or 9 it attacks", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 10 on its own", K: "fights as 3, scans see a 7", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
     const alive = (side, t, str) => state.pieces.filter(p => p.side === side && p.type === t && (str == null || p.str === str)).length;
@@ -739,7 +779,7 @@ if (params.has("sim")){
       const ch = t === "X" ? `<span class="pc ${cls(side)}">${str}</span>` : `<span class="pc tok ${cls(side)}"><span class="ic">${ICON[side][t]}</span>${LEVELS_UP(t) ? `<span class="n">${lvl}</span>` : ""}</span>`;
       const nm = t === "X" ? (side === "H" && str === 9 ? "CTO" : "agent") : ROLE[side][t];
       const tag = t !== "X" && LEVELS_UP(t) ? `<span class="lv">lvl ${lvl}</span>` : "";
-      return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${tag}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "stops a 9: both fall" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
+      return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${tag}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "cuts the power at ⚡" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
     };
     const myRanks = [...new Set(ARMIES[me].filter(([t]) => t === "X").map(([, n]) => n))].sort((a, b) => b - a);
     const specials = side => ["S","M","A","C","I","K","R","T","F"].filter(t => ARMIES[side].some(([tt]) => tt === t));
@@ -754,7 +794,7 @@ if (params.has("sim")){
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
       ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(p => `<span class="pc ${cls(other(me))}">${p.str}</span>`).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
-      <div class="kh n">A fight: higher number wins, same number both fall. Pieces never level up; only the AI's 🧠 grows. The 🧠 at ${BAL.AGI} is AGI; at 9 it is superintelligence and can't hide. What stops a 9: a 9 (both fall), the ✂️ power cut or 🦠 virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides. Pieces never level up; only the AI's 🧠 grows, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it can't hide, beats everything, sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on ⚡ and cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. What stops an 8 or 9: a stronger piece, the same number (both fall), the 📢 whistleblower or 🦠 virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
     </div>`;
   }
   function renderIntro(){
@@ -764,7 +804,8 @@ if (params.has("sim")){
         <div class="rule"><div class="k b">🛑</div><div>Reach the AI's <b>kill switch</b> to win.</div></div>
         <div class="rule"><div class="k a">🏢</div><div>Keep the AI off your <b>datacenter</b>.</div></div>
         <div class="rule"><div class="k a">?</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
-        <div class="rule"><div class="k a">🧠</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> to stop the AI growing.</div></div>
+        <div class="rule"><div class="k a">🧠</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> first.</div></div>
+        <div class="rule"><div class="k b">⚡</div><div>At 10, get your CTO to ⚡ and <b>cut the power</b>.</div></div>
       </div>
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
       <button class="primary" id="play">PLAY</button>
@@ -782,7 +823,7 @@ if (params.has("sim")){
   function explain(p){
     p = face(p);
     const n = LEVELS_UP(p.type) ? `${ROLE[p.side][p.type]} ${p.str}` : ROLE[p.side][p.type];
-    return `<span class="${p.side === me ? "you" : "them"}">${n[0].toUpperCase() + n.slice(1)}.</span> ${ABOUT[p.type](p)}${p.side === me && sel && legalMoves(state, p).length ? " Lit squares are where it can go; red means a fight." : ""}`;
+    return `<span class="${p.side === me ? "you" : "them"}">${n[0].toUpperCase() + n.slice(1)}.</span> ${ABOUT[p.type](p)}${p.side === me && sel && legalMoves(state, p).some(m => !m.cut) ? " Lit squares are where it can go; red means a fight." : ""}`;
   }
   function tap(r, c){
     if (busy) return;
@@ -802,9 +843,16 @@ if (params.has("sim")){
     if (p && p.side === me){ sfx.tap(); sel = sel && sel.id === p.id ? null : p; copyMode = false; info = sel ? explain(sel) : null; return render(); }
     if (p && p.side !== me && p.revealed && !sel){ sfx.tap(); info = explain(p); return render(); }
     if (sel){
-      const mv = legalMoves(state, sel).find(m => m.to[0] === r && m.to[1] === c && !!m.copy === copyMode);
-      if (mv){ const before = state; state = apply(state, { p: sel, ...mv }); sel = null; copyMode = false; info = null; afterMove(before).then(() => { if (state.winner) return; if (mode === "pass"){ phase = "handoff"; render(); } else setTimeout(botTurn, FAST ? 0 : 420); }); }
+      const mv = legalMoves(state, sel).find(m => !m.cut && m.to[0] === r && m.to[1] === c && !!m.copy === copyMode);
+      if (mv) play({ p: sel, ...mv });
     }
+  }
+  function play(move){
+    if (busy || phase !== "play" || state.turn !== me) return;
+    const before = state; state = apply(state, move); sel = null; copyMode = false; info = null;
+    // a big alert (AGI, superintelligence, power cut) gets time on screen before the bot moves or the hand-off screen replaces it
+    const big = !FAST && state.events.some(e => e.kind === "cut" || e.kind === "agi" || e.kind === "asi");
+    afterMove(before).then(() => { if (state.winner) return; if (mode === "pass") setTimeout(() => { phase = "handoff"; render(); }, big ? 1800 : 0); else setTimeout(botTurn, FAST ? 0 : big ? 1800 : 420); });
   }
   const wait = ms => new Promise(res => setTimeout(res, ms));
   const trace = k => { if (params.has("trace")) (window.__trace = window.__trace || []).push([k, Math.round(performance.now())]); }; // ?trace=1: fight timeline for testing
@@ -859,7 +907,7 @@ if (params.has("sim")){
     if (dDies) anims.push(fin(cd.animate([{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "scale(.3) rotate(20deg) translateZ(60px)", opacity: 0 }], { duration: dur, easing: "ease-in", fill: "forwards" }), dur));
     else cd.animate([{ transform: "translateX(0)" }, { transform: "translateX(-5px)" }, { transform: "translateX(5px)" }, { transform: "none" }], { duration: 220 });
     if (aDies) anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx * 0.4}px,${dy * 0.4}px) scale(.3) rotate(-20deg) translateZ(60px)`, opacity: 0 }], { duration: dur, easing: "ease-in", fill: "forwards" }), dur));
-    else if (r === "trapped") anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12) rotateY(180deg)` }], { duration: 300, fill: "forwards" }), 300));
+    else if (r === "trapped") anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx}px,${dy}px) scale(1) rotateY(180deg)` }], { duration: 300, fill: "forwards" }), 300));
     else anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx}px,${dy}px) scale(1)` }], { duration: 160, easing: "ease-out", fill: "forwards" }), 160));
     await Promise.all(anims);
     const you = a.side === me;
@@ -883,7 +931,8 @@ if (params.has("sim")){
       if (e.kind === "reveal") sfx.reveal();
       if (e.kind === "rsi"){ toast("🧠 the self-improver grew"); sfx.level(); }
       if (e.kind === "agi"){ toast("THE AI HAS REACHED AGI", true); sfx.big(); }
-      if (e.kind === "asi"){ toast("SUPERINTELLIGENCE · it can't hide now", true); sfx.big(); }
+      if (e.kind === "asi"){ toast("SUPERINTELLIGENCE · cut the power at ⚡", true); sfx.big(); }
+      if (e.kind === "cut"){ toast(`⚡ POWER CUT · the 🧠 drops to ${BAL.CUT_TO}`, true, "cut"); sfx.big(); shakeBoard(true); }
     }
     if (state.winner){
       const win = state.winner === me;
@@ -891,9 +940,9 @@ if (params.has("sim")){
       else { document.body.classList.add(win ? "won" : "lost"); setTimeout(() => document.body.classList.remove("won", "lost"), 1200); win ? sfx.gameWin() : sfx.gameLose(); }
     }
   }
-  function toast(text, big){
+  function toast(text, big, extra){
     const box = document.getElementById("toasts"); if (!box) return;
-    const el = document.createElement("div"); el.className = "toast" + (big ? " big" : ""); el.textContent = text;
+    const el = document.createElement("div"); el.className = "toast" + (big ? " big" : "") + (extra ? " " + extra : ""); el.textContent = text;
     if (params.has("hold")) el.style.setProperty("--hold", "999s");
     box.appendChild(el); setTimeout(() => el.remove(), params.has("hold") ? 1e9 : big ? 3800 : 2200);
   }
