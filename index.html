@@ -42,38 +42,63 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .sq.over{background:#1a2a3a}
 /* ⚡ the power station: a faint bolt on the square; it lights up once the 🧠 is a 10 */
 .sq.power::after{content:"⚡";position:absolute;font-size:.8em;opacity:.35;pointer-events:none}
-.sq.power[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;z-index:2}
+.sq.power[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;transform:translateZ(calc(var(--ph) + 2px))}
 .sq.power.live{background:#2a2208;border-color:#8a6d12}.sq.power.live::after{opacity:1;animation:bolt 1.2s ease-in-out infinite}
 @keyframes bolt{50%{filter:drop-shadow(0 0 6px #ffd84a)}}
 .primary.cutbtn{background:#ffd84a;color:#1a1405;box-shadow:0 0 18px rgba(255,216,74,.45)}
-/* the token: a card with a darker side under it and a soft shadow */
-.pz,.clone{position:absolute;inset:4% 7% 12% 7%;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:600;isolation:isolate;will-change:transform;transition:transform .15s,translate .15s,scale .15s;box-shadow:0 7px 10px rgba(0,0,0,.55);border-top-color:rgba(255,255,255,.22)!important}
-.pz::before,.clone::before{content:"";position:absolute;inset:-1px;border-radius:6px;z-index:-1;transform:translateY(5px);background:var(--side,#0a1826);border:1px solid var(--sideline,#163a55);border-bottom-width:2px}
-.sq.h .pz,.clone.h{background:linear-gradient(180deg,#143353,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue);--side:#0a1826;--sideline:#163a55}
-.sq.ai .pz,.clone.ai{background:linear-gradient(180deg,#3a2708,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);--side:#1a1105;--sideline:#4a3309}
-.sq.asi .pz{box-shadow:0 0 0 2px var(--red),0 0 14px rgba(255,92,92,.7)}
-.sq .q,.clone .q{color:var(--amber);opacity:.85}.sq.h .q,.clone.h .q{color:var(--blue)}
-.sq.sel .pz{translate:0 -5px;scale:1.12;box-shadow:0 12px 14px rgba(0,0,0,.55),0 0 18px rgba(92,200,255,.45)}
-.sq.h:not(.sel) .pz.idle{animation:breathe 2.8s ease-in-out infinite;animation-delay:var(--d,0s)}
-@keyframes breathe{0%,100%{translate:0 0}50%{translate:0 -2px}}
-.sq .ic,.clone .ic{font-size:.85em;line-height:1}
-.sq .n,.clone .n{position:absolute;right:6%;bottom:-2%;font-size:.58em}
-.pz.drag{transition:none;pointer-events:none;scale:1.15;box-shadow:0 0 22px rgba(92,200,255,.5)}
+/* tabletop (v0.17): the board tilts back like a table (the browser's own CSS 3D) and every piece is a raised block with sides.
+   .tilt holds the board and the fx layer in one tilted plane, so fight stand-ins use the same coordinates as the squares. */
+:root{--tilt:28deg;--ph:7px}
+.zoom{perspective:1100px;perspective-origin:50% -40%}
+.tilt{position:relative;transform-style:preserve-3d;transform:rotateX(var(--tilt));transform-origin:50% 100%;margin-top:-6%} /* the tilt leaves a gap above the far edge: pull it up */
+.board,.sq,.fx{transform-style:preserve-3d}
+.pz,.clone{position:absolute;transform-style:preserve-3d;pointer-events:none;font-weight:700}.pz{inset:0}
+.clone{font-size:clamp(14px,4.6vw,22px)}
+.shd{position:absolute;inset:18% 12% 6%;border-radius:8px;background:rgba(0,0,0,.6);filter:blur(3px);transform:translate3d(1px,3px,1px)}
+.blk{position:absolute;inset:8% 9% 12%;transform-style:preserve-3d;transition:transform .15s}
+.face{position:absolute;border-radius:6px}
+.ftop{inset:0;transform:translateZ(var(--ph));display:flex;align-items:center;justify-content:center;line-height:1;transition:box-shadow .15s}
+.ffr{left:2px;right:2px;bottom:0;height:var(--ph);transform-origin:bottom;transform:rotateX(-90deg);border-radius:0 0 6px 6px}
+.flf{top:2px;bottom:2px;left:0;width:var(--ph);transform-origin:left;transform:rotateY(-90deg)}
+.frt{top:2px;bottom:2px;right:0;width:var(--ph);transform-origin:right;transform:rotateY(90deg)}
+.h .ftop{background:linear-gradient(180deg,#1a4068,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue);border-top-color:#4f9fd0}
+.h .ffr{background:linear-gradient(#0d2238,#071422)}.h .flf,.h .frt{background:#0a1a2b}
+.ai .ftop{background:linear-gradient(180deg,#4a3209,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);border-top-color:#a8761e}
+.ai .ffr{background:linear-gradient(#2b1d06,#140d03)}.ai .flf,.ai .frt{background:#1f1504}
+.ftop .ic{font-size:1.02em;line-height:1}
+.ftop .n{position:absolute;right:3%;bottom:3%;font-size:.5em;padding:.08em .26em;border-radius:.4em;background:rgba(0,0,0,.5);font-weight:700;line-height:1.1}
+.sq .q,.clone .q,.floater .q{color:var(--amber);opacity:.85}.sq.h .q,.clone.h .q{color:var(--blue)}
+.sq.asi .ftop{box-shadow:0 0 0 2px var(--red),0 0 14px rgba(255,92,92,.8)}
+.sq.sel .blk{transform:translateZ(12px) scale(1.08)}
+.sq.sel .ftop{box-shadow:0 0 0 2px var(--blue),0 0 18px rgba(92,200,255,.6)}
+body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165,36,.6)}
+.sq:not(.sel) .blk.idle:not(.reveal){animation:bob 2.8s ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes bob{50%{transform:translateZ(3px)}}
+.pz.drag{visibility:hidden}
+/* while dragging, a flat copy of the piece follows the finger above the table */
+.floater{position:fixed;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;transform:translate(-50%,-50%) scale(1.15);box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(92,200,255,.5)}
+.floater.h{background:linear-gradient(180deg,#1a4068,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue)}
+.floater.ai{background:linear-gradient(180deg,#4a3209,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(245,165,36,.5)}
+.floater .n{position:absolute;right:4%;bottom:4%;font-size:.5em;padding:.08em .26em;border-radius:.4em;background:rgba(0,0,0,.5)}
+.ftop.lit{box-shadow:0 0 0 2px #fff,0 0 26px 6px rgba(255,255,255,.75)}
+.ftop.off{background:#151a20!important;border-color:#2a3038!important;color:#56616e!important}
+.ftop.sick{background:linear-gradient(180deg,#1d4a2a,#0d2414)!important;border-color:#2f8a4a!important}
+.ftop.glow{box-shadow:0 0 0 2px var(--red),0 0 16px rgba(255,92,92,.8)}
+.spk{position:absolute;width:6px;height:6px;margin:-3px;border-radius:2px;background:var(--amber);pointer-events:none}
+.ring{position:absolute;width:12%;aspect-ratio:1;margin:-6%;border-radius:50%;border:3px solid var(--c,#5CC8FF);pointer-events:none}
+.beam{position:absolute;height:8px;margin-top:-4px;border-radius:4px;background:linear-gradient(90deg,#fff,var(--red));box-shadow:0 0 14px var(--red),0 0 4px #fff;pointer-events:none;transform-origin:0 50%}
+.mini{position:absolute;width:6%;height:6%;margin:-3%;display:grid;place-items:center;font-size:12px;pointer-events:none}
 .sq.can{animation:pulse 1.1s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:inset 0 0 0 3px rgba(92,200,255,.35)}50%{box-shadow:inset 0 0 0 3px rgba(92,200,255,.9)}}
 .sq.can.ai{animation:pulser 1.1s ease-in-out infinite}
 @keyframes pulser{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,92,92,.4)}50%{box-shadow:inset 0 0 0 3px rgba(255,92,92,1)}}
-.pz.reveal,.clone.reveal{animation:flipin .45s ease-out}
-@keyframes flipin{0%{transform:rotateY(90deg) scale(.8)}60%{transform:rotateY(-15deg) scale(1.08)}100%{transform:none}}
-.sq.turned .pz{animation:turnflash .7s ease-out}
+.blk.reveal{animation:flip3d .5s cubic-bezier(.3,1.4,.5,1)} /* the idle bob skips a revealing block, or it would hide the flip */
+@keyframes flip3d{0%{transform:translateZ(30px) rotateY(-90deg)}100%{transform:none}}
+.sq.turned .ftop{animation:turnflash .7s ease-out}
 @keyframes turnflash{0%{filter:brightness(1)}30%{filter:brightness(2.2) saturate(2)}100%{filter:brightness(1)}}
 .fx{position:absolute;inset:0;pointer-events:none;z-index:3}
-.clone{font-size:clamp(14px,4.6vw,22px)}
-.burst{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);background:#fff;box-shadow:0 0 0 0 rgba(245,165,36,.9),0 0 0 0 rgba(255,92,92,.7);animation:burst .45s ease-out forwards}
-.burst.big{animation-duration:.8s;--s:12}
-@keyframes burst{0%{opacity:1;transform:translate(-50%,-50%) scale(.4)}100%{opacity:0;transform:translate(-50%,-50%) scale(var(--s,6));box-shadow:0 0 0 14px rgba(245,165,36,0),0 0 0 26px rgba(255,92,92,0)}}
-.spark{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--amber);animation:spark .7s ease-out forwards}
-@keyframes spark{to{transform:translate(var(--dx),var(--dy));opacity:0}}
+
+
 .flash{position:fixed;inset:0;pointer-events:none;z-index:8;background:radial-gradient(circle,rgba(245,165,36,.4),transparent 70%);animation:flashout .6s ease-out forwards}
 .board.shake{animation:shake .4s}.board.shake.big{animation:shakebig .6s}
 @keyframes shakebig{0%,100%{transform:none}15%{transform:translate(-9px,4px)}30%{transform:translate(9px,-4px)}45%{transform:translate(-7px,2px)}60%{transform:translate(7px,-2px)}80%{transform:translate(-3px,0)}}
@@ -135,7 +160,7 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 .vsc .row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;justify-items:center;gap:10px;width:100%}
 .vsc .side{min-width:0;max-width:100%;display:flex;flex-direction:column;align-items:center;gap:5px;transition:opacity .22s,filter .22s,transform .22s cubic-bezier(.2,.8,.2,1)}
 .vsc .pc{width:84px;min-width:0;height:64px;padding:0;gap:4px;font-size:30px;border-radius:12px;transition:box-shadow .22s}
-.vsc .pc .n{font-size:30px}.vsc .pc .i{font-size:24px}
+.vsc .pc{position:relative}.vsc .pc .i{font-size:34px;line-height:1}.vsc .pc .n{position:absolute;right:6px;bottom:4px;font-size:16px;padding:1px 5px;border-radius:6px;background:rgba(0,0,0,.45)}
 .vsc .nm{font-size:11px;line-height:1.35;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:center;overflow-wrap:anywhere}.vsc .nm b{display:block;font-weight:600;color:var(--fg)}
 .vsc .vt{font-size:11px;color:var(--muted);letter-spacing:1px}
 .vsc .res{font-family:var(--display);font-size:17px;letter-spacing:1.5px;min-height:20px;opacity:0;transition:opacity .15s}
@@ -158,15 +183,18 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
   #app{flex-direction:row;align-items:flex-start;gap:32px;max-width:1140px;margin:0 auto;padding:20px 28px}
   .left{flex:0 0 auto;width:min(560px,calc(100dvh - 160px));position:sticky;top:20px}
   .right{flex:1;min-width:340px;max-width:480px}
-  .boardwrap{margin:0}.board{gap:4px}.pz,.clone{border-radius:8px}
+  .boardwrap{margin:0}.board{gap:4px}:root{--ph:9px}.tilt{margin-top:-1%}
   .sq{font-size:24px;border-radius:9px}
   .top{padding:0 0 6px}.lvl{padding:0 0 10px}
   .top .t{font-size:24px}
   .msg{margin:0 0 10px;font-size:15px}.link{margin:0 0 10px}
   .actions{padding:0 0 10px}
-  .key{padding:14px 0 24px}.ranks{grid-template-columns:1fr 1fr 1fr}
+  .key{padding:14px 0 24px}
   .msg.over h1{font-size:28px}
 }
+.ranks .kr .kn{white-space:normal;overflow:visible;line-height:1.15} /* "red-teamer" breaks at its hyphen rather than being cut off */
+@media (max-width:360px){.ranks .kr{gap:6px;padding:4px 6px}.ranks .kr .kn{font-size:12px}}
+@media (prefers-reduced-motion:reduce){.blk.idle,.blk.reveal,.sq.can,.sq.can.ai,.sq.power.live::after,.sq.turned .ftop,.board.shake,.toast{animation:none!important}.blk{transition:none}}
 </style>
 </head>
 <body>
@@ -323,7 +351,7 @@ function sideMoves(s, side){
   return out;
 }
 function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, scans: { ...s.scans }, events: [], history: s.history.slice(-40) }; }
-const snap = x => ({ side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
+const snap = x => ({ id: x.id, side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
 // what `viewer` knows a piece to be: a deepfake looks like a 7 to the other side until a fight shows what it is
 const asSeenBy = (q, viewer) => q.type === "K" && q.side !== viewer && !q.seen ? { ...q, type: "X", str: 7 } : q;
 function apply(s0, move){
@@ -361,9 +389,9 @@ function apply(s0, move){
     p.seen = true; q.seen = true;
     if (q.type === "F"){ kill(q); p.r = r; p.c = c; s.winner = side; ev.result = "flag"; line = side === "H" ? "Humans hit the kill switch." : "The AI reached the datacenter."; }
     else if (q.type === "T"){
-      if (p.type === "M"){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} removed the ${ROLE[q.side][q.type]}.`; }
-      else if (isSuper(p)){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} saw through the ${ROLE[q.side][q.type]} and removed it.`; }
-      else { kill(q); p.r = r; p.c = c; convert(p, q.side); ev.result = "trapped"; line = `${name(p)} fell into a ${ROLE[q.side][q.type]} and switched sides.`; } // it moves onto the trap's square
+      if (p.type === "M"){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} removed the ${roleName(q)}.`; }
+      else if (isSuper(p)){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} saw through the ${roleName(q)} and removed it.`; }
+      else { kill(q); p.r = r; p.c = c; convert(p, q.side); ev.result = "trapped"; line = `${name(p)} fell into a ${roleName(q)} and switched sides.`; } // it moves onto the trap's square
     }
     else if (p.type === "A"){
       if (q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX && LEVELS_UP(q.type)){ kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} took out ${name(q)}.`; }
@@ -379,7 +407,7 @@ function apply(s0, move){
     s.events.push(ev);
     s.history.push({ round: s.round, side, text: line, a: ev.a, d: ev.d, result: ev.result, at: to });
   }
-  for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `Scanner spotted ${name(asSeenBy(e, sc.side))} at ${sqName(e.r, e.c)}.` }); }
+  for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `${who(sc.side)} ${roleName(sc)} spotted ${name(asSeenBy(e, sc.side))} at ${sqName(e.r, e.c)}.` }); }
   s.last = { from: [move.p.r, move.p.c], to: [r,c], side };
   const hadRsi = s.rsi;
   s.rsi = !!brainOf(s);
@@ -405,11 +433,16 @@ function apply(s0, move){
   return s;
 }
 const who = side => side === "H" ? "Human" : "AI";
+// a piece's identity is the army it started in (ids are dealt humans first), so a piece that switches sides keeps its character
+const homeSide = p => p.home || (p.id == null ? p.side : p.id < ARMIES.H.length ? "H" : "AI");
+// every fighter is a character, by its army and strength (the UI draws them; the names show in the log)
+const CHARS = { H: { 4: "analyst", 5: "researcher", 6: "red-teamer", 7: "operative", 8: "general", 9: "CTO" }, AI: { 3: "chatbot", 4: "bot", 5: "swarm", 7: "mech", 8: "overmind" } };
+const roleName = p => p.type === "X" ? CHARS[homeSide(p)][p.str] || "agent" : ROLE[homeSide(p)][p.type];
 const ROLE = {
-  H:  { S: "drone", M: "engineer", A: "whistleblower", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "honeypot", F: "datacenter" },
+  H:  { S: "pilot", M: "engineer", A: "whistleblower", C: "inspector", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "honeypot", F: "datacenter" },
   AI: { S: "crawler", M: "hacker", A: "virus", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "backdoor", F: "kill switch" },
 };
-function name(p){ const t = ROLE[p.side][p.type]; return LEVELS_UP(p.type) ? `${who(p.side)} ${t} ${p.str}` : `${who(p.side)} ${t}`; }
+function name(p){ const t = roleName(p); return LEVELS_UP(p.type) ? `${who(p.side)} ${t} ${p.str}` : `${who(p.side)} ${t}`; }
 // Bot: plays either side using only enemy info it has seen (revealed, or met in a fight).
 const known = q => q.revealed || q.seen;
 function botMove(s, side, r){
@@ -474,12 +507,21 @@ if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, s
 </script>
 <script>
 const ICON = {
-  H:  { F: "🏢", T: "🍯", S: "🛸", M: "🔧", A: "📢", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
+  H:  { F: "🏢", T: "🍯", S: "🧑‍✈️", M: "🧑‍🔧", A: "📢", C: "🧐", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
   AI: { F: "🛑", T: "🚪", S: "🕷", M: "💻", A: "🦠", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
 };
+// each fighter's face and the move it plays when it attacks (from the roster mockup); role pieces' moves are by type
+const CHAR = {
+  H:  { 4: ["🧑‍💻", "hop"], 5: ["🧑‍🔬", "dash"], 6: ["🥷", "flip"], 7: ["🕵️", "blink"], 8: ["🪖", "march"], 9: ["🧑‍💼", "shock"] },
+  AI: { 3: ["💬", "poke"], 4: ["🤖", "hop"], 5: ["🐝", "swarm"], 7: ["🦾", "stomp"], 8: ["👁️", "beam"] },
+};
+const ROLE_MOVE = { S: "glide", M: "walk", C: "hop", I: "grow", K: "fake", R: "hop", P: "hop" };
+const iconOf = p => p.type === "X" ? (CHAR[homeSide(p)][p.str] || ["⚔️"])[0] : ICON[homeSide(p)][p.type];
+const moveOf = p => p.type === "X" ? (CHAR[homeSide(p)][p.str] || [0, "hop"])[1] : p.type === "A" ? (homeSide(p) === "H" ? "expose" : "infect") : ROLE_MOVE[p.type] || "hop";
+const cap = s => s[0].toUpperCase() + s.slice(1);
 const ABOUT = {
   X: p => `Fights: higher number wins, same number kills both. ${p.side === "H" && p.str === 9 ? "The CTO. If the AI reaches superintelligence, stand on ⚡ and cut the power." : ""}`,
-  S: () => "Slides any distance in a straight line. Scouts, and hits the back row.",
+  S: p => `${homeSide(p) === "H" ? "Flies" : "Scuttles"} any distance in a straight line. Scouts, and hits the back row.`,
   M: p => p.side === "H" ? "Fights as a 3, and is the only piece that walks through a backdoor safely, removing it." : "Fights as a 3, and walks through honeypots safely, removing them.",
   A: p => p.side === "H" ? `The whistleblower. Fights as a 1, but exposes an AI ${BAL.SPY_MIN} or ${BAL.SPY_MAX} it attacks and takes it out. Can't touch a 10. Loses to anything else, so scan first.` : `The virus. Kills an ${BAL.SPY_MIN} or ${BAL.SPY_MAX} if it attacks it: the humans' top agents. Loses to anything else, so remember where their big numbers are.`,
   C: () => "Reveals every hidden enemy piece next to it, every turn. Keep it escorted.",
@@ -570,16 +612,19 @@ if (params.has("sim")){
   function camIn(r, c, tier){ camState = { scale: [1.12, 1.28, 1.4][tier], ox: (c + .5) * 12.5, oy: (r + .5) * 12.5 }; applyCam(false); }
   function camOut(){ camState = null; applyCam(false); }
   // pointer handling: tap, or drag an own piece and drop it on a lit square
-  let ptr = null, dragEl = null;
-  // the dragged piece's centre decides the drop: the nearest legal square, as soon as it is nearer than the piece's own square
-  function dropTarget(from, dx, dy){
+  let ptr = null, dragEl = null; // ptr.cx/cy: the dragged square's centre on screen
+  // the dragged piece's centre (on screen) decides the drop: the nearest legal square, as soon as it is nearer than the
+  // piece's own square. Screen rects, not offsets: the board is tilted, so a finger's pixels aren't the board's pixels.
+  const mid = el => { const q = el.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2, w: q.width, h: q.height }; };
+  function dropTarget(from, x, y){
     const src = app.querySelector(`.sq[data-r="${from.r}"][data-c="${from.c}"]`); if (!src) return null;
-    const cx = src.offsetLeft + src.offsetWidth / 2 + dx, cy = src.offsetTop + src.offsetHeight / 2 + dy;
     const cands = phase === "setup" ? [...app.querySelectorAll(".sq")].filter(q => !q.disabled && SETUP_ROWS[me].includes(+q.dataset.r)) : [...app.querySelectorAll(".sq.can,.sq.copy")];
-    let best = null, bd = Math.hypot(dx, dy);
-    for (const q of cands){ if (q === src) continue; const d = Math.hypot(q.offsetLeft + q.offsetWidth / 2 - cx, q.offsetTop + q.offsetHeight / 2 - cy); if (d < bd){ bd = d; best = q; } }
+    const s = mid(src); let best = null, bd = Math.hypot(x - s.x, y - s.y);
+    for (const q of cands){ if (q === src) continue; const m = mid(q), d = Math.hypot(m.x - x, m.y - y); if (d < bd){ bd = d; best = q; } }
     return best;
   }
+  const noSlide = new Set(); // a dropped piece is already where it lands: skip its slide on the next render
+  let floater = null;
   // select in place while a drag starts: a full render() would replace the square under the finger, and iOS then stops
   // sending that touch's pointer events (they go to the detached node), so the drag silently dies
   function lightMoves(){
@@ -598,6 +643,7 @@ if (params.has("sim")){
       ptr = { r: +sq.dataset.r, c: +sq.dataset.c, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
     });
   }
+  function endDrag(){ if (floater){ floater.remove(); floater = null; } if (dragEl){ dragEl.classList.remove("drag"); dragEl = null; } }
   window.addEventListener("pointermove", e => {
     if (!ptr || e.pointerId !== ptr.id) return;
     const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
@@ -608,13 +654,19 @@ if (params.has("sim")){
       if (!can){ ptr = null; return; }
       ptr.moved = true;
       if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; lightMoves(); }
-      dragEl = app.querySelector(`.sq[data-id="${p.id}"] .pz`); if (dragEl) dragEl.classList.add("drag");
+      const src = app.querySelector(`.sq[data-id="${p.id}"]`), m = mid(src);
+      ptr.cx = m.x; ptr.cy = m.y;
+      dragEl = src.querySelector(".pz"); if (dragEl) dragEl.classList.add("drag");
+      floater = document.createElement("div"); floater.className = "floater " + cls(p.side);
+      floater.innerHTML = faceHtml(face(p));
+      Object.assign(floater.style, { width: m.w * .82 + "px", height: m.w * .76 + "px", fontSize: getComputedStyle(src).fontSize });
+      document.body.appendChild(floater);
       sfx.tap();
     }
-    if (dragEl){
-      dragEl.style.translate = `${dx}px ${dy}px`;
+    if (floater){
+      floater.style.left = ptr.cx + dx + "px"; floater.style.top = ptr.cy + dy + "px";
       app.querySelectorAll(".sq.over").forEach(x => x.classList.remove("over"));
-      const t = dropTarget(ptr, dx, dy); if (t) t.classList.add("over");
+      const t = dropTarget(ptr, ptr.cx + dx, ptr.cy + dy); if (t) t.classList.add("over");
     }
     e.preventDefault();
   }, { passive: false });
@@ -623,19 +675,12 @@ if (params.has("sim")){
     const was = ptr; ptr = null;
     if (!was.moved) return tap(was.r, was.c);
     app.querySelectorAll(".sq.over").forEach(x => x.classList.remove("over"));
-    const dx = e.clientX - was.x, dy = e.clientY - was.y;
-    const t = dropTarget(was, dx, dy), el = dragEl; dragEl = null;
-    if (t){
-      const src = app.querySelector(`.sq[data-r="${was.r}"][data-c="${was.c}"]`);
-      const fromX = dx - (t.offsetLeft - src.offsetLeft), fromY = dy - (t.offsetTop - src.offsetTop);
-      const id = sel && sel.id;
-      if (el) el.style.translate = "";
-      tap(+t.dataset.r, +t.dataset.c);
-      const nel = id != null ? app.querySelector(`.sq[data-id="${id}"] .pz`) : null;
-      if (nel && !busy){ nel.getAnimations().forEach(a => a.cancel()); nel.animate([{ translate: `${fromX}px ${fromY}px` }, { translate: "0 0" }], { duration: 180, easing: "ease-out" }); }
-    } else if (el){ el.classList.remove("drag"); el.style.translate = ""; }
+    const t = dropTarget(was, was.cx + e.clientX - was.x, was.cy + e.clientY - was.y);
+    if (t && sel) noSlide.add(String(sel.id));
+    endDrag();
+    if (t) tap(+t.dataset.r, +t.dataset.c);
   });
-  window.addEventListener("pointercancel", () => { ptr = null; if (dragEl){ dragEl.classList.remove("drag"); dragEl.style.translate = ""; dragEl = null; } });
+  window.addEventListener("pointercancel", () => { ptr = null; endDrag(); });
   function start(m = "solo", side = "H"){
     mode = m; me = side; document.body.classList.toggle("me-ai", me === "AI");
     state = newGame(seed + Math.floor(Math.random()*1e6)); phase = "setup"; sel = null; scanMode = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map();
@@ -654,13 +699,12 @@ if (params.has("sim")){
     if (state.turn !== me) setTimeout(botTurn, 500);
   }
   const cls = s => s === "H" ? "h" : "ai";
-  function chip(x){ return `<span class="pc ${cls(x.side)}">${x.type === "X" ? x.str : ICON[x.side][x.type] + (LEVELS_UP(x.type) ? " " + x.str : "")}</span>`; }
-  function faceHtml(p){
-    if (p.type === "X") return `<span>${p.str}</span>`;
-    return `<span class="ic">${ICON[p.side][p.type]}</span>` + (LEVELS_UP(p.type) ? `<span class="n">${p.str}</span>` : "");
-  }
+  function chip(x){ return `<span class="pc ${cls(x.side)}">${iconOf(x)}${LEVELS_UP(x.type) ? " " + x.str : ""}</span>`; }
+  function faceHtml(p){ return `<span class="ic">${iconOf(p)}</span>` + (LEVELS_UP(p.type) ? `<span class="n">${p.str}</span>` : ""); }
+  // a piece on the table: a block with a top, a front and two sides, and a soft shadow under it
+  const blockHtml = (inner, idle, d) => `<i class="shd"></i><div class="blk${idle ? " idle" : ""}"${d ? ` style="--d:${d}"` : ""}><i class="face ffr"></i><i class="face flf"></i><i class="face frt"></i><div class="face ftop">${inner}</div></div>`;
   const face = p => phase === "over" ? p : asSeenBy(p, me);
-  function pieceHtml(p, show){ return `<div class="pz${p.side === me && p.id % 3 === 0 ? " idle" : ""}" style="--d:-${(p.id * 7) % 28 / 10}s">${show ? faceHtml(p) : `<span class="q">?</span>`}</div>`; }
+  function pieceHtml(p, show){ return `<div class="pz">${blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`, p.side === me && p.id % 3 === 0, `-${(p.id * 7) % 28 / 10}s`)}</div>`; }
   const color = t => t.replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), '<span class="you">Your</span>').replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
   // FLIP: remember where every piece was drawn, then slide it from there after a re-render
   function snapshotRects(){
@@ -679,7 +723,7 @@ if (params.has("sim")){
     const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? "power cut" : "superintelligent";
     let html = `<div class="left"><div class="top"><div class="t">KILL SWITCH</div><div class="stat">Round <b>${state.round}</b> · ${me === "H" ? "Scans" : "Hacks"} <b>${state.scans[me]}</b></div></div>
     <div class="lvl"><span>🧠 grows</span><div class="bar"><i style="width:${pct}%"></i></div><span>${barText}</span></div>
-    <div class="boardwrap"><div class="zoom" id="zoom"><div class="board" id="board">`;
+    <div class="boardwrap"><div class="zoom" id="zoom"><div class="tilt"><div class="board" id="board">`;
     const cans = sel ? legalMoves(state, sel).filter(m => !m.cut) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
     const rowOrder = me === "H" ? [...Array(ROWS).keys()] : [...Array(ROWS).keys()].reverse(); // my side at the bottom
@@ -708,7 +752,7 @@ if (params.has("sim")){
       if (state.last && state.last.to[0] === r && state.last.to[1] === c) k.push("last");
       html += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED.has(r+","+c) ? "disabled" : ""}>${inner}</button>`;
     }
-    html += `</div><div class="fx" id="fx"></div></div><div class="toasts" id="toasts"></div></div></div><div class="right">`;
+    html += `</div><div class="fx" id="fx"></div></div></div><div class="toasts" id="toasts"></div></div></div><div class="right">`;
     let logHtml;
     if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Tap two pieces to swap them, or try the next lineup. Then START.`; }
     else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up, then moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
@@ -741,17 +785,17 @@ if (params.has("sim")){
     if (!FAST && prev.size){
       app.querySelectorAll(".sq[data-id]").forEach(el => {
         const id = el.dataset.id, was = prev.get(id);
-        if (!was || (opts.skip && opts.skip.has(id))) return;
+        if (!was || (opts.skip && opts.skip.has(id)) || noSlide.has(id)) return;
         const now = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth };
         const dx = was.left - now.left, dy = was.top - now.top;
         if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
         const dist = Math.hypot(dx, dy) / now.width;
         el.querySelector(".pz").animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }], { duration: Math.min(420, 140 + dist * 70), easing: "cubic-bezier(.2,.8,.2,1)" });
       });
-      for (const id of flips){ const el = app.querySelector(`.sq[data-id="${id}"] .pz`); if (el) el.classList.add("reveal"); }
+      for (const id of flips){ const el = app.querySelector(`.sq[data-id="${id}"] .blk`); if (el) el.classList.add("reveal"); }
       for (const id of turns){ const el = app.querySelector(`.sq[data-id="${id}"]`); if (el) el.classList.add("turned"); }
     }
-    shown = nowShown; prevSides = nowSides;
+    shown = nowShown; prevSides = nowSides; noSlide.clear();
     applyCam(true);
     bindPointer();
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
@@ -767,7 +811,7 @@ if (params.has("sim")){
   }
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
-    H:  { S: "slides any distance", M: "fights as 3, removes backdoors", A: "1; kills an 8 or 9 it attacks", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
+    H:  { S: "flies any distance", M: "fights as 3, removes backdoors", A: "1; kills an 8 or 9 it attacks", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
     AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 10 on its own", K: "fights as 3, scans see a 7", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
@@ -776,8 +820,8 @@ if (params.has("sim")){
     const krow = (side, t, str) => {
       const n = alive(side, t, str), m = total(side, t, str);
       const lvl = t === "X" ? str : ARMIES[side].find(([tt]) => tt === t)[1];
-      const ch = t === "X" ? `<span class="pc ${cls(side)}">${str}</span>` : `<span class="pc tok ${cls(side)}"><span class="ic">${ICON[side][t]}</span>${LEVELS_UP(t) ? `<span class="n">${lvl}</span>` : ""}</span>`;
-      const nm = t === "X" ? (side === "H" && str === 9 ? "CTO" : "agent") : ROLE[side][t];
+      const ch = `<span class="pc tok ${cls(side)}"><span class="ic">${iconOf({ side, home: side, type: t, str: lvl })}</span>${LEVELS_UP(t) ? `<span class="n">${lvl}</span>` : ""}</span>`;
+      const nm = roleName({ side, home: side, type: t, str: lvl });
       const tag = t !== "X" && LEVELS_UP(t) ? `<span class="lv">lvl ${lvl}</span>` : "";
       return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${tag}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "cuts the power at ⚡" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
     };
@@ -792,7 +836,7 @@ if (params.has("sim")){
       ${specials(me).map(t => krow(me, t)).join("")}
       <div class="kh ${cls(me) === "h" ? "a" : "b"}">${theirs()} pieces <span class="kc">${state.pieces.filter(p => p.side !== me).length}<i> of ${ARMIES[other(me)].length} left</i></span></div>
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
-      ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(p => `<span class="pc ${cls(other(me))}">${p.str}</span>`).join("")}</div>` : ""}
+      ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
       <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides. Pieces never level up; only the AI's 🧠 grows, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it can't hide, beats everything, sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on ⚡ and cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. What stops an 8 or 9: a stronger piece, the same number (both fall), the 📢 whistleblower or 🦠 virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
     </div>`;
@@ -822,8 +866,8 @@ if (params.has("sim")){
   }
   function explain(p){
     p = face(p);
-    const n = LEVELS_UP(p.type) ? `${ROLE[p.side][p.type]} ${p.str}` : ROLE[p.side][p.type];
-    return `<span class="${p.side === me ? "you" : "them"}">${n[0].toUpperCase() + n.slice(1)}.</span> ${ABOUT[p.type](p)}${p.side === me && sel && legalMoves(state, p).some(m => !m.cut) ? " Lit squares are where it can go; red means a fight." : ""}`;
+    const n = LEVELS_UP(p.type) ? `${roleName(p)} ${p.str}` : roleName(p);
+    return `<span class="${p.side === me ? "you" : "them"}">${iconOf(p)} ${cap(n)}.</span> ${ABOUT[p.type](p)}${p.side === me && sel && legalMoves(state, p).some(m => !m.cut) ? " Lit squares are where it can go; red means a fight." : ""}`;
   }
   function tap(r, c){
     if (busy) return;
@@ -859,20 +903,81 @@ if (params.has("sim")){
   // an animation's finished promise only settles while the page is visible; never let a fight hang on it
   const fin = (a, ms) => Promise.race([a.finished.catch(() => {}), wait(ms + 80)]);
   function rectOf(r, c){ const el = app.querySelector(`.sq[data-r="${r}"][data-c="${c}"]`); return el ? { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight } : null; }
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // one Web Animation that holds its end state; a single keyframe animates from wherever the element is now
+  const A = (el, frames, ms, easing = "ease", extra = {}) => fin(el.animate(frames, { duration: reduce ? 1 : ms, easing, fill: "forwards", ...extra }), reduce ? 1 : ms);
+  const blk = el => el.querySelector(".blk"), topOf = el => el.querySelector(".ftop");
+  // a fight stand-in: the same block as on the board, in the fx layer (the same tilted plane, so the same coordinates)
   function cloneAt(p, rect, show){
     const fx = document.getElementById("fx"); if (!fx) return null;
     const el = document.createElement("div"); el.className = `clone ${cls(p.side)}`;
-    const in7 = rect.width * .07;
-    el.style.left = (rect.left + in7) + "px"; el.style.top = (rect.top + in7) + "px"; el.style.width = (rect.width - 2 * in7) + "px"; el.style.height = (rect.height - 2 * in7) + "px";
-    el.innerHTML = show ? faceHtml(p) : `<span class="q">?</span>`;
+    Object.assign(el.style, { left: rect.left + "px", top: rect.top + "px", width: rect.width + "px", height: rect.height + "px" });
+    el.innerHTML = blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`);
     fx.appendChild(el); return el;
   }
-  // the attacker lunges into the defender; the loser shakes and shrinks away; then the board re-renders.
+  // effects on the table at a point given as a fraction of the way from the attacker (x0,y0) to the defender
+  function fxAt(cls, c, f, style = {}){ const e = document.createElement("div"); e.className = cls; Object.assign(e.style, { left: c.x0 + c.dx * f + "px", top: c.y0 + c.dy * f + "px" }, style); document.getElementById("fx").appendChild(e); return e; }
+  function sparks(c, f = 1, color){
+    if (reduce) return;
+    for (let i = 0; i < 18; i++){
+      const s = fxAt("spk", c, f); if (color) s.style.background = color; else if (i % 3 === 0) s.style.background = "#fff";
+      const a = Math.random() * Math.PI * 2, d = 30 + Math.random() * 50;
+      s.animate([{ transform: "translate3d(0,0,20px)", opacity: 1 }, { transform: `translate3d(${Math.cos(a) * d}px,${Math.sin(a) * d}px,${40 + Math.random() * 60}px)`, opacity: 0 }], { duration: 600 + Math.random() * 300, easing: "cubic-bezier(.1,.7,.3,1)" }).finished.then(() => s.remove(), () => s.remove());
+    }
+  }
+  function ring(c, f, color, scale = 4, ms = 600){
+    const e = fxAt("ring", c, f); e.style.setProperty("--c", color);
+    e.animate([{ transform: "translateZ(4px) scale(.2)", opacity: 1 }, { transform: `translateZ(4px) scale(${scale})`, opacity: 0 }], { duration: reduce ? 1 : ms, easing: "ease-out" }).finished.then(() => e.remove(), () => e.remove());
+  }
+  const IMP = .62; // where the attacker meets the defender
+  const go = (c, f, ms, easing = "ease-out") => { c.at = f; return A(c.ca, [{ transform: `translate(${c.dx * f}px,${c.dy * f}px)` }], ms, easing); };
+  const lift = (el, z, ms = 220) => A(blk(el), [{ transform: `translateZ(${z}px)` }], ms, "ease-out");
+  const land = el => A(blk(el), [{ transform: "none" }], 300, "cubic-bezier(.3,1.6,.5,1)");
+  // the approach: each move ends with the attacker at the point of impact (c.at), or firing from where it stands
+  const APPROACH = {
+    hop: c => Promise.all([go(c, IMP, 340), A(blk(c.ca), [{ transform: "translateZ(0)" }, { transform: "translateZ(46px)", offset: .5 }, { transform: "translateZ(16px)" }], 340, "ease-out")]),
+    async dash(c){ await go(c, -.14, 230); await Promise.all([go(c, IMP, 150, "cubic-bezier(.6,0,.9,.4)"), A(blk(c.ca), [{ transform: "translateZ(6px) scale(1.18)" }], 150)]); },
+    flip: c => Promise.all([go(c, IMP, 560, "ease-in-out"), A(blk(c.ca), [{ transform: "translateZ(0) rotateX(0)" }, { transform: "translateZ(90px) rotateX(-180deg)", offset: .5 }, { transform: "translateZ(12px) rotateX(-360deg)" }], 560, "ease-in-out")]),
+    async blink(c){ await A(blk(c.ca), [{ transform: "scale(0) rotateZ(180deg)" }], 240, "ease-in"); sparks(c, 0, "#8A9BB0"); await go(c, IMP, 1); sparks(c, IMP, "#8A9BB0"); await A(blk(c.ca), [{ transform: "scale(0) rotateZ(-180deg)" }, { transform: "translateZ(10px) scale(1) rotateZ(0)" }], 280, "cubic-bezier(.3,1.5,.5,1)"); },
+    async march(c){ for (const [f, z] of [[.31, 8], [IMP, -8]]) await Promise.all([go(c, f, 230, "ease-in-out"), A(blk(c.ca), [{ transform: "translateZ(0) rotateZ(0)" }, { transform: `translateZ(14px) rotateZ(${z}deg)`, offset: .5 }, { transform: "translateZ(0) rotateZ(0)" }], 230)]); },
+    async shock(c){ await Promise.all([go(c, IMP * .8, 440), A(blk(c.ca), [{ transform: "translateZ(0) rotateZ(0)" }, { transform: "translateZ(80px) rotateZ(360deg)" }], 440, "ease-out")]); await Promise.all([go(c, IMP, 120, "ease-in"), A(blk(c.ca), [{ transform: "translateZ(0)" }], 120, "ease-in")]); ring(c, IMP, "#5CC8FF", 5, 650); ring(c, IMP, "#E6EDF3", 3.5, 480); },
+    async poke(c){ await A(blk(c.ca), [0, 12, -12, 10, -10, 8, -8, 0].map(z => ({ transform: `rotateZ(${z}deg)` })), 480); await go(c, IMP, 140, "ease-in"); },
+    async swarm(c){
+      await A(blk(c.ca), [{ transform: "scale(0)" }], 180);
+      if (!reduce) await Promise.all([0, 1, 2, 3, 4].map(i => { const m = fxAt("mini", c, 0); m.textContent = "🐝"; const px = -c.dy / c.len * (i - 2) * 14, py = c.dx / c.len * (i - 2) * 14;
+        return fin(m.animate([{ transform: "translate3d(0,0,10px)" }, { transform: `translate3d(${c.dx * .3 + px}px,${c.dy * .3 + py}px,${50 + (i % 2) * 40}px)`, offset: .5 }, { transform: `translate3d(${c.dx * IMP}px,${c.dy * IMP}px,14px)` }], { duration: 560, delay: i * 60, easing: "ease-in-out", fill: "forwards" }), 560 + i * 60).then(() => m.remove()); }));
+      await go(c, IMP, 1); await A(blk(c.ca), [{ transform: "scale(0)" }, { transform: "scale(1)" }], 260, "cubic-bezier(.3,1.5,.5,1)");
+    },
+    async stomp(c){ for (const f of [.28, .5]){ await Promise.all([go(c, f, 280, "ease-in-out"), A(blk(c.ca), [{ transform: "translateZ(0)" }, { transform: "translateZ(30px)", offset: .45 }, { transform: "translateZ(0)" }], 280, "ease-in")]); shakeBoard(false); } await lift(c.ca, 60, 200); await Promise.all([go(c, IMP, 170, "ease-in"), A(blk(c.ca), [{ transform: "translateZ(0)" }], 170, "ease-in")]); },
+    async beam(c){
+      await lift(c.ca, 40, 280);
+      const b = fxAt("beam", c, 0, { width: c.len + "px" }); b.style.transform = `rotate(${Math.atan2(c.dy, c.dx)}rad) translateZ(40px) scaleX(0)`;
+      await A(b, [{ transform: `rotate(${Math.atan2(c.dy, c.dx)}rad) translateZ(40px) scaleX(1)` }], 180, "ease-out"); setTimeout(() => b.remove(), reduce ? 0 : 320);
+    },
+    async glide(c){ await lift(c.ca, 18, 160); await go(c, .8, Math.min(560, 240 + c.len / c.size * 70), "cubic-bezier(.5,0,.8,.6)"); },
+    async walk(c){ await lift(c.ca, 24, 200); await go(c, IMP, 300, "ease-in-out"); },
+    async expose(c){ await lift(c.ca, 16, 200);
+      for (let i = 0; i < 3; i++){ const w = fxAt("ring", c, 0); w.style.setProperty("--c", "#E6EDF3"); w.animate([{ transform: "translate3d(0,0,24px) scale(.6)", opacity: 1 }, { transform: `translate3d(${c.dx}px,${c.dy}px,24px) scale(2.2)`, opacity: 0 }], { duration: reduce ? 1 : 520, easing: "ease-out" }).finished.then(() => w.remove(), () => w.remove()); await wait(reduce ? 0 : 160); } },
+    infect: c => APPROACH.walk(c),
+    async grow(c){ ring(c, 0, "#FF5C5C", 3, 600); await A(blk(c.ca), [{ transform: "scale(1)" }, { transform: "scale(1.18)" }, { transform: "scale(1)" }], 360, "ease-in-out"); await APPROACH.hop(c); },
+    async fake(c){ const t = topOf(c.ca), real = t.innerHTML, mask = faceHtml({ ...c.a, type: "X", str: 7 });
+      for (let i = 0; i < 3; i++){ t.innerHTML = i % 2 ? mask : real; await A(blk(c.ca), [{ transform: "translateX(3px)" }, { transform: "translateX(-3px)" }, { transform: "none" }], 120); }
+      await APPROACH.hop(c); },
+  };
+  // knocked off the table: flies away from the attack and tumbles
+  function knockOff(el, c, f, sign){
+    const s = c.size, ux = c.dx / c.len, uy = c.dy / c.len, bx = c.dx * f, by = c.dy * f;
+    A(el.querySelector(".shd"), [{ opacity: 0 }], 200);
+    A(el, [{ transform: `translate(${bx + (ux * .9 - uy * .4) * s * sign}px,${by + (uy * .9 + ux * .4) * s * sign}px)` }], 650, "ease-out");
+    return A(blk(el), [{ transform: "translateZ(0) rotateX(0) rotateZ(0) scale(1)" }, { transform: `translateZ(140px) rotateX(-250deg) rotateZ(${40 * sign}deg) scale(.7)`, offset: .55 }, { transform: `translateZ(60px) rotateX(-420deg) rotateZ(${70 * sign}deg) scale(0)` }], 650, "ease-out");
+  }
+  const sink = el => A(blk(el), [{ transform: "translateZ(-6px) scale(0)" }], 420, "ease-in");
+  async function flip3d(el, html){ await A(blk(el), [{ transform: "translateZ(30px) rotateY(90deg)" }], 130, "ease-in"); topOf(el).innerHTML = html; await A(blk(el), [{ transform: "translateZ(30px) rotateY(-90deg)" }, { transform: "none" }], 240, "cubic-bezier(.3,1.5,.5,1)"); }
   // Bigger ranks, bigger fight: poke (1-3), clash (4-6), showdown (7+) by the higher rank in the fight.
   function fightTier(a, d){ const m = Math.max(a.type === "X" || LEVELS_UP(a.type) ? a.str : 0, d.type === "X" || LEVELS_UP(d.type) ? d.str : 0); return m >= 7 ? 2 : m >= 4 ? 1 : 0; }
-  function sparks(x, y){ const fx = document.getElementById("fx"); for (let i = 0; i < 14; i++){ const s = document.createElement("div"); s.className = "spark"; const ang = Math.random() * Math.PI * 2, d = 30 + Math.random() * 50; s.style.left = x + "px"; s.style.top = y + "px"; s.style.setProperty("--dx", Math.cos(ang) * d + "px"); s.style.setProperty("--dy", Math.sin(ang) * d + "px"); s.style.animationDelay = (Math.random() * .1) + "s"; fx.appendChild(s); setTimeout(() => s.remove(), 900); } }
-  function shakeBoard(big){ const b = document.getElementById("board"); if (!b) return; b.classList.remove("shake", "big"); void b.offsetWidth; b.classList.add("shake"); if (big) b.classList.add("big"); }
+  function shakeBoard(big){ const b = document.getElementById("board"); if (!b || reduce) return; b.classList.remove("shake", "big"); void b.offsetWidth; b.classList.add("shake"); if (big) b.classList.add("big"); }
   let lastCard = null;
+  // the attacker plays its own move up to the impact; the card shows both pieces; the loser is knocked off the table
   async function animateFight(before, ev){
     const a = before.pieces.find(x => x.r === state.last.from[0] && x.c === state.last.from[1]);
     const d = before.pieces.find(x => x.r === ev.r && x.c === ev.c);
@@ -883,35 +988,46 @@ if (params.has("sim")){
     const masked = x => x.side !== me && (!x.revealed || face(x) !== x);
     const ca = cloneAt(face(a), ra, a.side === me || a.revealed), cd = cloneAt(face(d), rd, d.side === me || d.revealed);
     for (const sq of [sqA, sqD]){ const pz = sq && sq.querySelector(".pz"); if (pz) pz.style.visibility = "hidden"; }
+    app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach(q => q.classList.remove("can", "sel", "copy")); // the choice is made: unlight the board
+    const font = getComputedStyle(sqA).fontSize; ca.style.fontSize = cd.style.fontSize = font;
     const dx = rd.left - ra.left, dy = rd.top - ra.top;
-    if (tier === 2) await wait(200);
-    const lunge = [160, 200, 420][tier];
-    await fin(ca.animate([{ transform: "none" }, { transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }], { duration: lunge, easing: tier === 2 ? "ease-in" : "cubic-bezier(.4,0,1,1)", fill: "forwards" }), lunge);
+    const c = { a, d, ca, cd, dx, dy, len: Math.hypot(dx, dy) || 1, size: ra.width, at: 0, x0: ra.left + ra.width / 2, y0: ra.top + ra.height / 2 };
+    // a hidden attacker doesn't give its move away: it hops like any ? until the impact shows what it is
+    const mv = a.side === me || a.revealed ? moveOf(face(a)) : "hop";
+    if (tier === 2) await wait(reduce ? 0 : 160);
+    await APPROACH[mv](c);
     sfx.hit(); if (tier === 2) sfx.big();
-    const fx = document.getElementById("fx");
-    const bx = rd.left + rd.width / 2, by = rd.top + rd.height / 2;
-    const burst = document.createElement("div"); burst.className = "burst" + (tier === 2 ? " big" : ""); burst.style.left = bx + "px"; burst.style.top = by + "px";
-    fx.appendChild(burst); setTimeout(() => burst.remove(), 900);
-    if (tier >= 1) shakeBoard(tier === 2);
-    if (tier === 2){ sparks(bx, by); const fl = document.createElement("div"); fl.className = "flash"; document.body.appendChild(fl); setTimeout(() => fl.remove(), 700); }
-    // reveal the hidden one at the moment of impact
-    if (masked(a)) { ca.innerHTML = faceHtml(a); ca.classList.add("reveal"); }
-    if (masked(d)) { cd.innerHTML = faceHtml(d); cd.classList.add("reveal"); }
+    sparks(c, 1); if (tier >= 1) shakeBoard(tier === 2);
+    if (tier === 2 && !reduce){ const fl = document.createElement("div"); fl.className = "flash"; document.body.appendChild(fl); setTimeout(() => fl.remove(), 700); }
+    // the hidden one turns over at the moment of impact
+    const flips = [];
+    if (masked(a)) flips.push(flip3d(ca, faceHtml(a)));
+    if (masked(d)) flips.push(flip3d(cd, faceHtml(d)));
     const card = vsCard(ev, tier); lastCard = card;
-    if (tier === 2) await wait(300); // freeze on impact
-    setTimeout(() => vsResolve(card, ev), [520, 560, 700][tier]); // long enough to read both numbers first
+    await Promise.all(flips);
+    if (tier === 2) await wait(reduce ? 0 : 260); // hold on impact
+    setTimeout(() => vsResolve(card, ev), reduce ? 0 : [380, 420, 520][tier]); // long enough to read both numbers first
     const r = ev.result;
-    const aDies = r === "lose" || r === "tie", dDies = r === "win" || r === "flag" || r === "defuse" || r === "tie";
-    const dur = [260, 320, 600][tier];
-    const anims = [];
-    if (dDies) anims.push(fin(cd.animate([{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "scale(.3) rotate(20deg) translateZ(60px)", opacity: 0 }], { duration: dur, easing: "ease-in", fill: "forwards" }), dur));
-    else cd.animate([{ transform: "translateX(0)" }, { transform: "translateX(-5px)" }, { transform: "translateX(5px)" }, { transform: "none" }], { duration: 220 });
-    if (aDies) anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx * 0.4}px,${dy * 0.4}px) scale(.3) rotate(-20deg) translateZ(60px)`, opacity: 0 }], { duration: dur, easing: "ease-in", fill: "forwards" }), dur));
-    else if (r === "trapped") anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx}px,${dy}px) scale(1) rotateY(180deg)` }], { duration: 300, fill: "forwards" }), 300));
-    else anims.push(fin(ca.animate([{ transform: `translate(${dx * 0.7}px,${dy * 0.7}px) scale(1.12)` }, { transform: `translate(${dx}px,${dy}px) scale(1)` }], { duration: 160, easing: "ease-out", fill: "forwards" }), 160));
-    await Promise.all(anims);
+    const aWins = r === "win" || r === "flag" || r === "defuse";
+    const finish = () => Promise.all([go(c, 1, 220), land(ca)]);
+    if (r === "defuse"){ await sink(cd); await finish(); }
+    else if (aWins){
+      if (mv === "expose"){ topOf(cd).classList.add("lit"); await wait(reduce ? 0 : 320); topOf(cd).classList.add("off"); await sink(cd); }
+      else if (mv === "infect"){ topOf(cd).classList.add("sick"); await A(blk(cd), [0, 6, -6, 5, -5, 0].map(x => ({ transform: `translateX(${x}px)` })), 420); await knockOff(cd, c, 1, 1); }
+      else { if (mv === "beam") topOf(cd).classList.add("glow"); knockOff(cd, c, 1, 1); await wait(reduce ? 0 : 200); }
+      await finish();
+    }
+    else if (r === "lose"){ A(blk(cd), [{ transform: "translateX(-5px)" }, { transform: "translateX(5px)" }, { transform: "none" }], 220); await knockOff(ca, c, c.at, -1); }
+    else if (r === "tie"){ await Promise.all([knockOff(ca, c, c.at, -1), knockOff(cd, c, 1, 1)]); }
+    else if (r === "trapped"){ // it lands on the trap, the trap is used up, and it switches sides right there
+      sink(cd); await Promise.all([go(c, 1, 300, "ease-in"), lift(ca, 26, 300)]);
+      await A(blk(ca), [0, 10, -10, 8, -8, 0].map(z => ({ transform: `translateZ(26px) rotateZ(${z}deg)` })), 400);
+      ca.classList.toggle("h"); ca.classList.toggle("ai"); sparks(c, 1, ca.classList.contains("h") ? "#5CC8FF" : "#F5A524");
+      await A(blk(ca), [{ transform: "translateZ(26px) rotateY(0)" }, { transform: "translateZ(26px) rotateY(360deg)" }], 460); await land(ca);
+    }
+    else await finish();
     const you = a.side === me;
-    const good = r === "tie" ? null : r === "trapped" ? !you : (!aDies) === you;
+    const good = r === "tie" ? null : r === "trapped" ? !you : aWins === you;
     if (good === true) sfx.win(); else if (good === false) sfx.lose();
     ca.remove(); cd.remove();
     return new Set([String(a.id), String(d.id)]);
@@ -951,7 +1067,7 @@ if (params.has("sim")){
     const wrap = app.querySelector(".boardwrap"); if (!wrap) return null;
     const b = wrap.getBoundingClientRect();
     const el = document.createElement("div"); el.className = "vsc" + (tier === 2 ? " big" : "");
-    const side = (x, k) => `<div class="side ${k}"><span class="pc ${cls(x.side)}">${x.type === "X" ? `<b class="n">${x.str}</b>` : `<span class="i">${ICON[x.side][x.type]}</span>${LEVELS_UP(x.type) ? `<b class="n">${x.str}</b>` : ""}`}</span><span class="nm"><b>${x.side === me ? "you" : theirs()}</b>${x.type === "X" ? (x.side === "H" && x.str === 9 ? "CTO" : "agent") : ROLE[x.side][x.type]}</span></div>`;
+    const side = (x, k) => `<div class="side ${k}"><span class="pc ${cls(x.side)}"><span class="i">${iconOf(x)}</span>${LEVELS_UP(x.type) ? `<b class="n">${x.str}</b>` : ""}</span><span class="nm"><b>${x.side === me ? "you" : theirs()}</b>${roleName(x)}</span></div>`;
     el.innerHTML = `<div class="row">${side(ev.a, "a")}<span class="vt">vs</span>${side(ev.d, "d")}</div><div class="res"></div>`;
     // centre it over the half of the board the fight is not in (on screen: the AI player sees the board flipped),
     // so the fight square stays visible, and keep the whole card inside the viewport
