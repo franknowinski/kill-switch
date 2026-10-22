@@ -15,6 +15,7 @@
   --display:"Chakra Petch",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace;
 }
 *{box-sizing:border-box}
+html{overflow-x:clip} /* fight sparks and knock-offs fly past the edge for a moment: never let the page scroll sideways */
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 body{min-height:100dvh;display:flex;flex-direction:column;overflow-x:clip;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 button{font:inherit;color:inherit;cursor:pointer}
@@ -27,7 +28,7 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .lvl .bar{flex:1;height:8px;border-radius:4px;background:var(--panel);border:1px solid var(--amber-line);overflow:hidden}
 .lvl .bar i{display:block;height:100%;background:var(--amber);transition:width .3s}
 .lvl span{font-size:11px;letter-spacing:1px;color:var(--amber);text-transform:uppercase;white-space:nowrap}
-.boardwrap{position:relative;margin:0 16px}
+.boardwrap{position:relative;margin:0 16px;touch-action:none}
 /* flat board; the .zoom layer scales around the fight square for the battle close-up */
 .zoom{position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1);will-change:transform}
 .board{position:relative;display:grid;grid-template-columns:repeat(8,1fr);gap:3px;aspect-ratio:1;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none}
@@ -80,6 +81,9 @@ body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165
 .floater.h{background:linear-gradient(180deg,#1a4068,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue)}
 .floater.ai{background:linear-gradient(180deg,#4a3209,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(245,165,36,.5)}
 .floater .n{position:absolute;right:4%;bottom:4%;font-size:.5em;padding:.08em .26em;border-radius:.4em;background:rgba(0,0,0,.5)}
+/* the CTO stands out from the other people: a gold rim and a gold strength badge wherever it's drawn */
+.crest{position:absolute;inset:1px;border:2px solid #ffd84a;border-radius:5px;box-shadow:inset 0 0 8px rgba(255,216,74,.4);pointer-events:none}
+.n.gold,.ftop .n.gold,.vsc .pc .n.gold{background:#ffd84a;color:#1a1405}.kr .pc.tok .n.gold{padding:0 2px;border-radius:3px;right:1px}
 .ftop.lit{box-shadow:0 0 0 2px #fff,0 0 26px 6px rgba(255,255,255,.75)}
 .ftop.off{background:#151a20!important;border-color:#2a3038!important;color:#56616e!important}
 .ftop.sick{background:linear-gradient(180deg,#1d4a2a,#0d2414)!important;border-color:#2f8a4a!important}
@@ -512,7 +516,7 @@ const ICON = {
 };
 // each fighter's face and the move it plays when it attacks (from the roster mockup); role pieces' moves are by type
 const CHAR = {
-  H:  { 4: ["🧑‍💻", "hop"], 5: ["🧑‍🔬", "dash"], 6: ["🥷", "flip"], 7: ["🕵️", "blink"], 8: ["🪖", "march"], 9: ["🧑‍💼", "shock"] },
+  H:  { 4: ["🧑‍💻", "hop"], 5: ["🧑‍🔬", "dash"], 6: ["🥷", "flip"], 7: ["🕵️", "blink"], 8: ["🪖", "march"], 9: ["🤵", "shock"] }, // the CTO in a tuxedo: 🧑‍💼 read the same as the 🧑‍🔧 engineer at board size
   AI: { 3: ["💬", "poke"], 4: ["🤖", "hop"], 5: ["🐝", "swarm"], 7: ["🦾", "stomp"], 8: ["👁️", "beam"] },
 };
 const ROLE_MOVE = { S: "glide", M: "walk", C: "hop", I: "grow", K: "fake", R: "hop", P: "hop" };
@@ -534,11 +538,28 @@ const ABOUT = {
 // tiny synthesized sounds, no files
 const SFX = { ctx: null, on: true };
 try { SFX.on = localStorage.getItem("ks-sound") !== "off"; } catch (e) {}
+// iPhone Safari only lets audio start inside a user gesture, and suspends ("interrupted") the context when the page is
+// backgrounded or a call comes in. So: make and resume the context on every touch, and play one silent sample the first time.
+function audioCtx(){
+  if (!SFX.ctx){ const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; SFX.ctx = new AC(); }
+  if (SFX.ctx.state !== "running" && SFX.ctx.resume) SFX.ctx.resume().catch(() => {});
+  return SFX.ctx;
+}
+function unlockAudio(){
+  if (!SFX.on) return;
+  try {
+    const ctx = audioCtx(); if (!ctx || SFX.unlocked) return;
+    const src = ctx.createBufferSource(); src.buffer = ctx.createBuffer(1, 1, 22050); src.connect(ctx.destination); src.start(0);
+    SFX.unlocked = ctx.state === "running"; // still suspended: try again on the next touch
+  } catch (e) {}
+}
+for (const ev of ["pointerdown", "touchend", "click", "keydown"]) document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && SFX.ctx && SFX.on) audioCtx(); });
 function tone(freq, dur, type = "square", gain = 0.08, when = 0, slide = null){
   if (!SFX.on) return;
   try {
-    if (!SFX.ctx) SFX.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = SFX.ctx, t0 = ctx.currentTime + when;
+    const ctx = audioCtx(); if (!ctx) return;
+    const t0 = ctx.currentTime + when;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t0);
     if (slide) o.frequency.exponentialRampToValueAtTime(slide, t0 + dur);
@@ -621,6 +642,16 @@ if (params.has("sim")){
     const cands = phase === "setup" ? [...app.querySelectorAll(".sq")].filter(q => !q.disabled && SETUP_ROWS[me].includes(+q.dataset.r)) : [...app.querySelectorAll(".sq.can,.sq.copy")];
     const s = mid(src); let best = null, bd = Math.hypot(x - s.x, y - s.y);
     for (const q of cands){ if (q === src) continue; const m = mid(q), d = Math.hypot(m.x - x, m.y - y); if (d < bd){ bd = d; best = q; } }
+    if (best) return best;
+    // a flick: the piece hasn't reached a square, so go the way it was pulled. Of the lit squares within 40° of the drag
+    // direction, take the one nearest the finger (a short flick picks the next square, a long one goes further for sliders).
+    // let go still on (most of) the piece's own square: that cancels, as it always has; it has to be pulled off to flick
+    const vx = x - s.x, vy = y - s.y, vl = Math.hypot(vx, vy); if (vl < Math.max(8, s.w * .4)) return null;
+    for (const q of cands){
+      if (q === src) continue; const m = mid(q), ux = m.x - s.x, uy = m.y - s.y, ul = Math.hypot(ux, uy);
+      if ((vx * ux + vy * uy) / (vl * ul) < Math.cos(40 * Math.PI / 180)) continue;
+      const d = Math.hypot(m.x - x, m.y - y); if (!best || d < bd){ bd = d; best = q; }
+    }
     return best;
   }
   const noSlide = new Set(); // a dropped piece is already where it lands: skip its slide on the next render
@@ -636,10 +667,19 @@ if (params.has("sim")){
     lit.forEach(q => q && q.classList.add("can"));
     const msg = app.querySelector(".msg"); if (msg && info) msg.innerHTML = info;
   }
+  // the square under a touch: on the tilted board a touch's target can come back as the whole board (browsers adjust
+  // touch targets, and 3D hit-testing differs), so ask for what's under the point, then fall back to the nearest square
+  function sqAt(e){
+    const hit = e.target.closest && e.target.closest(".sq"); if (hit) return hit;
+    const under = document.elementsFromPoint(e.clientX, e.clientY).map(el => el.closest && el.closest(".sq")).find(Boolean); if (under) return under;
+    let best = null, bd = Infinity;
+    for (const q of app.querySelectorAll(".sq")){ const m = mid(q), d = Math.hypot(m.x - e.clientX, m.y - e.clientY); if (d < bd && d < m.w * .75){ bd = d; best = q; } }
+    return best;
+  }
   function bindPointer(){
     const board = document.getElementById("board"); if (!board) return;
     board.addEventListener("pointerdown", e => {
-      const sq = e.target.closest(".sq"); if (!sq || sq.disabled || busy) return;
+      const sq = sqAt(e); if (!sq || sq.disabled || busy) return;
       ptr = { r: +sq.dataset.r, c: +sq.dataset.c, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
     });
   }
@@ -700,7 +740,8 @@ if (params.has("sim")){
   }
   const cls = s => s === "H" ? "h" : "ai";
   function chip(x){ return `<span class="pc ${cls(x.side)}">${iconOf(x)}${LEVELS_UP(x.type) ? " " + x.str : ""}</span>`; }
-  function faceHtml(p){ return `<span class="ic">${iconOf(p)}</span>` + (LEVELS_UP(p.type) ? `<span class="n">${p.str}</span>` : ""); }
+  const ctoLook = p => p.type === "X" && p.str === 9 && homeSide(p) === "H";
+  function faceHtml(p){ const g = ctoLook(p); return (g ? `<i class="crest"></i>` : "") + `<span class="ic">${iconOf(p)}</span>` + (LEVELS_UP(p.type) ? `<span class="n${g ? " gold" : ""}">${p.str}</span>` : ""); }
   // a piece on the table: a block with a top, a front and two sides, and a soft shadow under it
   const blockHtml = (inner, idle, d) => `<i class="shd"></i><div class="blk${idle ? " idle" : ""}"${d ? ` style="--d:${d}"` : ""}><i class="face ffr"></i><i class="face flf"></i><i class="face frt"></i><div class="face ftop">${inner}</div></div>`;
   const face = p => phase === "over" ? p : asSeenBy(p, me);
@@ -820,7 +861,7 @@ if (params.has("sim")){
     const krow = (side, t, str) => {
       const n = alive(side, t, str), m = total(side, t, str);
       const lvl = t === "X" ? str : ARMIES[side].find(([tt]) => tt === t)[1];
-      const ch = `<span class="pc tok ${cls(side)}"><span class="ic">${iconOf({ side, home: side, type: t, str: lvl })}</span>${LEVELS_UP(t) ? `<span class="n">${lvl}</span>` : ""}</span>`;
+      const ch = `<span class="pc tok ${cls(side)}"><span class="ic">${iconOf({ side, home: side, type: t, str: lvl })}</span>${LEVELS_UP(t) ? `<span class="n${ctoLook({ side, home: side, type: t, str: lvl }) ? " gold" : ""}">${lvl}</span>` : ""}</span>`;
       const nm = roleName({ side, home: side, type: t, str: lvl });
       const tag = t !== "X" && LEVELS_UP(t) ? `<span class="lv">lvl ${lvl}</span>` : "";
       return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${tag}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "cuts the power at ⚡" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
@@ -1067,7 +1108,7 @@ if (params.has("sim")){
     const wrap = app.querySelector(".boardwrap"); if (!wrap) return null;
     const b = wrap.getBoundingClientRect();
     const el = document.createElement("div"); el.className = "vsc" + (tier === 2 ? " big" : "");
-    const side = (x, k) => `<div class="side ${k}"><span class="pc ${cls(x.side)}"><span class="i">${iconOf(x)}</span>${LEVELS_UP(x.type) ? `<b class="n">${x.str}</b>` : ""}</span><span class="nm"><b>${x.side === me ? "you" : theirs()}</b>${roleName(x)}</span></div>`;
+    const side = (x, k) => `<div class="side ${k}"><span class="pc ${cls(x.side)}"><span class="i">${iconOf(x)}</span>${LEVELS_UP(x.type) ? `<b class="n${ctoLook(x) ? " gold" : ""}">${x.str}</b>` : ""}</span><span class="nm"><b>${x.side === me ? "you" : theirs()}</b>${roleName(x)}</span></div>`;
     el.innerHTML = `<div class="row">${side(ev.a, "a")}<span class="vt">vs</span>${side(ev.d, "d")}</div><div class="res"></div>`;
     // centre it over the half of the board the fight is not in (on screen: the AI player sees the board flipped),
     // so the fight square stays visible, and keep the whole card inside the viewport
