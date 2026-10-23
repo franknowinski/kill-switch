@@ -170,6 +170,7 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 /* after a fight the winner's number rises from the square and fades; never blocks a tap */
 .float{position:fixed;z-index:4;pointer-events:none;transform:translate(-50%,-50%);font-family:var(--display);font-weight:700;font-size:44px;line-height:1;white-space:nowrap;text-shadow:0 3px 12px rgba(0,0,0,.85),0 0 2px #000}
 .float.h{color:var(--blue)}.float.ai{color:var(--amber)}.float.n{color:var(--fg)}.float .x{color:var(--muted);font-size:.6em;margin:0 .15em}.float .b{color:var(--blue)}.float .a{color:var(--amber)}
+.card.lobby .link{margin:0}.card.lobby h1{font-size:26px}.card .rules .rule b{color:var(--fg)}
 .lgs{display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow:auto;font-size:13px;line-height:1.4}
 .lgs div{padding:4px 2px;border-bottom:1px solid #182230}.lgs i{font-style:normal;color:var(--muted);font-size:11px;margin-right:6px}.lgs .mile{color:var(--amber)}
 @media (max-width:859px){
@@ -692,7 +693,7 @@ if (params.has("sim")){
     if (!ptr.moved){
       if (Math.hypot(dx, dy) < 8) return;
       const p = at(state, ptr.r, ptr.c);
-      const can = p && p.side === me && !scanMode && (phase === "setup" || (phase === "play" && state.turn === me));
+      const can = p && p.side === me && !scanMode && ((phase === "setup" && !(mode === "live" && LIVE.ready[me])) || (phase === "play" && state.turn === me));
       if (!can){ ptr = null; return; }
       ptr.moved = true;
       if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; lightMoves(); }
@@ -732,6 +733,11 @@ if (params.has("sim")){
   // after START: solo as the AI means the bot (humans) moves first; two player means the other side sets up and moves first
   function begin(){
     sfx.win();
+    if (mode === "live"){ // each player sets up their own side; the host starts play when both are set
+      LIVE.ready[me] = true; sel = null;
+      if (LIVE.host) maybeBegin(); else { if (!send({ t: "setup", pos: state.pieces.filter(p => p.side === me).map(p => [p.id, p.r, p.c]), form: state.forms[me] })){ LIVE.ready[me] = false; info = "Not connected to the other phone yet. Try START again."; } render(); }
+      return;
+    }
     if (mode === "pass"){
       if (state.needSetup === me){ state.needSetup = null; state.turn = me; phase = "play"; }   // second to set up moves first
       else { state.needSetup = other(me); state.turn = other(me); phase = "handoff"; }        // the creator hands over
@@ -756,6 +762,7 @@ if (params.has("sim")){
   }
   function render(opts = {}){
     if (phase === "intro") return renderIntro();
+    if (phase === "lobby" || phase === "joining") return renderLobby();
     const prev = snapshotRects();
     const brainIn = BAL.RSI_EVERY - ((state.round - 1) % BAL.RSI_EVERY);
     const brain = brainOf(state);
@@ -797,13 +804,15 @@ if (params.has("sim")){
     html += `</div><div class="fx" id="fx"></div></div></div><div class="toasts" id="toasts"></div></div><div class="dock">`;
     html += lastFight && phase !== "setup" ? `<button class="fline" id="fline">⚔️ <span>${fightLine(lastFight)}</span><small>log ›</small></button>` : `<div class="fline none" aria-hidden="true">⚔️ <span>&nbsp;</span></div>`;
     let logHtml;
-    if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Tap two pieces to swap them, or try the next lineup. Then START.`; }
+    if (phase === "setup" && mode === "live" && LIVE.ready[me]) logHtml = `<span class="you">Your side is set.</span> Waiting for the other player to finish setting up<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
+    else if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Tap two pieces to swap them, or try the next lineup. Then START.`; }
     else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up, then moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
     else if (info) logHtml = info;
     else if (state.turn !== me && !state.winner) logHtml = mode === "pass" ? `Waiting for <b>${theirs()}</b>.` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
     else if (!state.winner && state.turn === me && state.pieces.some(x => x.side === me && canCut(state, x))) logHtml = `<span class="you">Your CTO is on ⚡.</span> Cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. Or make another move.`;
     else if (!state.winner && (/to move\.$/.test(state.log) || (lastFight && lastFight.line && state.log === lastFight.line))) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then tap a lit square." : ""}`;
     else logHtml = color(state.log);
+    if (mode === "live" && LIVE.note && phase !== "over") logHtml = `<b>${LIVE.note}</b>`;
     if (phase === "over"){
       const win = state.winner === me, draw = state.winner === "D";
       const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ` + (state.last.from[0] === state.last.to[0] && state.last.from[1] === state.last.to[1] ? `cut the power at ${sqName(...state.last.to)}.` : `${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`);
@@ -812,7 +821,8 @@ if (params.has("sim")){
     const cto = phase === "play" && state.turn === me && !busy && state.pieces.find(x => x.side === me && canCut(state, x));
     if (cto) html += `<div class="actions"><button class="primary cutbtn" id="cut">⚡ CUT THE POWER</button></div>`;
     html += `<div class="actions">`;
-    if (phase === "setup") html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
+    if (phase === "setup" && !(mode === "live" && LIVE.ready[me])) html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
+    else if (phase === "setup") html += `<button class="ghost" id="restart">LEAVE</button>`;
     else if (phase === "handoff") html += `<button class="primary" id="share">SEND LINK</button><button class="ghost" id="copylink">COPY</button>`;
     else if (phase === "play"){
       html += `<button class="ghost" id="scan" aria-pressed="${scanMode}" ${state.scans[me] && state.turn === me ? "" : "disabled"}>${me === "H" ? "SCAN" : "HACK"} (${state.scans[me]})</button>`;
@@ -841,7 +851,8 @@ if (params.has("sim")){
     shown = nowShown; prevSides = nowSides; noSlide.clear();
     bindPointer();
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
-    on("lineup", () => { sfx.tap(); const cur = state.forms[me], n = FORMATIONS[me].length; layoutSide(state, me, cur == null ? 0 : cur + 1 >= n ? null : cur + 1, Math.random); sel = null; render(); }); on("go", begin); on("again", () => { phase = "intro"; render(); }); on("restart", () => { phase = "intro"; render(); });
+    on("lineup", () => { sfx.tap(); const cur = state.forms[me], n = FORMATIONS[me].length; layoutSide(state, me, cur == null ? 0 : cur + 1 >= n ? null : cur + 1, Math.random); sel = null; render(); }); on("go", begin); on("again", () => { if (mode === "live"){ sfx.tap(); if (LIVE.host) toLobby(); else send({ t: "again" }); return; } phase = "intro"; render(); });
+    on("restart", () => { if (mode === "live"){ if (!confirm("Leave this live game?")) return; leaveLive(); } phase = "intro"; render(); });
     on("share", async () => { const url = gameLink(); sfx.tap(); try { if (navigator.share) await navigator.share({ title: "Kill Switch", text: "Your move in Kill Switch", url }); else { await navigator.clipboard.writeText(url); info = "Link copied. Paste it to the other player."; render(); } } catch (e) {} });
     on("copylink", async () => { sfx.tap(); try { await navigator.clipboard.writeText(gameLink()); info = "Link copied."; } catch (e) { info = "Select the link below and copy it."; } render(); });
     on("scan", () => { sfx.tap(); scanMode = !scanMode; copyMode = false; sel = null; info = scanMode ? (me === "H" ? "Scan" : "Hack") + ": tap a hidden enemy piece to reveal it for good." : null; render(); });
@@ -850,6 +861,7 @@ if (params.has("sim")){
     on("copybtn", () => { sfx.tap(); copyMode = !copyMode; render(); });
     // a key row explains a piece type, so it is never disguised (seen: true)
     app.querySelectorAll(".kr").forEach(el => el.addEventListener("click", () => { const t = el.dataset.type, side = el.dataset.side; sfx.tap(); info = explain({ side, type: t, str: el.dataset.str ? +el.dataset.str : (ARMIES[side].find(([tt]) => tt === t) || [0, 0])[1], seen: true }); render(); }));
+    if (mode === "live") saveLive();
     on("sound", () => { SFX.on = !SFX.on; try { localStorage.setItem("ks-sound", SFX.on ? "on" : "off"); } catch (e) {} sfx.tap(); render(); });
   }
   // the key: what each piece is, what it does in three words, and how many are left
@@ -897,12 +909,16 @@ if (params.has("sim")){
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
       <button class="primary" id="play">PLAY</button>
       <div class="row2"><button class="ghost" id="playai">PLAY AS THE AI</button><button class="ghost" id="two">TWO PLAYER</button></div>
-      <div class="two" id="twobox" hidden><p>Two player works by passing a link back and forth. Start a game and send the link, or paste the link you were sent.</p>
+      <div class="two" id="twobox" hidden><p>Play live with a friend on their own phone: create a game and send them the invite.</p>
+        <button class="primary" id="create">CREATE GAME</button><button class="ghost" id="bylink">PLAY BY LINK</button>
+        <div class="two" id="bylinkbox" hidden><p>Play by link: pass a link back and forth after every move. Start a game and send the link, or paste the link you were sent.</p>
         <div class="row2"><button class="ghost" id="newpass">NEW · I'M THE HUMANS</button><button class="ghost" id="newpassai">NEW · I'M THE AI</button></div>
-        <textarea class="paste" id="paste" placeholder="Paste the link you were sent"></textarea><button class="ghost" id="openpass">OPEN LINK</button></div></div></div>`;
+        <textarea class="paste" id="paste" placeholder="Paste the link you were sent"></textarea><button class="ghost" id="openpass">OPEN LINK</button></div></div></div></div>`;
     document.getElementById("play").addEventListener("click", () => { sfx.win(); start("solo", "H"); });
     document.getElementById("playai").addEventListener("click", () => { sfx.win(); start("solo", "AI"); });
     document.getElementById("two").addEventListener("click", () => { sfx.tap(); document.getElementById("twobox").hidden = false; });
+    document.getElementById("create").addEventListener("click", () => { sfx.win(); createLive(); });
+    document.getElementById("bylink").addEventListener("click", () => { sfx.tap(); document.getElementById("bylinkbox").hidden = false; });
     document.getElementById("newpass").addEventListener("click", () => { sfx.win(); start("pass", "H"); });
     document.getElementById("newpassai").addEventListener("click", () => { sfx.win(); start("pass", "AI"); });
     document.getElementById("openpass").addEventListener("click", () => { sfx.tap(); loadLink(document.getElementById("paste").value); });
@@ -916,6 +932,7 @@ if (params.has("sim")){
     if (busy) return;
     const p = at(state, r, c);
     if (phase === "setup"){
+      if (mode === "live" && LIVE.ready[me]) return;
       if (sel && !p && SETUP_ROWS[me].includes(r) && !BLOCKED.has(r+","+c)){ sfx.move(); sel.r = r; sel.c = c; sel = null; return render(); }
       if (!p || p.side !== me) return;
       if (!sel){ sfx.tap(); sel = p; return render(); }
@@ -924,7 +941,8 @@ if (params.has("sim")){
     }
     if (phase !== "play" || state.turn !== me) return;
     if (scanMode){
-      if (p && p.side !== me && !p.revealed && state.scans[me] > 0){ p.revealed = true; state.scans[me]--; state.log = `${me === "H" ? "Scan" : "Hack"}: ${name(face(p))} at ${sqName(p.r, p.c)}.`; state.history.push({ round: state.round, side: me, text: state.log }); scanMode = false; info = null; sfx.reveal(); }
+      if (mode === "live" && !LIVE.host){ if (p && p.side !== me && !p.revealed && state.scans[me] > 0 && send({ t: "scan", id: p.id })){ scanMode = false; info = null; sfx.reveal(); } return render(); }
+      if (p && p.side !== me && !p.revealed && state.scans[me] > 0){ p.revealed = true; state.scans[me]--; state.log = `${me === "H" ? "Scan" : "Hack"}: ${name(face(p))} at ${sqName(p.r, p.c)}.`; state.history.push({ round: state.round, side: me, text: state.log }); scanMode = false; info = null; sfx.reveal(); if (mode === "live") sendSync(); }
       return render();
     }
     if (p && p.side === me){ sfx.tap(); sel = sel && sel.id === p.id ? null : p; copyMode = false; info = sel ? explain(sel) : null; return render(); }
@@ -936,6 +954,15 @@ if (params.has("sim")){
   }
   function play(move){
     if (busy || phase !== "play" || state.turn !== me) return;
+    if (mode === "live"){
+      sel = null; copyMode = false; info = null;
+      if (LIVE.host){ busy = true; queue(() => { busy = false; return liveApply(move); }); return; }
+      // the guest asks the host, which plays it on both phones; until then the board just waits
+      if (!send({ t: "move", id: move.p.id, to: move.to, copy: !!move.copy, cut: !!move.cut })){ info = "Not connected to the other phone yet."; return render(); }
+      busy = true; noSlide.clear(); app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach(q => q.classList.remove("can", "sel", "copy"));
+      const msg = app.querySelector(".msg"); if (msg) msg.innerHTML = `Sending your move<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
+      return;
+    }
     const before = state; state = apply(state, move); sel = null; copyMode = false; info = null;
     // a big alert (AGI, superintelligence, power cut) gets time on screen before the bot moves or the hand-off screen replaces it
     const big = !FAST && state.events.some(e => e.kind === "cut" || e.kind === "agi" || e.kind === "asi");
@@ -1106,8 +1133,253 @@ if (params.has("sim")){
     const close = () => ov.remove();
     ov.addEventListener("click", e => { if (e.target === ov || e.target.id === "logclose") close(); });
   }
+  // ---- live two-player (v0.21): peer to peer over WebRTC with PeerJS and its free public broker; no server of ours.
+  // The host's browser runs the game and is the source of truth; the guest sends moves and gets the state back.
+  // Redaction: the guest's copy shuffles who is who among the host's hidden pieces (positions and counts stay right,
+  // identities don't), so the guest's browser doesn't hold the host's setup. The host's browser holds everything.
+  const PEERJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js";
+  const LIVE = { alias: new Map(), unalias: new Map(), peer: null, conn: null, room: null, host: false, hostSide: "H", guestIn: false, ready: { H: false, AI: false }, note: null, fail: null, ever: false, tries: 0, seen: 0, chain: Promise.resolve(), beat: null, retryT: null };
+  const peerId = room => "killswitch-" + room;
+  const liveYou = () => LIVE.host ? LIVE.hostSide : other(LIVE.hostSide);
+  function inviteLink(){ const real = /^https?:$/.test(location.protocol) && !/claude/.test(location.hostname); return (real ? location.href.split("#")[0].split("?")[0] : PUBLIC_URL) + "#live=" + LIVE.room; } // a real address (Pages, localhost, a tailnet preview) invites back to itself; the artifact viewer has none
+  function loadPeer(){
+    if (window.Peer) return Promise.resolve();
+    return new Promise((ok, no) => { const s = document.createElement("script"); s.src = PEERJS_URL; s.onload = ok; s.onerror = () => no(new Error("peerjs")); document.head.appendChild(s); });
+  }
+  const queue = fn => { LIVE.chain = LIVE.chain.then(fn).catch(e => { console.error(e); busy = false; }); }; // one error must not freeze every later move
+  function send(m){ try { if (LIVE.conn && LIVE.conn.open){ LIVE.conn.send(m); return true; } } catch (e) {} return false; }
+  // the host keeps the game in this browser, so a refresh (or iOS dropping the tab) picks it up again
+  function saveLive(){ if (!LIVE.host) return; try { localStorage.setItem("ks-live", JSON.stringify({ room: LIVE.room, hostSide: LIVE.hostSide, phase, ready: LIVE.ready, state: state ? { ...state, events: [] } : null, lastFight, alias: [...LIVE.alias] })); } catch (e) {} }
+  function clearLive(){ try { localStorage.removeItem("ks-live"); } catch (e) {} }
+  function leaveLive(){
+    clearTimeout(LIVE.retryT); clearInterval(LIVE.beat); LIVE.beat = null;
+    if (LIVE.host) clearLive();
+    send({ t: "bye" });
+    const peer = LIVE.peer; setTimeout(() => { try { if (peer) peer.destroy(); } catch (e) {} }, 400); // let the goodbye get out first
+    clearTimeout(LIVE.connT); LIVE.chain = Promise.resolve();
+    Object.assign(LIVE, { peer: null, conn: null, room: null, guestIn: false, note: null, fail: null, ever: false, tries: 0 });
+    mode = "solo"; history.replaceState(null, "", location.pathname + location.search);
+  }
+  // the guest's copy: the host's hidden pieces trade identities among themselves; the two pieces in a fight stay true
+  // Ids are dealt in army order, so the host's pieces travel under a per-game shuffled id (still inside the host's
+  // army's range, so a piece keeps its character); the seed and the host's lineup stay home. Once the game is over
+  // the guest gets the real game (only the ids stay aliased), since the end screen shows every piece.
+  const al = id => LIVE.alias.get(id) ?? id, unal = id => LIVE.unalias.get(id) ?? id;
+  function makeAlias(){
+    const ids = state.pieces.filter(p => homeSide(p) === LIVE.hostSide).map(p => p.id), perm = shuffle(ids.slice(), Math.random);
+    LIVE.alias = new Map(ids.map((id, k) => [id, perm[k]])); LIVE.unalias = new Map(ids.map((id, k) => [perm[k], id]));
+  }
+  function redact(s, keep){
+    const g = other(LIVE.hostSide), h0 = LIVE.hostSide, snapA = x => x && { ...x, id: al(x.id) };
+    const o = { ...s, seed: 0, forms: { ...s.forms, [h0]: null }, mirror: { ...s.mirror, [h0]: null }, pieces: s.pieces.map(p => ({ ...p })),
+      events: s.events.map(e => e.kind === "fight" ? { ...e, a: snapA(e.a), d: snapA(e.d) } : e),
+      history: s.history.map(h => ({ ...(h.mv && h.side !== g && !h.mv.open && !s.winner ? { ...h, text: `${SIDE_WORD[h.side]} piece ${h.mv.from} → ${h.mv.to}` } : h), a: snapA(h.a), d: snapA(h.d) })) };
+    if (!s.winner){
+      const hid = o.pieces.filter(p => p.side !== g && !p.revealed && !(keep && keep.has(p.id)));
+      const ids = shuffle(hid.map(p => [p.type, p.str, !!p.seen]), Math.random);
+      hid.forEach((p, k) => { [p.type, p.str, p.seen] = ids[k]; });
+    }
+    o.pieces.forEach(p => { p.id = al(p.id); });
+    o.pieces.sort((a, b) => a.id - b.id); // the array order would give the real ids away
+    return o;
+  }
+  const aliasFight = f => f && { ...f, a: { ...f.a, id: al(f.a.id) }, d: { ...f.d, id: al(f.d.id) } };
+  const fightIds = s => { const f = s.events.find(e => e.kind === "fight"); return new Set(f ? [f.a.id, f.d.id] : []); };
+  function sendSync(){ if (LIVE.host) send({ t: "sync", phase, hostSide: LIVE.hostSide, ready: LIVE.ready, s: state ? redact(state) : null, lastFight: aliasFight(lastFight) }); }
+  function sendLobby(){ if (LIVE.host) send({ t: "lobby", hostSide: LIVE.hostSide }); }
+  function heartbeat(){
+    clearInterval(LIVE.beat); LIVE.seen = Date.now();
+    LIVE.beat = setInterval(() => {
+      if (!LIVE.conn || !LIVE.conn.open) return;
+      send({ t: "ping" });
+      if (Date.now() - LIVE.seen > 8000) connLost(LIVE.conn); // a phone that drops off cellular never says goodbye
+    }, 2000);
+  }
+  function connLost(conn){
+    if (conn && conn !== LIVE.conn) return;
+    try { if (LIVE.conn) LIVE.conn.close(); } catch (e) {}
+    LIVE.conn = null;
+    if (LIVE.host){ LIVE.guestIn = false; LIVE.note = phase === "lobby" ? null : "Opponent disconnected, waiting to reconnect…"; render(); }
+    else { LIVE.note = "Host disconnected, waiting to reconnect…"; render(); retryGuest(); }
+  }
+  function liveFail(text){
+    if (LIVE.host && state && phase !== "lobby"){ // a game is going: keep the board, say what's wrong and keep trying
+      LIVE.note = text.replace(/ Try again, or play by link\.$/, "").replace(/, or play by link\.$/, ".") + " Retrying…"; render();
+      clearTimeout(LIVE.retryT); LIVE.retryT = setTimeout(() => { if (LIVE.host && LIVE.room){ try { if (LIVE.peer) LIVE.peer.destroy(); } catch (e) {} openHost(); } }, 5000);
+      return;
+    }
+    LIVE.fail = text; phase = "lobby"; render();
+  }
+  // host: open the room under a fixed id; after a refresh the broker can hold the old id for a few seconds
+  async function openHost(tries = 0){
+    try { await loadPeer(); } catch (e) { return liveFail("Couldn't load the live connection. Check the internet, or play by link."); }
+    const peer = LIVE.peer = new Peer(peerId(LIVE.room), { debug: 0 });
+    peer.on("connection", conn => conn.on("open", () => { if (LIVE.peer === peer) adoptGuest(conn); else conn.close(); }));
+    peer.on("error", err => {
+      if (err.type === "unavailable-id" && tries < 15){ try { peer.destroy(); } catch (e) {} return setTimeout(() => { if (LIVE.host && LIVE.room) openHost(tries + 1); }, 2000); }
+      if (err.type === "peer-unavailable") return;
+      if (["network", "server-error", "socket-error", "socket-closed", "disconnected"].includes(err.type)){ LIVE.note = "Lost the connection to the game server. Retrying…"; render(); setTimeout(() => { if (LIVE.peer === peer && !peer.destroyed){ try { peer.reconnect(); } catch (e) {} } }, 2500); return; }
+      liveFail("The live connection failed (" + err.type + "). Try again, or play by link.");
+    });
+    peer.on("open", () => { if (LIVE.note && /server/.test(LIVE.note)){ LIVE.note = null; render(); } });
+    peer.on("disconnected", () => setTimeout(() => { if (LIVE.peer === peer && !peer.destroyed){ try { peer.reconnect(); } catch (e) {} } }, 1500));
+  }
+  function adoptGuest(conn){
+    // a different tab with the link takes the seat and the old one is told; the same tab reconnecting is not
+    if (LIVE.conn && LIVE.conn !== conn){ const old = LIVE.conn, tab = x => x.metadata && x.metadata.tab; try { if (tab(old) !== tab(conn)) old.send({ t: "bumped" }); } catch (e) {} setTimeout(() => { try { old.close(); } catch (e) {} }, 300); }
+    LIVE.conn = conn; LIVE.guestIn = true; LIVE.note = null; LIVE.fail = null;
+    conn.on("data", m => onHostData(conn, m));
+    conn.on("close", () => connLost(conn));
+    heartbeat();
+    if (phase === "lobby") sendLobby(); else sendSync();
+    sfx.level(); render();
+  }
+  function onHostData(conn, m){
+    if (conn !== LIVE.conn || !m) return;
+    LIVE.seen = Date.now();
+    const g = other(LIVE.hostSide);
+    if (m.t === "hello"){ if (phase === "lobby") sendLobby(); else sendSync(); }
+    else if (m.t === "bye") connLost(conn);
+    else if (m.t === "swap" && phase === "lobby"){ LIVE.hostSide = other(LIVE.hostSide); sfx.tap(); sendLobby(); saveLive(); render(); }
+    else if (m.t === "again" && phase === "over") toLobby();
+    else if (m.t === "setup" && phase === "setup" && !LIVE.ready[g]){
+      const mine = state.pieces.filter(p => p.side === g), taken = new Set();
+      const ids = new Set(Array.isArray(m.pos) ? m.pos.map(x => x[0]) : []);
+      const ok = Array.isArray(m.pos) && m.pos.length === mine.length && ids.size === mine.length && m.pos.every(([id, r, c]) => { const p = mine.find(x => x.id === unal(id)), k = r + "," + c; if (!p || !SETUP_ROWS[g].includes(r) || c < 0 || c >= COLS || BLOCKED.has(k) || taken.has(k)) return false; taken.add(k); return true; });
+      if (!ok) return sendSync(); // a stale or odd layout: hand the guest the host's copy again
+      for (const [id, r, c] of m.pos){ const p = mine.find(x => x.id === unal(id)); p.r = r; p.c = c; }
+      state.forms[g] = m.form == null ? null : m.form; LIVE.ready[g] = true; maybeBegin();
+    }
+    else if (m.t === "move") queue(() => {
+      if (phase !== "play" || state.turn !== g || state.winner) return sendSync();
+      const p = state.pieces.find(x => x.id === unal(m.id) && x.side === g); if (!p) return sendSync();
+      const mv = legalMoves(state, p).find(x => x.to[0] === m.to[0] && x.to[1] === m.to[1] && !!x.copy === !!m.copy && !!x.cut === !!m.cut);
+      if (!mv) return sendSync();
+      return liveApply({ p, ...mv });
+    });
+    else if (m.t === "scan") queue(() => { if (!(phase === "play" && state.turn === g)) return;
+      const p = state.pieces.find(x => x.id === unal(m.id));
+      if (p && p.side !== g && !p.revealed && state.scans[g] > 0){ p.revealed = true; state.scans[g]--; state.log = `${g === "H" ? "Scan" : "Hack"}: ${name(asSeenBy(p, g))} at ${sqName(p.r, p.c)}.`; state.history.push({ round: state.round, side: g, text: state.log }); sendSync(); render(); }
+    });
+  }
+  // host: apply a move (either player's), show it here and send it to the guest to show there at the same time
+  function liveApply(move){
+    const before = state; state = apply(state, move);
+    send({ t: "turn", before: redact(before, fightIds(state)), s: redact(state) });
+    return afterMove(before).then(() => saveLive());
+  }
+  function maybeBegin(){
+    if (LIVE.ready.H && LIVE.ready.AI){ phase = "play"; state.turn = "H"; sel = null; sfx.win(); sendSync(); }
+    else send({ t: "ready", ready: LIVE.ready });
+    saveLive(); render();
+  }
+  function toLobby(){ phase = "lobby"; state = null; lastFight = null; sel = null; LIVE.ready = { H: false, AI: false }; sendLobby(); saveLive(); render(); }
+  function liveStartGame(){
+    me = LIVE.hostSide; document.body.classList.toggle("me-ai", me === "AI");
+    state = newGame(seed + Math.floor(Math.random() * 1e6)); makeAlias();
+    phase = "setup"; sel = null; scanMode = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null; info = null;
+    LIVE.ready = { H: false, AI: false };
+    sfx.win(); sendSync(); saveLive(); render();
+  }
+  function createLive(){
+    LIVE.room = Math.random().toString(36).slice(2, 10); LIVE.host = true; LIVE.hostSide = "H"; LIVE.guestIn = false; LIVE.fail = null; LIVE.note = null;
+    mode = "live"; phase = "lobby"; state = null;
+    history.replaceState(null, "", "#host=" + LIVE.room);
+    saveLive(); render(); openHost();
+  }
+  function resumeHost(saved){
+    LIVE.room = saved.room; LIVE.host = true; LIVE.hostSide = saved.hostSide; LIVE.ready = saved.ready || { H: false, AI: false };
+    LIVE.alias = new Map(saved.alias || []); LIVE.unalias = new Map((saved.alias || []).map(([a, b]) => [b, a]));
+    mode = "live"; phase = saved.phase || "lobby"; state = saved.state ? { ...saved.state, events: [] } : null; lastFight = saved.lastFight || null;
+    if (!state) phase = "lobby";
+    me = LIVE.hostSide; document.body.classList.toggle("me-ai", me === "AI");
+    render(); openHost();
+  }
+  // guest: join by the invite link; keep trying while the host is away (a refresh, a dropped connection)
+  async function joinLive(room){
+    LIVE.room = room; LIVE.host = false; LIVE.fail = null; mode = "live"; phase = "joining"; render();
+    try { await loadPeer(); } catch (e) { return liveFail("Couldn't load the live connection. Check the internet, or play by link."); }
+    const peer = LIVE.peer = new Peer({ debug: 0 });
+    peer.on("open", () => { if (!(LIVE.conn && LIVE.conn.open)) connectGuest(); }); // it fires again after a broker reconnect: the game connection may still be fine
+    peer.on("error", err => {
+      if (err.type === "peer-unavailable") return guestMiss();
+      if (["network", "server-error", "socket-error", "socket-closed", "disconnected"].includes(err.type)){ setTimeout(() => { if (LIVE.peer === peer && !peer.destroyed){ try { peer.reconnect(); } catch (e) {} } }, 2500); return; }
+      liveFail("The live connection failed (" + err.type + "). Try again, or play by link.");
+    });
+    peer.on("disconnected", () => setTimeout(() => { if (LIVE.peer === peer && !peer.destroyed){ try { peer.reconnect(); } catch (e) {} } }, 1500));
+  }
+  function retryGuest(){ clearTimeout(LIVE.retryT); LIVE.retryT = setTimeout(() => { if (LIVE.peer && !LIVE.peer.destroyed && !(LIVE.conn && LIVE.conn.open)){ if (LIVE.peer.disconnected){ try { LIVE.peer.reconnect(); } catch (e) {} } else connectGuest(); } }, 2500); }
+  // the host isn't there, or the phones couldn't reach each other: keep trying once we've played; on a first join, say so
+  function guestMiss(){
+    clearTimeout(LIVE.connT);
+    if (LIVE.conn && LIVE.conn.open) return; // a stale timer or error from an earlier attempt
+    LIVE.tries++;
+    if (!LIVE.ever && LIVE.tries >= 4) return liveFail("Couldn't reach the other phone. The game may be closed, or this network blocks direct connections. Try again, or play by link.");
+    if (LIVE.ever){ LIVE.note = "Host disconnected, waiting to reconnect…"; render(); }
+    retryGuest();
+  }
+  function connectGuest(){
+    if (!LIVE.peer || LIVE.peer.destroyed) return;
+    LIVE.tab = LIVE.tab || Math.random().toString(36).slice(2);
+    const conn = LIVE.peer.connect(peerId(LIVE.room), { reliable: true, metadata: { tab: LIVE.tab } });
+    let opened = false;
+    clearTimeout(LIVE.connT); LIVE.connT = setTimeout(() => { if (!opened){ try { conn.close(); } catch (e) {} guestMiss(); } }, 12000);
+    conn.on("open", () => { opened = true; clearTimeout(LIVE.connT); LIVE.conn = conn; LIVE.ever = true; LIVE.tries = 0; LIVE.note = null; LIVE.fail = null; heartbeat(); send({ t: "hello" }); });
+    conn.on("data", m => onGuestData(conn, m));
+    conn.on("close", () => { if (opened) connLost(conn); });
+  }
+  function onGuestData(conn, m){
+    if (conn !== LIVE.conn || !m) return;
+    LIVE.seen = Date.now();
+    if (m.t === "bumped"){ const room = LIVE.room; leaveLive(); LIVE.room = room; return liveFail("This game was opened on another tab or phone. TRY AGAIN to play here instead."); }
+    if (m.t === "bye"){ const room = LIVE.room; leaveLive(); LIVE.room = room; return liveFail("The host left the game."); } // TRY AGAIN rejoins if they come back
+    if (m.t === "lobby"){ queue(() => { LIVE.hostSide = m.hostSide; if (phase !== "lobby"){ phase = "lobby"; state = null; lastFight = null; } render(); }); return; }
+    if (m.t === "ready"){ LIVE.ready = { ...m.ready, [me]: LIVE.ready[me] || m.ready[me] }; render(); return; } // our own START may still be on its way to the host
+    if (m.t === "sync") queue(() => {
+      LIVE.hostSide = m.hostSide; me = other(m.hostSide); document.body.classList.toggle("me-ai", me === "AI");
+      LIVE.ready = m.ready; lastFight = m.lastFight || lastFight; busy = false;
+      if (phase !== m.phase || !state) { sel = null; scanMode = false; info = null; }
+      if (phase === "setup" && m.phase === "setup" && state && m.s && !LIVE.ready[me]) for (const p of m.s.pieces){ const mine = p.side === me && state.pieces.find(x => x.id === p.id); if (mine){ p.r = mine.r; p.c = mine.c; } } // keep the lineup you're arranging
+      state = m.s; phase = m.phase; render();
+    });
+    if (m.t === "turn") queue(() => { state = m.s; sel = null; busy = false; return afterMove(m.before); });
+  }
+  // the lobby: waiting for the friend, who plays which side, switch sides, start
+  function renderLobby(){
+    const you = liveYou(), sideRow = (side, who) => `<div class="rule"><div class="k ${side === "H" ? "b" : "a"}">${side === "H" ? "🧑‍💻" : "🤖"}</div><div><b>${who}</b> ${who === "You" ? "play" : "plays"} the ${side === "H" ? "Humans" : "AI"}</div></div>`;
+    let body;
+    if (LIVE.fail) body = `<div class="eyebrow">Live game</div><h1>NO CONNECTION</h1><p>${LIVE.fail}</p><button class="primary" id="lvretry">TRY AGAIN</button><button class="ghost" id="lvlink">PLAY BY LINK</button><button class="ghost" id="lvleave">LEAVE</button>`;
+    else if (phase === "joining") body = `<div class="eyebrow">Live game</div><h1>JOINING<span class="dots"><i>.</i><i>.</i><i>.</i></span></h1><p>Connecting to the other phone.</p><button class="ghost" id="lvleave">CANCEL</button>`;
+    else if (LIVE.host && !LIVE.guestIn) body = `<div class="eyebrow">Live game · invite a friend</div><h1>WAITING<span class="dots"><i>.</i><i>.</i><i>.</i></span></h1><p>Waiting for your opponent… Send them this link:</p><div class="link" id="invite">${inviteLink()}</div>
+      <div class="row2"><button class="primary" id="lvshare">SHARE INVITE</button><button class="ghost" id="lvcopy">COPY</button></div>
+      <div class="rules">${sideRow(you, "You")}</div><div class="row2"><button class="ghost" id="lvswap">SWITCH SIDES</button><button class="ghost" id="lvleave">LEAVE</button></div>`;
+    else body = `<div class="eyebrow">Live game · lobby</div><h1>${LIVE.host ? "YOUR FRIEND IS HERE" : "YOU'RE IN"}</h1>
+      <div class="rules">${sideRow(you, "You")}${sideRow(other(you), LIVE.host ? "Your friend" : "The host")}</div>
+      <button class="ghost" id="lvswap">SWITCH SIDES</button>
+      ${LIVE.host ? `<button class="primary" id="lvstart">START</button>` : `<p class="eyebrow" id="lvwait">Waiting for host to start<span class="dots"><i>.</i><i>.</i><i>.</i></span></p>`}
+      ${LIVE.note ? `<p>${LIVE.note}</p>` : ""}<button class="ghost" id="lvleave">LEAVE</button>`;
+    app.innerHTML = `<div class="overlay"><div class="card lobby">${body}</div></div>`;
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener("click", fn); };
+    on("lvshare", async () => { sfx.tap(); const url = inviteLink(); try { if (navigator.share) await navigator.share({ title: "Kill Switch", text: "Play Kill Switch with me", url }); else { await navigator.clipboard.writeText(url); toastLobby("Link copied"); } } catch (e) {} });
+    on("lvcopy", async () => { sfx.tap(); try { await navigator.clipboard.writeText(inviteLink()); toastLobby("Link copied"); } catch (e) { toastLobby("Select the link and copy it"); } });
+    on("lvswap", () => { sfx.tap(); if (LIVE.host){ LIVE.hostSide = other(LIVE.hostSide); sendLobby(); saveLive(); render(); } else send({ t: "swap" }); });
+    on("lvstart", liveStartGame);
+    on("lvleave", () => { sfx.tap(); leaveLive(); phase = "intro"; render(); });
+    on("lvlink", () => { sfx.tap(); leaveLive(); phase = "intro"; render(); const b = document.getElementById("twobox"); if (b) b.hidden = false; const l = document.getElementById("bylinkbox"); if (l){ l.hidden = false; l.scrollIntoView({ block: "center" }); } });
+    on("lvretry", () => {
+      sfx.tap(); const room = LIVE.room;
+      if (LIVE.host){ // never clearLive here: the saved game is what we resume
+        try { if (LIVE.peer) LIVE.peer.destroy(); } catch (e) {} LIVE.peer = null; LIVE.fail = null;
+        let saved = null; try { saved = JSON.parse(localStorage.getItem("ks-live")); } catch (e) {}
+        history.replaceState(null, "", "#host=" + room);
+        if (saved && saved.room === room) resumeHost(saved); else { mode = "live"; phase = "lobby"; render(); openHost(); }
+      } else { leaveLive(); history.replaceState(null, "", "#live=" + room); joinLive(room); }
+    });
+  }
+  function toastLobby(text){ const c = app.querySelector(".card"); if (!c) return; const p = document.createElement("p"); p.className = "eyebrow"; p.textContent = text; c.appendChild(p); setTimeout(() => p.remove(), 1600); }
+  if (params.has("trace")) window.__ks = () => ({ state, me, phase, busy, sel, mode, ready: LIVE.ready, hostSide: LIVE.hostSide, host: LIVE.host, peer: LIVE.peer }); // tests only
   function botTurn(){
-    if (mode !== "solo" || state.turn === me || state.winner) return;
+    if (mode !== "solo" || state.turn === me || state.winner) return; // pass and live: a person plays the other side
     const m = botMove(state, other(me), bot);
     if (!m) return afterMove(state);
     const before = state; state = apply(state, m);
@@ -1122,6 +1394,12 @@ if (params.has("sim")){
   }
   else if (params.has("play")) start("solo", params.get("side") === "AI" ? "AI" : "H");
   else if (params.has("g") || /[#&]g=/.test(location.hash)) loadLink(params.get("g") || location.hash);
+  else if (/[#&]live=[A-Za-z0-9_-]+/.test(location.hash)) joinLive(location.hash.match(/live=([A-Za-z0-9_-]+)/)[1]);
+  else if (/[#&]host=[A-Za-z0-9_-]+/.test(location.hash)){
+    const room = location.hash.match(/host=([A-Za-z0-9_-]+)/)[1]; let saved = null;
+    try { saved = JSON.parse(localStorage.getItem("ks-live")); } catch (e) {}
+    if (saved && saved.room === room) resumeHost(saved); else { history.replaceState(null, "", location.pathname + location.search); render(); }
+  }
   else render();
 }
 </script>
