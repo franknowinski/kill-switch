@@ -143,6 +143,7 @@ body.me-ai .msg .you,body.me-ai .you{color:var(--amber)}body.me-ai .msg .them{co
 .kr.gone{opacity:.35}.kr.gone .pc{filter:grayscale(1)}
 .ranks{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 .ranks .kr{grid-template-columns:auto minmax(0,1fr) auto;padding:4px 8px}.ranks .kr .kn{min-width:0;overflow:hidden;text-overflow:ellipsis}.ranks .kr .kp{display:none}
+.kr .kb{color:var(--amber);font-size:11px;letter-spacing:0;white-space:nowrap} /* v0.29: AI fighters 5–6 take +1 at the 🏢, once */
 .seen{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px;color:var(--muted);padding:2px 8px 4px}
 .seen .pc{min-width:24px;height:22px;font-size:12px}
 .eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
@@ -203,6 +204,11 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
   .right{width:min(100%,760px)}
   .key{padding:14px 0 24px}
   .msg.over h1{font-size:28px}
+  /* v0.29: the board is as wide as the column, so a taller box above it (the end screen) pushed its tilted far row up over the
+     message. Size it by the room it has instead: the board is never wider than its space is tall, less the 3D blocks' overhang */
+  .boardwrap{container-type:size}
+  .zoom{width:min(100%,calc(100cqh * var(--fit)));margin:0 auto}
+  :root{--fit:.97}
 }
 .ranks .kr .kn{white-space:normal;overflow:visible;line-height:1.15} /* "self-improver", "rogue agent" wrap rather than being cut off */
 @media (max-width:360px){.ranks .kr{gap:6px;padding:4px 6px}.ranks .kr .kn{font-size:12px}}
@@ -218,18 +224,18 @@ const BLOCKED = new Set(["3,2","4,2","3,5","4,5"]);
 const SETUP_ROWS = { H: [5,6,7], AI: [0,1,2] }; // every square in these rows is filled, like Stratego
 // Tuning: everything that decides fairness is here.
 const BAL = {
-  RSI_EVERY: 5,     // the 🧠 self-improver grows itself +1 every N rounds while it lives, up to MAX_STR (v0.27: 4, was 7: the cut at the humans' own 🏢 is easier to reach; v0.28: 5, with the deepfake back and the 🏢 on the back row)
+  RSI_EVERY: 6,     // the 🧠 self-improver grows itself +1 every N rounds while it lives, up to MAX_STR (v0.27: 4, was 7: the cut at the humans' own 🏢 is easier to reach; v0.28: 5, with the deepfake back and the 🏢 on the back row; v0.29: 6, now that only fighters 5–6 boost)
   MAX_STR: 10, COPIES: 2, MAX_ROUNDS: 100, // past MAX_ROUNDS the game is a draw
   AGI: 8, ASI: 10,  // the 🧠's milestones: AGI at 8, superintelligence at 10
   SPY_MIN: 8, SPY_MAX: 9, // the whistleblower / virus kills a piece this strong when it attacks it, and loses to anything else
-  BOOST_MIN: 1, BOOST_MAX: 7, // an AI piece this strong when it steps on the 🏢 takes +1 there, once (v0.28)
+  BOOST_MIN: 5, BOOST_MAX: 6, // an AI fighter this strong when it steps on the 🏢 takes +1 there, once (v0.28: 1 to 7, any numbered piece; v0.29: fighters 5 to 6)
 };
 // 🏢 the humans' datacenter (v0.27): a square on their setup rows that they place in setup (s.dc); it starts on their back
-// row (v0.28). No piece starts on it; any piece can stand on it. An AI piece that is a 1 to 7 when it moves onto it gets +1,
-// once per piece, until the power is cut (v0.28: not the 👾 8, not the 🧠, which grows on its own, and not the deepfake,
-// which has no number). The CTO cuts the power there once the 🧠 is a 10: the 🧠 is then fragile (0, loses every fight), for good.
+// row (v0.28). No piece starts on it; any piece can stand on it. An AI fighter that is a 5 or 6 when it moves onto it gets +1,
+// once per piece, until the power is cut (v0.29: so a 🐝 5 becomes 6 and a 🤖 6 becomes 7; never the 🦾 7 or 👾 8, the 🧠,
+// the deepfake, or a non-fighter, whose value is its ability). A turned piece goes by its current side, type and number. The CTO cuts the power there once the 🧠 is a 10: the 🧠 is then fragile (0, loses every fight), for good.
 const onDC = (s, r, c) => !!s.dc && s.dc[0] === r && s.dc[1] === c;
-const BOOSTS = p => p.side === "AI" && LEVELS_UP(p.type) && p.type !== "I" && p.str >= BAL.BOOST_MIN && p.str <= BAL.BOOST_MAX;
+const BOOSTS = p => p.side === "AI" && p.type === "X" && p.str >= BAL.BOOST_MIN && p.str <= BAL.BOOST_MAX;
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
 // M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (cut in v0.11.27: nobody understood it; the engine still understands it),
 // A whistleblower / virus (the spy: kills an 8 or 9 when attacking, else dies; both sides have one), I self-improver (grows itself
@@ -446,12 +452,12 @@ function apply(s0, move){
     s.history.push({ round: s.round, side, text: line, a: ev.a, d: ev.d, result: ev.result, at: to });
   }
   for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `${who(sc.side)} ${roleName(sc)} spotted ${name(e)} at ${sqName(e.r, e.c)}.` }); }
-  // the datacenter's power: an AI piece that is a 1 to 7 (BOOSTS) and ends its move on the 🏢 gets +1, once per piece, until the cut
+  // the datacenter's power: an AI fighter that is a 5 or 6 (BOOSTS) and ends its move on the 🏢 gets +1, once per piece, until the cut
   const mover = s.pieces.find(x => x.id === move.p.id);
   if (!move.cut && mover && !s.cut && BOOSTS(mover) && !mover.boosted && onDC(s, mover.r, mover.c) && mover.str < BAL.MAX_STR){
     const was = mover.str; mover.base = mover.base ?? was; mover.str++; mover.boosted = true; // base: it keeps its character (a 🤖 bot with a 7)
     const t = `${who(mover.side)} ${roleName(mover)} took power from the datacenter: ${was} → ${mover.str}.`;
-    s.events.push({ kind: "boost", r: mover.r, c: mover.c, id: mover.id, from: was, to: mover.str }); s.history.push({ round: s.round, side: mover.side, text: t });
+    s.events.push({ kind: "boost", r: mover.r, c: mover.c, id: mover.id, from: was, to: mover.str }); s.history.push({ round: s.round, side: mover.side, text: `${t} (Fighters 5–6 get +1, once.)` });
     line = line ? `${line} 🏢 ${was} → ${mover.str}.` : t; // after a fight line, short: the message box is two lines
   }
   s.last = { from: [move.p.r, move.p.c], to: [r,c], side };
@@ -579,7 +585,7 @@ if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, s
 const cap = s => s[0].toUpperCase() + s.slice(1);
 // what a piece does, short: the message box above the board is two lines (the rules below say the rest)
 const ABOUT = {
-  X: p => isCTO(p) ? `Higher wins. At 🧠${BAL.ASI}, stand on 🏢 and cut the power.` : "Higher number wins a fight; the same number, both fall.",
+  X: (p, s) => isCTO(p) ? `Higher wins. At 🧠${BAL.ASI}, stand on 🏢 and cut the power.` : BOOSTS(p) && !p.boosted && !(s && s.cut) ? "Higher number wins; same, both fall. +1 once on the 🏢." : "Higher number wins a fight; the same number, both fall.",
   S: p => `${charSide(p) === "H" ? "Flies" : "Scuttles"} any distance in a straight line.`,
   M: p => p.side === "H" ? "Fights as a 3, and removes a backdoor safely." : "Fights as a 3, and removes a honeypot safely.",
   A: p => `Takes out an ${BAL.SPY_MIN} or ${BAL.SPY_MAX} it attacks; loses any other attack.`,
@@ -961,7 +967,7 @@ if (params.has("sim")){
       const lvl = t === "X" ? str : ARMIES[side].find(([tt]) => tt === t)[1];
       const ch = `<span class="pc tok ${cls(side)}"><span class="ic">${iconOf({ side, home: side, type: t, str: lvl })}</span>${LEVELS_UP(t) ? `<span class="n">${lvl}</span>` : ""}</span>`;
       const nm = roleName({ side, home: side, type: t, str: lvl });
-      return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "cuts the power at 🏢" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
+      return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${t === "X" && !state.cut && BOOSTS({ side, type: t, str }) ? ` <span class="kb" title="+1 at the 🏢, once">↑🏢</span>` : ""}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "cuts the power at 🏢" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
     };
     const ranks = side => [...new Set(ARMIES[side].filter(([t]) => t === "X").map(([, n]) => n))].sort((a, b) => b - a);
     const specials = side => ["S","M","A","C","I","K","R","T","F"].filter(t => ARMIES[side].some(([tt]) => tt === t));
@@ -981,7 +987,7 @@ if (params.has("sim")){
       ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
       ${turnedRow(joinedThem, "theirs")}
-      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI piece that is a 1 to 7 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and cut the power: the 🧠 is fragile for good (still hidden), and any piece that finds it kills it. Until the cut, every AI piece from 1 to 7 that reaches the 🏢 takes +1 once; the 👾 8 and the 🧠 never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌐 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and cut the power: the 🧠 is fragile for good (still hidden), and any piece that finds it kills it. Until the cut, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌐 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
     </div>`;
   }
   // the side a solo game is played from: the start screen's choice, remembered on this phone
@@ -1021,12 +1027,12 @@ if (params.has("sim")){
     document.getElementById("newpassai").addEventListener("click", () => { sfx.win(); start("pass", "AI"); });
     document.getElementById("openpass").addEventListener("click", () => { sfx.tap(); loadLink(document.getElementById("paste").value); });
   }
-  const DC_INFO = () => me === "H" ? `<span class="you">🏢 Your datacenter.</span> AI pieces 1 to 7 get +1 here, once. At 🧠${BAL.ASI} your CTO cuts the power here.`
-    : `<span class="you">🏢 The humans' datacenter.</span> Your pieces 1 to 7 get +1 here, once each (not the 👾 or 🧠), until the cut.`;
+  const DC_INFO = () => state.cut ? `<span class="you">🏢 ${me === "H" ? "Your" : "The humans'"} datacenter.</span> The power is cut: it gives nothing now.` : me === "H" ? `<span class="you">🏢 Your datacenter.</span> AI fighters 5–6 get +1 here, once. At 🧠${BAL.ASI} your CTO cuts the power here.`
+    : `<span class="you">🏢 The humans' datacenter.</span> Your fighters 5–6 get +1 here, once.`;
   function explain(p){
     p = face(p);
     const n = (isTurned(p) ? "turned " : "") + (LEVELS_UP(p.type) ? `${roleName(p)} ${p.str}` : roleName(p));
-    return `<span class="${p.side === me ? "you" : "them"}">${iconOf(p)} ${cap(n)}.</span> ${ABOUT[p.type](p)}`;
+    return `<span class="${p.side === me ? "you" : "them"}">${iconOf(p)} ${cap(n)}.</span> ${ABOUT[p.type](p, state)}`;
   }
   function tap(r, c){
     if (busy) return;
@@ -1188,7 +1194,7 @@ if (params.has("sim")){
       if (e.kind === "rsi"){ toast("🧠 the self-improver grew"); sfx.level(); }
       if (e.kind === "agi"){ toast("THE AI HAS REACHED AGI", true); sfx.big(); }
       if (e.kind === "asi"){ toast("SUPERINTELLIGENCE · cut the power at 🏢", true); sfx.big(); }
-      if (e.kind === "boost"){ toast(`🏢 ${e.from} → ${e.to} · power from the datacenter`); sfx.level(); }
+      if (e.kind === "boost"){ toast(`🏢 ${e.from} → ${e.to} · fighters 5–6 get +1, once`); sfx.level(); }
       if (e.kind === "cut"){ toast("⚡ POWER CUT · the 🧠 is fragile", true, "cut"); sfx.big(); shakeBoard(true); }
     }
     if (state.winner){
