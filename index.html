@@ -20,61 +20,47 @@ html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);
 body{min-height:100dvh;display:flex;flex-direction:column;overflow-x:clip;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 button{font:inherit;color:inherit;cursor:pointer}
 h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
-.top{display:flex;justify-content:space-between;align-items:center;padding:8px 16px 4px;gap:8px}
-.top .t{font-family:var(--display);font-size:20px;letter-spacing:1px;white-space:nowrap}
-.stat{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5}
-.stat b{color:var(--fg);font-size:14px;letter-spacing:0}
-.lvl{display:flex;align-items:center;gap:8px;padding:0 16px 6px}
-.lvl .bar{flex:1;height:8px;border-radius:4px;background:var(--panel);border:1px solid var(--amber-line);overflow:hidden}
-.lvl .bar i{display:block;height:100%;background:var(--amber);transition:width .3s}
-.lvl span{font-size:11px;letter-spacing:1px;color:var(--amber);text-transform:uppercase;white-space:nowrap}
-.boardwrap{position:relative;margin:0 16px;touch-action:none}
-/* .zoom holds the perspective; .tilt (inside) tilts the board and its fx layer together */
-.zoom{position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1);will-change:transform}
-.board{position:relative;display:grid;grid-template-columns:repeat(8,1fr);gap:3px;aspect-ratio:1;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none}
-.sq{position:relative;border-radius:7px;background:var(--panel);border:1px solid var(--line);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:clamp(14px,4.6vw,22px);min-width:0;padding:0;color:var(--fg)}
+/* the board (v0.23): flat and top-down like a chess site, square squares, as large as the space allows.
+   .boardwrap is a size container; .stage takes the smaller of its width and height and holds the board and the fx layer,
+   so fight stand-ins use the same coordinates as the squares. Piece and number sizes follow the board (cqw). */
+.boardwrap{position:relative;flex:1;min-height:0;container-type:size;display:flex;align-items:center;justify-content:center;margin:6px 4px} /* no touch-action here: a swipe beside the board scrolls to the rules */
+.stage{position:relative;width:min(calc(100vw - 8px),calc(100svh - 200px));width:min(100cqw,100cqh);aspect-ratio:1;container-type:inline-size} /* the first width: browsers without container units (iOS 15) */
+.board{position:absolute;inset:0;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));gap:3px;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none}
+.sq{position:relative;border-radius:7px;background:var(--panel);border:1px solid var(--line);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:min(5.6vw,4.4svh);font-size:5.8cqw;min-width:0;min-height:0;padding:0;color:var(--fg)}
 .sq.block{background:#070A0E;border-color:#0f151d}
 .sq.ai{color:var(--amber)}.sq.h{color:var(--blue)}
 .sq.can{box-shadow:inset 0 0 0 3px rgba(92,200,255,.55)}
 .sq.can.ai{box-shadow:inset 0 0 0 3px var(--red)}
 .sq.copy{box-shadow:inset 0 0 0 3px var(--green)}
-.sq.scan{box-shadow:inset 0 0 0 3px var(--green)}
 .sq.last{box-shadow:inset 0 0 0 2px rgba(255,255,255,.3)}
 .sq.over{background:#1a2a3a}
 /* ⚡ the power station: a faint bolt on the square; it lights up once the 🧠 is a 10 */
 .sq.power::after{content:"⚡";position:absolute;font-size:.8em;opacity:.35;pointer-events:none}
-.sq.power[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;transform:translateZ(calc(var(--ph) + 2px))}
+.sq.power[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;z-index:2}
 .sq.power.live{background:#2a2208;border-color:#8a6d12}.sq.power.live::after{opacity:1;animation:bolt 1.2s ease-in-out infinite}
 @keyframes bolt{50%{filter:drop-shadow(0 0 6px #ffd84a)}}
 .primary.cutbtn{background:#ffd84a;color:#1a1405;box-shadow:0 0 18px rgba(255,216,74,.45)}
-/* tabletop (v0.17): the board tilts back like a table (the browser's own CSS 3D) and every piece is a raised block with sides.
-   .tilt holds the board and the fx layer in one tilted plane, so fight stand-ins use the same coordinates as the squares. */
-:root{--tilt:28deg;--ph:7px}
-.zoom{perspective:1100px;perspective-origin:50% -40%}
-.tilt{position:relative;transform-style:preserve-3d;transform:rotateX(var(--tilt));transform-origin:50% 100%;margin-top:-6%} /* the tilt leaves a gap above the far edge: pull it up */
-.board,.sq,.fx{transform-style:preserve-3d}
-.pz,.clone{position:absolute;transform-style:preserve-3d;pointer-events:none;font-weight:700}.pz{inset:0}
-.clone{font-size:clamp(14px,4.6vw,22px)}
-.shd{position:absolute;inset:18% 12% 6%;border-radius:8px;background:rgba(0,0,0,.6);filter:blur(3px);transform:translate3d(1px,3px,1px)}
-.blk{position:absolute;inset:8% 9% 12%;transform-style:preserve-3d;transition:transform .15s}
+/* pieces (v0.23): a low raised tile seen from above: the top face, a few pixels of darker edge under it, a soft shadow */
+:root{--ph:4px}
+.pz,.clone{position:absolute;pointer-events:none;font-weight:700}.pz{inset:0}
+.clone{font-size:min(5.6vw,4.4svh);font-size:5.8cqw}
+.shd{position:absolute;inset:16% 8% 3% 13%;border-radius:8px;background:rgba(0,0,0,.6);filter:blur(2px)}
+.blk{position:absolute;inset:7% 8% 9%;border-radius:7px;transition:transform .15s}
 .face{position:absolute;border-radius:6px}
-.ftop{inset:0;transform:translateZ(var(--ph));display:flex;align-items:center;justify-content:center;line-height:1;transition:box-shadow .15s}
-.ffr{left:2px;right:2px;bottom:0;height:var(--ph);transform-origin:bottom;transform:rotateX(-90deg);border-radius:0 0 6px 6px}
-.flf{top:2px;bottom:2px;left:0;width:var(--ph);transform-origin:left;transform:rotateY(-90deg)}
-.frt{top:2px;bottom:2px;right:0;width:var(--ph);transform-origin:right;transform:rotateY(90deg)}
+.ftop{inset:0 0 var(--ph);display:flex;align-items:center;justify-content:center;line-height:1;transition:box-shadow .15s}
+.h .blk{background:linear-gradient(#123150,#071422)}
 .h .ftop{background:linear-gradient(180deg,#1a4068,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue);border-top-color:#4f9fd0}
-.h .ffr{background:linear-gradient(#0d2238,#071422)}.h .flf,.h .frt{background:#0a1a2b}
+.ai .blk{background:linear-gradient(#3a2808,#140d03)}
 .ai .ftop{background:linear-gradient(180deg,#4a3209,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);border-top-color:#a8761e}
-.ai .ffr{background:linear-gradient(#2b1d06,#140d03)}.ai .flf,.ai .frt{background:#1f1504}
-.ftop .ic{font-size:1.02em;line-height:1}
+.ftop .ic{font-size:1.02em;line-height:1}.ftop .ic.up,.floater .ic.up{font-size:.92em;transform:translate(-17%,-13%)} /* room for the number in the corner */
 .ftop .n{position:absolute;right:3%;bottom:3%;font-size:.5em;padding:.08em .26em;border-radius:.4em;background:rgba(0,0,0,.5);font-weight:700;line-height:1.1}
 .sq .q,.clone .q,.floater .q{color:var(--amber);opacity:.85}.sq.h .q,.clone.h .q{color:var(--blue)}
 .sq.asi .ftop{box-shadow:0 0 0 2px var(--red),0 0 14px rgba(255,92,92,.8)}
-.sq.sel .blk{transform:translateZ(12px) scale(1.08)}
+.sq.sel .blk{transform:translateY(-3px) scale(1.08)}
 .sq.sel .ftop{box-shadow:0 0 0 2px var(--blue),0 0 18px rgba(92,200,255,.6)}
 body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165,36,.6)}
 .sq:not(.sel) .blk.idle:not(.reveal){animation:bob 2.8s ease-in-out infinite;animation-delay:var(--d,0s)}
-@keyframes bob{50%{transform:translateZ(3px)}}
+@keyframes bob{50%{transform:translateY(-2px)}}
 .pz.drag{visibility:hidden}
 /* while dragging, a flat copy of the piece follows the finger above the table */
 .floater{position:fixed;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;transform:translate(-50%,-50%) scale(1.15);box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(92,200,255,.5)}
@@ -87,7 +73,7 @@ body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165
 .sq.can.ai{animation:pulser 1.1s ease-in-out infinite}
 @keyframes pulser{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,92,92,.4)}50%{box-shadow:inset 0 0 0 3px rgba(255,92,92,1)}}
 .blk.reveal{animation:flip3d .5s cubic-bezier(.3,1.4,.5,1)} /* the idle bob skips a revealing block, or it would hide the flip */
-@keyframes flip3d{0%{transform:translateZ(30px) rotateY(-90deg)}100%{transform:none}}
+@keyframes flip3d{0%{transform:perspective(320px) translateY(-4px) rotateY(-90deg)}100%{transform:none}}
 .sq.turned .ftop{animation:turnflash .7s ease-out}
 @keyframes turnflash{0%{filter:brightness(1)}30%{filter:brightness(2.2) saturate(2)}100%{filter:brightness(1)}}
 .fx{position:absolute;inset:0;pointer-events:none;z-index:3}
@@ -105,20 +91,20 @@ body.lost::after{background:radial-gradient(circle,rgba(255,92,92,.4),transparen
 @keyframes shake{0%,100%{transform:none}20%{transform:translate(-6px,2px)}40%{transform:translate(6px,-2px)}60%{transform:translate(-4px,0)}80%{transform:translate(4px,0)}}
 @keyframes flashout{from{opacity:1}to{opacity:0}}
 .ghost.sm{flex:0 0 52px}
-.msg{min-height:40px;margin:8px 16px 0;padding:8px 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-size:14px;line-height:1.4}
+.msg{margin:4px 8px 0;padding:6px 10px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-size:13px;line-height:1.4;height:calc(2 * 1.4em + 14px);overflow-y:auto;flex-shrink:0} /* a fixed height: a longer message must never move the board under the finger */
 .msg b{color:var(--amber)}
 .msg .you{color:var(--blue)}.msg .them{color:var(--amber)}
 body.me-ai .msg .you,body.me-ai .you{color:var(--amber)}body.me-ai .msg .them{color:var(--blue)}body.me-ai .msg b{color:var(--blue)}
-.link{margin:8px 16px 0;padding:8px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:10.5px;color:var(--muted);word-break:break-all;max-height:64px;overflow:auto;user-select:all}
+.link{margin:6px 8px 0;padding:8px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:10.5px;color:var(--muted);word-break:break-all;max-height:64px;overflow:auto;user-select:all}
 .row2{display:flex;gap:8px}.row2 .ghost{font-size:13px}
 .two p{color:var(--muted)}.two{display:flex;flex-direction:column;gap:8px}.two[hidden]{display:none}
 .paste{width:100%;min-height:64px;background:#0d131b;color:var(--fg);border:1px solid var(--line2);border-radius:10px;padding:8px;font:inherit;font-size:12px}
-.msg.over{border-width:2px;display:flex;flex-direction:column;gap:6px}
+.msg.over{border-width:2px;display:flex;flex-direction:column;gap:6px;height:auto}
 .msg.over h1{font-size:24px}.msg.over.win{border-color:var(--green)}.msg.over.lose{border-color:var(--red)}
 .pc{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 5px;border-radius:6px;font-weight:600;font-size:13px;flex-shrink:0}
 .pc.h{background:var(--blue-bg);border:1px solid #1f4b6b;color:var(--blue)}
 .pc.ai{background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber)}
-.actions{display:flex;gap:10px;padding:8px 16px 4px}
+.actions{display:flex;gap:8px;padding:0 8px;flex-shrink:0}.actions .ghost,.actions .primary{min-height:44px}.actions .primary{font-size:16px}
 .ghost{flex:1;min-height:46px;border-radius:12px;border:1px solid var(--line2);background:transparent;font-family:var(--display);font-weight:700;letter-spacing:1px;font-size:15px}
 .ghost[aria-pressed="true"]{border-color:var(--green);color:var(--green);background:#0d2418}
 .ghost:disabled{opacity:.4}
@@ -156,56 +142,37 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 @keyframes tin{from{opacity:0;transform:translateY(-12px) scale(.9)}to{opacity:1;transform:none}}
 @keyframes tout{to{opacity:0;transform:translateY(-10px)}}
 #app{display:flex;flex-direction:column;width:100%}
-/* play screen (v0.19): small pills, a dock with the last fight, the message and the buttons, then the board.
-   On a phone (v0.20) the dock sits on top and the board runs down to the bottom of the screen. */
-.hud{display:none;gap:6px;align-items:center;padding:6px 8px 2px}
+/* play screen (v0.23), one column everywhere: pills, the last fight, the message, the board as large as fits, the buttons.
+   Rules and pieces are below, by scrolling. */
+.left{display:flex;flex-direction:column;height:calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom));min-height:470px;padding-bottom:14px}
+.hud{display:flex;gap:6px;align-items:center;padding:6px 8px 0;flex-shrink:0}
 .pill{font:600 12px var(--mono);letter-spacing:.06em;padding:5px 10px;border-radius:999px;background:rgba(14,20,28,.88);border:1px solid var(--line2);white-space:nowrap}
 .pill.am{color:var(--amber);border-color:var(--amber-line);background:linear-gradient(90deg,rgba(245,165,36,.22) var(--p,0%),rgba(14,20,28,.88) var(--p,0%))}
-.dock{display:flex;flex-direction:column}
-.fline{display:flex;gap:8px;align-items:center;margin:8px 16px 0;padding:6px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:13px;color:var(--fg);text-align:left;width:auto;font-family:var(--mono)}
+.fline{display:flex;gap:8px;align-items:center;margin:4px 8px 0;padding:6px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:13px;color:var(--fg);text-align:left;width:auto;font-family:var(--mono);flex-shrink:0}
 .fline span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fline.none{visibility:hidden} /* holds its row before the first fight, so the board doesn't jump when it appears */.fline small{color:var(--muted);font-size:11px;flex-shrink:0}
 .fline .you{color:var(--blue)}.fline .them{color:var(--amber)}body.me-ai .fline .you{color:var(--amber)}body.me-ai .fline .them{color:var(--blue)}
-.more{display:none;text-align:center;font-size:12px;color:var(--muted);letter-spacing:1px;margin:14px 0 0}
+.more{text-align:center;font-size:12px;color:var(--muted);letter-spacing:1px;margin:14px 0 0}
 /* after a fight the winner's number rises from the square and fades; never blocks a tap */
 .float{position:fixed;z-index:4;pointer-events:none;transform:translate(-50%,-50%);font-family:var(--display);font-weight:700;font-size:44px;line-height:1;white-space:nowrap;text-shadow:0 3px 12px rgba(0,0,0,.85),0 0 2px #000}
 .float.h{color:var(--blue)}.float.ai{color:var(--amber)}.float.n{color:var(--fg)}.float .x{color:var(--muted);font-size:.6em;margin:0 .15em}.float .b{color:var(--blue)}.float .a{color:var(--amber)}
 .card.lobby .link{margin:0}.card.lobby h1{font-size:26px}.card .rules .rule b{color:var(--fg)}
+/* the start screen: pick a side, then PLAY */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px;border-radius:14px;background:#0d131b;border:1px solid var(--line2)}
+.seg button{min-height:48px;border-radius:10px;border:1px solid transparent;background:transparent;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:1px;color:var(--muted)}
+.seg button[aria-pressed="true"].h{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+.seg button[aria-pressed="true"].ai{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
 .lgs{display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow:auto;font-size:13px;line-height:1.4}
 .lgs div{padding:4px 2px;border-bottom:1px solid #182230}.lgs i{font-style:normal;color:var(--muted);font-size:11px;margin-right:6px}.lgs .mile{color:var(--amber)}
-@media (max-width:859px){
-  /* the board fills the screen: no title block, squares taller than wide, a flatter tilt */
-  .left{display:flex;flex-direction:column;height:calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom));min-height:470px}
-  .left .top,.left .lvl{display:none}
-  .hud{display:flex}
-  .hud{order:0}.dock{order:1}.boardwrap{order:2} /* the dock above the board, so the board's near edge is the screen's bottom */
-  .boardwrap{flex:1;min-height:0;margin:2px 4px 20px} /* v0.22: 20px under the board (above the safe area), so the bottom row isn't on the screen's edge */
-  .zoom,.tilt{height:100%}
-  .zoom{perspective:1300px;perspective-origin:50% -30%}
-  :root{--tilt:20deg;--ph:9px}
-  .tilt{margin-top:0}
-  .board{aspect-ratio:auto;height:100%;grid-template-rows:repeat(8,minmax(0,1fr))}
-  .sq,.clone{font-size:clamp(15px,5.4vw,28px)}
-  .dock{padding:2px 8px 4px;gap:6px}
-  .dock .fline,.dock .msg,.dock .link{margin:0}
-  /* a fixed-height dock: a longer message must not shrink the board under the finger between two taps */
-  .dock .msg{min-height:0;height:calc(3 * 1.4em + 14px);overflow-y:auto;padding:7px 10px;font-size:13px;line-height:1.4}
-  .dock .msg.over{height:auto}
-  .dock .actions{padding:0}
-  .dock .ghost,.dock .primary{min-height:44px}
-  .more{display:block}
-}
 @media (min-width:860px){
-  #app{flex-direction:row;align-items:flex-start;gap:32px;max-width:1140px;margin:0 auto;padding:20px 28px}
-  .left{flex:0 0 auto;width:min(560px,calc(100dvh - 300px));position:sticky;top:20px}
-  .dock .fline{margin:10px 0 0}
-  .right{flex:1;min-width:340px;max-width:480px}
-  .boardwrap{margin:0}.board{gap:4px}:root{--ph:9px}.tilt{margin-top:-1%}
-  .sq{font-size:24px;border-radius:9px}
-  .top{padding:0 0 6px}.lvl{padding:0 0 10px}
-  .top .t{font-size:24px}
-  .msg{margin:0 0 10px;font-size:15px}.link{margin:0 0 10px}
-  .actions{padding:0 0 10px}
+  /* desktop: the same column, as wide as the board can be while everything fits the window's height */
+  #app{align-items:center;padding:0 20px}
+  .left{width:min(100%,calc(100svh - 200px));min-height:520px;padding:10px 0 16px}
+  .hud,.actions{padding-left:0;padding-right:0}
+  .fline,.msg,.link{margin-left:0;margin-right:0}.boardwrap{margin:8px 0}
+  .board{gap:4px}.sq{border-radius:9px}
+  .msg{font-size:14px}
+  .right{width:min(100%,760px)}
   .key{padding:14px 0 24px}
   .msg.over h1{font-size:28px}
 }
@@ -224,7 +191,7 @@ const SETUP_ROWS = { H: [5,6,7], AI: [0,1,2] }; // every square in these rows is
 // Tuning: everything that decides fairness is here.
 const BAL = {
   RSI_EVERY: 7,     // the 🧠 self-improver grows itself +1 every N rounds while it lives, up to MAX_STR
-  MAX_STR: 10, SCANS: 2, COPIES: 2, MAX_ROUNDS: 100, // past MAX_ROUNDS the game is a draw
+  MAX_STR: 10, COPIES: 2, MAX_ROUNDS: 100, // past MAX_ROUNDS the game is a draw
   AGI: 8, ASI: 10,  // the 🧠's milestones: AGI at 8, superintelligence at 10
   SPY_MIN: 8, SPY_MAX: 9, // the whistleblower / virus kills a piece this strong when it attacks it, and loses to anything else
   CUT_TO: 8,        // cutting the power at ⚡ drops the 10 to this, for good
@@ -234,7 +201,7 @@ const onPower = (r, c) => r === POWER_SQ[0] && c === POWER_SQ[1];
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
 // M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (cut in v0.11.27: nobody understood it; the engine still understands it),
 // A whistleblower / virus (the spy: kills an 8 or 9 when attacking, else dies; both sides have one), I self-improver (grows itself
-// to 10, superintelligence), K deepfake (the AI's bluff: fights as its number, but a scan or scanner sees a 7 until a fight shows it), X fighter.
+// to 10, superintelligence), K deepfake (the AI's bluff: fights as its number, but a scanner sees a 7 until a fight shows it), X fighter.
 // P persuader was cut in v0.11.13; the engine still understands it.
 // 22 a side: flag, 3 traps, 3 sliders, 2 or 3 removers, scanners, specials, 9 fighters. Two front-row squares start empty.
 const ARMIES = {
@@ -255,18 +222,18 @@ function shuffle(arr, r){ for (let i = arr.length - 1; i > 0; i--){ const j = Ma
 // doesn't give the whole setup away. The CTO and the self-improver stay on the back row in all of them.
 const FORMATIONS = {
   H: [
-    { name: "Fortress", hint: "Datacenter in the corner, walled in.", rows: ["FT89C57S", "T7MA6MC4", "S54.MTS."] },
-    { name: "Keep", hint: "Datacenter in the middle, big numbers around it.", rows: ["S4TF798T", "5M7TSACM", "4C.6M5.S"] },
+    { name: "Fortress", hint: "The Internet in a corner, walled in.", rows: ["FT89C57S", "T7MA6MC4", "S54.MTS."] },
+    { name: "Keep", hint: "The Internet mid-row, big numbers around.", rows: ["S4TF798T", "5M7TSACM", "4C.6M5.S"] },
     { name: "Spearhead", hint: "Top agents up front. Attack early.", rows: ["FT9C4ST4", "T5CM6MSA", ".5877MS."] },
     { name: "Wall", hint: "Honeypots across the back, two fake flags.", rows: ["TFT98S7T", "M7MC6ACS", "54S.5M4."] },
-    { name: "Bluff", hint: "Traps where a flag would be. The flag is elsewhere.", rows: ["T5S8C9TF", "4M7ACM6T", "S54.MS7."] },
+    { name: "Bluff", hint: "Traps where the flag would be.", rows: ["T5S8C9TF", "4M7ACM6T", "S54.MS7."] },
   ],
   AI: [
     { name: "Fortress", hint: "Kill switch in the corner, walled in.", rows: ["FT6IC56S", "T6MA5MC4", "S4K.5TS."] },
-    { name: "Keep", hint: "Kill switch in the middle, big numbers around it.", rows: ["S6TFTI6C", "5M5T6AC4", "4S.5MK.S"] },
+    { name: "Keep", hint: "Kill switch mid-row, big numbers around.", rows: ["S6TFTI6C", "5M5T6AC4", "4S.5MK.S"] },
     { name: "Spearhead", hint: "Top agents up front. Attack early.", rows: ["FT4CKSTI", "T54M5ASS", ".666C5M."] },
     { name: "Wall", hint: "Backdoors across the back, two fake switches.", rows: ["TFTSIC6T", "M6MC5A6S", "54S.5K4."] },
-    { name: "Bluff", hint: "Traps where a switch would be. The switch is elsewhere.", rows: ["T5S6CITF", "4M6ACM5T", "S4K.5S6."] },
+    { name: "Bluff", hint: "Traps where the switch would be.", rows: ["T5S6CITF", "4M6ACM5T", "S4K.5S6."] },
   ],
 };
 const FORM_ROWS = side => side === "H" ? [7,6,5] : [0,1,2]; // back, middle, front
@@ -326,7 +293,7 @@ function newGame(seed, forms = {}){
   const r = rng(seed);
   const pieces = []; let id = 0;
   for (const side of ["H","AI"]) for (const [type, str] of ARMIES[side]) pieces.push({ id: id++, side, type, str, revealed: false, r: -1, c: -1 });
-  const s = { pieces, turn: "H", round: 1, scans: { H: BAL.SCANS, AI: BAL.SCANS }, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, cut: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, forms: {}, mirror: {} };
+  const s = { pieces, turn: "H", round: 1, copies: { H: BAL.COPIES, AI: BAL.COPIES }, winner: null, rsi: true, agi: false, asi: false, cut: false, log: "Humans to move.", last: null, seed, events: [], history: [], pass: false, needSetup: null, forms: {}, mirror: {} };
   for (const side of ["H","AI"]) layoutSide(s, side, forms[side] === undefined ? Math.floor(r() * FORMATIONS[side].length) : forms[side], r);
   return s;
 }
@@ -367,7 +334,7 @@ function sideMoves(s, side){
   for (const p of s.pieces) if (p.side === side) for (const m of legalMoves(s, p)) out.push({ p, ...m });
   return out;
 }
-function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, scans: { ...s.scans }, events: [], history: s.history.slice(-40) }; }
+function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, events: [], history: s.history.slice(-40) }; }
 const snap = x => ({ id: x.id, side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
 // what `viewer` knows a piece to be: a deepfake looks like a 7 to the other side until a fight shows what it is
 const asSeenBy = (q, viewer) => q.type === "K" && q.side !== viewer && !q.seen ? { ...q, type: "X", str: 7 } : q;
@@ -378,7 +345,8 @@ function apply(s0, move){
   const [r,c] = move.to;
   const q = at(s, r, c);
   const kill = x => { s.pieces = s.pieces.filter(y => y.id !== x.id); };
-  const convert = (x, to) => { x.side = to; x.revealed = true; x.seen = true; };
+  // a piece that switches sides is hidden again (to its old side too), like any piece after a fight; bots remember it (seen)
+  const convert = (x, to) => { x.side = to; x.revealed = false; x.seen = true; };
   const from = sqName(p.r, p.c), to = sqName(r, c);
   let line = "";
   if (move.cut){
@@ -402,13 +370,13 @@ function apply(s0, move){
   }
   else {
     const ev = { kind: "fight", r, c, a: snap(p), d: snap(q), result: "", line: "" };
-    // a fight shows both pieces once; afterwards the board hides them again on both sides (bots remember via "seen"), except scans and a 9
+    // a fight shows both pieces once; afterwards the board hides them again on both sides (bots remember via "seen"), except what a 📡 scanner revealed
     p.seen = true; q.seen = true;
-    if (q.type === "F"){ kill(q); p.r = r; p.c = c; s.winner = side; ev.result = "flag"; line = side === "H" ? "Humans hit the kill switch." : "The AI reached the datacenter."; }
+    if (q.type === "F"){ kill(q); p.r = r; p.c = c; s.winner = side; ev.result = "flag"; line = side === "H" ? "Humans hit the kill switch." : "The AI got out onto the Internet."; }
     else if (q.type === "T"){
       if (p.type === "M"){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} removed the ${roleName(q)}.`; }
       else if (isSuper(p)){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} saw through the ${roleName(q)} and removed it.`; }
-      else { kill(q); p.r = r; p.c = c; convert(p, q.side); ev.result = "trapped"; line = `${name(p)} fell into a ${roleName(q)} and switched sides.`; } // it moves onto the trap's square
+      else { const was = name(p); kill(q); p.r = r; p.c = c; convert(p, q.side); ev.result = "trapped"; line = `${was} fell into a ${roleName(q)} and switched sides.`; } // named before it switches: "Human operative 7 fell into a backdoor" // it moves onto the trap's square
     }
     else if (p.type === "A"){
       if (q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX && LEVELS_UP(q.type)){ kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} took out ${name(q)}.`; }
@@ -428,7 +396,7 @@ function apply(s0, move){
   s.last = { from: [move.p.r, move.p.c], to: [r,c], side };
   const hadRsi = s.rsi;
   s.rsi = !!brainOf(s);
-  if (hadRsi && !s.rsi && !s.winner){ line += " The AI can't improve itself anymore."; s.history.push({ round: s.round, side: "H", text: "The AI's self-improver is gone. The AI stops growing." }); }
+  if (hadRsi && !s.rsi && !s.winner){ line += " The 🧠 is gone."; s.history.push({ round: s.round, side: "H", text: "The AI's self-improver is gone. The AI stops growing." }); }
   s.log = line || (side === "H" ? "AI to move." : "Humans to move.");
   if (!s.winner){
     if (side === "AI"){
@@ -441,7 +409,7 @@ function apply(s0, move){
       }
       const top = brainOf(s); // the milestones are the 🧠's: the AI's 8 fighter starts at AGI strength, the 🧠 has to get there
       if (top && !s.agi && top.str >= BAL.AGI){ s.agi = true; s.events.push({ kind: "agi" }); s.log = "The AI has reached AGI."; s.history.push({ round: s.round, side: "AI", text: "The AI has reached AGI.", mile: true }); }
-      if (top && !s.asi && top.str >= BAL.ASI){ s.asi = true; s.events.push({ kind: "asi" }); s.log = "The AI has reached superintelligence."; s.history.push({ round: s.round, side: "AI", text: "The AI has reached superintelligence.", mile: true }); } // the 🧠 stays hidden: only a scan or a fight shows where it is
+      if (top && !s.asi && top.str >= BAL.ASI){ s.asi = true; s.events.push({ kind: "asi" }); s.log = "The AI has reached superintelligence."; s.history.push({ round: s.round, side: "AI", text: "The AI has reached superintelligence.", mile: true }); } // the 🧠 stays hidden: only a 📡 scanner or a fight shows where it is
       if (s.round > BAL.MAX_ROUNDS){ s.winner = "D"; s.log = `Round ${BAL.MAX_ROUNDS} is over and nobody got through. A draw.`; }
     }
     s.turn = other(side);
@@ -456,7 +424,7 @@ const homeSide = p => p.home || (p.id == null ? p.side : p.id < ARMIES.H.length 
 const CHARS = { H: { 4: "analyst", 5: "researcher", 6: "red-teamer", 7: "operative", 8: "general", 9: "CTO" }, AI: { 3: "chatbot", 4: "bot", 5: "swarm", 7: "mech", 8: "overmind" } };
 const roleName = p => p.type === "X" ? CHARS[homeSide(p)][p.str] || "agent" : ROLE[homeSide(p)][p.type];
 const ROLE = {
-  H:  { S: "pilot", M: "engineer", A: "whistleblower", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "honeypot", F: "datacenter" },
+  H:  { S: "pilot", M: "engineer", A: "whistleblower", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "honeypot", F: "Internet" },
   AI: { S: "crawler", M: "hacker", A: "virus", C: "scanner", R: "replicator", P: "persuader", I: "self-improver", K: "deepfake", X: "agent", T: "backdoor", F: "kill switch" },
 };
 function name(p){ const t = roleName(p); return LEVELS_UP(p.type) ? `${who(p.side)} ${t} ${p.str}` : `${who(p.side)} ${t}`; }
@@ -524,7 +492,7 @@ if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, s
 </script>
 <script>
 const ICON = {
-  H:  { F: "🏢", T: "🍯", S: "🧑‍✈️", M: "🧑‍🔧", A: "📢", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
+  H:  { F: "🌐", T: "🍯", S: "🧑‍✈️", M: "🧑‍🔧", A: "📢", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
   AI: { F: "🛑", T: "🚪", S: "🕷", M: "💻", A: "🦠", C: "📡", R: "🧬", P: "🗣", I: "🧠", K: "🎭", X: "" },
 };
 // each fighter's face (from the roster mockup)
@@ -534,17 +502,18 @@ const CHAR = {
 };
 const iconOf = p => p.type === "X" ? CHAR[homeSide(p)][p.str] || "⚔️" : ICON[homeSide(p)][p.type];
 const cap = s => s[0].toUpperCase() + s.slice(1);
+// what a piece does, short: the message box above the board is two lines (the rules below say the rest)
 const ABOUT = {
-  X: p => `Fights: higher number wins, same number kills both. ${p.side === "H" && p.str === 9 ? "The CTO. If the AI reaches superintelligence, stand on ⚡ and cut the power." : ""}`,
-  S: p => `${homeSide(p) === "H" ? "Flies" : "Scuttles"} any distance in a straight line. Scouts, and hits the back row.`,
-  M: p => p.side === "H" ? "Fights as a 3, and is the only piece that walks through a backdoor safely, removing it." : "Fights as a 3, and walks through honeypots safely, removing them.",
-  A: p => p.side === "H" ? `The whistleblower. Fights as a 1, but exposes an AI ${BAL.SPY_MIN} or ${BAL.SPY_MAX} it attacks and takes it out. Can't touch a 10. Loses to anything else, so scan first.` : `The virus. Kills an ${BAL.SPY_MIN} or ${BAL.SPY_MAX} if it attacks it: the humans' top agents. Loses to anything else, so remember where their big numbers are.`,
-  C: () => "Reveals every hidden enemy piece next to it, every turn. Keep it escorted.",
-  T: p => p.side === "H" ? "A honeypot. Can't move. An AI piece that attacks it switches to the human side." : "A backdoor. Can't move. A human piece that attacks it switches to the AI.",
-  F: p => p.side === "H" ? "The datacenter. Can't move. If the AI reaches it, it can never be shut down: the humans lose." : "The AI's kill switch. Can't move. If the humans reach it, the AI is shut down.",
+  X: p => p.side === "H" && p.str === 9 ? `Higher wins. At 🧠${BAL.ASI}, stand on ⚡ and cut the power.` : "Higher number wins a fight; the same number, both fall.",
+  S: p => `${homeSide(p) === "H" ? "Flies" : "Scuttles"} any distance in a straight line.`,
+  M: p => p.side === "H" ? "Fights as a 3, and removes a backdoor safely." : "Fights as a 3, and removes a honeypot safely.",
+  A: p => `Takes out an ${BAL.SPY_MIN} or ${BAL.SPY_MAX} it attacks; loses any other attack.`,
+  C: () => "Reveals every hidden enemy next to it, every turn.",
+  T: p => p.side === "H" ? "Can't move. An AI piece that attacks it joins the humans." : "Can't move. A human piece that attacks it joins the AI.",
+  F: p => p.side === "H" ? "Can't move. If the AI reaches it, it gets out onto the Internet." : "Can't move. If the humans reach it, the AI is shut down.",
   R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
-  I: () => `The self-improver. It grows itself +1 every ${BAL.RSI_EVERY} rounds. Kill it to stop the AI growing. At ${BAL.AGI} it is AGI; at ${BAL.ASI} superintelligence: it beats everything and sees through honeypots (it stays hidden like any piece), until the humans' CTO cuts the power at ⚡ (it drops to ${BAL.CUT_TO} for good and never grows again).`,
-  K: () => `The deepfake. Fights as a 3, but a scan or a scanner sees it as a 7. A fight shows what it really is.`,
+  I: () => `Grows +1 every ${BAL.RSI_EVERY} rounds; at ${BAL.ASI} it beats everything.`,
+  K: () => "Fights as a 3, but a 📡 scanner sees a 7 until a fight shows it.",
 };
 // tiny synthesized sounds, no files
 const SFX = { ctx: null, on: true };
@@ -596,20 +565,20 @@ if (params.has("sim")){
   const res = simulate(Number(params.get("sim")) || 200);
   app.innerHTML = `<pre>${JSON.stringify({ ...res, BAL }, null, 2)}</pre>`;
 } else {
-  let state, phase = "intro", sel = null, scanMode = false, copyMode = false, info = null, busy = false;
+  let state, phase = "intro", sel = null, copyMode = false, info = null, busy = false;
   let me = "H";          // the side this screen plays
   let mode = "solo";     // solo: the bot plays the other side. pass: two players, the state travels in a link
   const SIDE_WORD = { H: "Human", AI: "AI" };
   const theirs = () => SIDE_WORD[other(me)];
   // pass-the-link: the whole game state in the URL hash (hidden pieces included; fine between friends, not for strangers)
   function encState(s){
-    const o = { v: 1, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, sc: [s.scans.H, s.scans.AI], cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, cu: s.cut ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
+    const o = { v: 1, P: s.pieces.map(p => [p.id, p.side === "H" ? 0 : 1, p.type, p.str, (p.revealed ? 1 : 0) | (p.seen ? 2 : 0), p.r, p.c]), t: s.turn, rd: s.round, sc: [0, 0], cp: [s.copies.H, s.copies.AI], w: s.winner, rsi: s.rsi ? 1 : 0, agi: s.agi ? 1 : 0, asi: s.asi ? 1 : 0, cu: s.cut ? 1 : 0, log: s.log, last: s.last, seed: s.seed, ns: s.needSetup || null };
     return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
   function decState(code){
     const o = JSON.parse(decodeURIComponent(escape(atob(code.replace(/-/g, "+").replace(/_/g, "/")))));
     if (o.v !== 1) throw new Error("version");
-    const s = { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, scans: { H: o.sc[0], AI: o.sc[1] }, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: false, cut: !!o.cu, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns };
+    const s = { pieces: o.P.map(([id, sd, type, str, fl, r, c]) => ({ id, side: sd ? "AI" : "H", type, str, revealed: !!(fl & 1), seen: !!(fl & 2), r, c })), turn: o.t, round: o.rd, copies: { H: o.cp[0], AI: o.cp[1] }, winner: o.w, rsi: !!o.rsi, agi: !!o.agi, asi: false, cut: !!o.cu, log: o.log, last: o.last, seed: o.seed, events: [], history: [], pass: true, needSetup: o.ns };
     s.asi = !!o.asi && !!brainOf(s) && brainOf(s).str >= BAL.ASI; // links from before v0.16 called a 9 superintelligence; the alert now comes at 10
     return s;
   }
@@ -620,7 +589,7 @@ if (params.has("sim")){
   function codeFrom(text){ const m = String(text || "").match(/g=([A-Za-z0-9_-]+)/); return m ? m[1] : String(text || "").trim(); }
   function loadLink(text){
     try { state = decState(codeFrom(text)); } catch (e) { info = "That link didn't work. Paste the whole link you were sent."; return render(); }
-    mode = "pass"; sel = null; scanMode = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null;
+    mode = "pass"; sel = null; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null;
     me = state.needSetup || state.turn;
     phase = state.needSetup ? "setup" : state.winner ? "over" : "play";
     document.body.classList.toggle("me-ai", me === "AI");
@@ -634,7 +603,7 @@ if (params.has("sim")){
   // pointer handling: tap, or drag an own piece and drop it on a lit square
   let ptr = null, dragEl = null; // ptr.cx/cy: the dragged square's centre on screen
   // the dragged piece's centre (on screen) decides the drop: the nearest legal square, as soon as it is nearer than the
-  // piece's own square. Screen rects, not offsets: the board is tilted, so a finger's pixels aren't the board's pixels.
+  // piece's own square (screen rects, so the page's scroll doesn't matter)
   const mid = el => { const q = el.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2, w: q.width, h: q.height }; };
   function dropTarget(from, x, y){
     const src = app.querySelector(`.sq[data-r="${from.r}"][data-c="${from.c}"]`); if (!src) return null;
@@ -666,11 +635,9 @@ if (params.has("sim")){
     lit.forEach(q => q && q.classList.add("can"));
     const msg = app.querySelector(".msg"); if (msg && info) msg.innerHTML = info;
   }
-  // the square under a touch: on the tilted board a touch's target can come back as the whole board (browsers adjust
-  // touch targets, and 3D hit-testing differs), so ask for what's under the point, then fall back to the nearest square
+  // the square under a touch, by its on-screen box: a touch in the gap between squares (or adjusted by the browser onto
+  // the board itself) still finds the nearest square
   function sqAt(e){
-    // by geometry, not hit-testing: the squares lie in the same tilted plane as the board, and browsers' 3D hit-tests
-    // can return the board or a neighbour. Of the squares whose on-screen box holds the point, the nearest centre wins.
     let best = null, bd = Infinity;
     for (const q of app.querySelectorAll(".sq")){
       const r = q.getBoundingClientRect(), d = Math.hypot(r.left + r.width / 2 - e.clientX, r.top + r.height / 2 - e.clientY);
@@ -693,7 +660,7 @@ if (params.has("sim")){
     if (!ptr.moved){
       if (Math.hypot(dx, dy) < 8) return;
       const p = at(state, ptr.r, ptr.c);
-      const can = p && p.side === me && !scanMode && ((phase === "setup" && !(mode === "live" && LIVE.ready[me])) || (phase === "play" && state.turn === me));
+      const can = p && p.side === me && ((phase === "setup" && !(mode === "live" && LIVE.ready[me])) || (phase === "play" && state.turn === me));
       if (!can){ ptr = null; return; }
       ptr.moved = true;
       if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; lightMoves(); }
@@ -702,7 +669,7 @@ if (params.has("sim")){
       dragEl = src.querySelector(".pz"); if (dragEl) dragEl.classList.add("drag");
       floater = document.createElement("div"); floater.className = "floater " + cls(p.side);
       floater.innerHTML = faceHtml(face(p));
-      Object.assign(floater.style, { width: m.w * .82 + "px", height: m.w * .76 + "px", fontSize: getComputedStyle(src).fontSize });
+      Object.assign(floater.style, { width: m.w * .84 + "px", height: m.w * .84 + "px", fontSize: getComputedStyle(src).fontSize });
       document.body.appendChild(floater);
       sfx.tap();
     }
@@ -726,7 +693,7 @@ if (params.has("sim")){
   window.addEventListener("pointercancel", () => { ptr = null; endDrag(); });
   function start(m = "solo", side = "H"){
     mode = m; me = side; document.body.classList.toggle("me-ai", me === "AI");
-    state = newGame(seed + Math.floor(Math.random()*1e6)); phase = "setup"; sel = null; scanMode = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null;
+    state = newGame(seed + Math.floor(Math.random()*1e6)); phase = "setup"; sel = null; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null;
     if (mode === "pass"){ state.pass = true; state.needSetup = other(side); }
     render();
   }
@@ -748,9 +715,9 @@ if (params.has("sim")){
   }
   const cls = s => s === "H" ? "h" : "ai";
   function chip(x){ return `<span class="pc ${cls(x.side)}">${iconOf(x)}${LEVELS_UP(x.type) ? " " + x.str : ""}</span>`; }
-  function faceHtml(p){ return `<span class="ic">${iconOf(p)}</span>` + (LEVELS_UP(p.type) ? `<span class="n">${p.str}</span>` : ""); }
-  // a piece on the table: a block with a top, a front and two sides, and a soft shadow under it
-  const blockHtml = (inner, idle, d) => `<i class="shd"></i><div class="blk${idle ? " idle" : ""}"${d ? ` style="--d:${d}"` : ""}><i class="face ffr"></i><i class="face flf"></i><i class="face frt"></i><div class="face ftop">${inner}</div></div>`;
+  function faceHtml(p){ return LEVELS_UP(p.type) ? `<span class="ic up">${iconOf(p)}</span><span class="n">${p.str}</span>` : `<span class="ic">${iconOf(p)}</span>`; }
+  // a piece: a low tile (its top face over a darker edge) with a soft shadow under it
+  const blockHtml = (inner, idle, d) => `<i class="shd"></i><div class="blk${idle ? " idle" : ""}"${d ? ` style="--d:${d}"` : ""}><div class="face ftop">${inner}</div></div>`;
   const face = p => phase === "over" ? p : asSeenBy(p, me);
   function pieceHtml(p, show){ return `<div class="pz">${blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`, p.side === me && p.id % 3 === 0, `-${(p.id * 7) % 28 / 10}s`)}</div>`; }
   const color = t => t.replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), '<span class="you">Your</span>').replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
@@ -770,9 +737,8 @@ if (params.has("sim")){
     const live = !!(brain && isSuper(brain)); // a 10 on the board: ⚡ lights up
     const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : live ? 100 : 0;
     const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? "power cut" : "superintelligent";
-    let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span><span class="pill">${me === "H" ? "Scans" : "Hacks"} ${state.scans[me]}</span></div><div class="top"><div class="t">KILL SWITCH</div><div class="stat">Round <b>${state.round}</b> · ${me === "H" ? "Scans" : "Hacks"} <b>${state.scans[me]}</b></div></div>
-    <div class="lvl"><span>🧠 grows</span><div class="bar"><i style="width:${pct}%"></i></div><span>${barText}</span></div>
-    <div class="boardwrap"><div class="zoom" id="zoom"><div class="tilt"><div class="board" id="board">`;
+    let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span></div>`;
+    let bhtml = `<div class="boardwrap"><div class="stage"><div class="board" id="board">`;
     const cans = sel ? legalMoves(state, sel).filter(m => !m.cut) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
     const rowOrder = me === "H" ? [...Array(ROWS).keys()] : [...Array(ROWS).keys()].reverse(); // my side at the bottom
@@ -786,7 +752,7 @@ if (params.has("sim")){
         k.push(cls(p.side));
         const show = p.side === me || p.revealed || phase === "over";
         if (!show) k.push("hid");
-        if (p.side === "AI" && (p.revealed || p.side === me) && p.str >= BAL.ASI) k.push("asi"); // your own 10 glows; theirs only once a scan shows it
+        if (p.side === "AI" && (p.revealed || p.side === me) && p.str >= BAL.ASI) k.push("asi"); // your own 10 glows; theirs only once a scanner shows it
         inner = pieceHtml(face(p), show);
         idAttr = ` data-id="${p.id}"`;
         if (show){ nowShown.add(String(p.id)); if (!shown.has(String(p.id)) && prev.has(String(p.id))) flips.push(String(p.id)); }
@@ -797,20 +763,19 @@ if (params.has("sim")){
       if (phase === "setup" && sel && !p && SETUP_ROWS[me].includes(r) && !BLOCKED.has(r+","+c)) k.push("can");
       const mv = cans.filter(m => m.to[0] === r && m.to[1] === c);
       if (mv.length) k.push(mv.some(m => m.copy) && copyMode ? "copy" : "can");
-      if (scanMode && p && p.side !== me && !p.revealed) k.push("scan");
       if (state.last && state.last.to[0] === r && state.last.to[1] === c) k.push("last");
-      html += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED.has(r+","+c) ? "disabled" : ""}>${inner}</button>`;
+      bhtml += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED.has(r+","+c) ? "disabled" : ""}>${inner}</button>`;
     }
-    html += `</div><div class="fx" id="fx"></div></div></div><div class="toasts" id="toasts"></div></div><div class="dock">`;
+    bhtml += `</div><div class="fx" id="fx"></div></div><div class="toasts" id="toasts"></div></div>`;
     html += lastFight && phase !== "setup" ? `<button class="fline" id="fline">⚔️ <span>${fightLine(lastFight)}</span><small>log ›</small></button>` : `<div class="fline none" aria-hidden="true">⚔️ <span>&nbsp;</span></div>`;
     let logHtml;
     if (phase === "setup" && mode === "live" && LIVE.ready[me]) logHtml = `<span class="you">Your side is set.</span> Waiting for the other player to finish setting up<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
-    else if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Tap two pieces to swap them, or try the next lineup. Then START.`; }
+    else if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Swap two, then START.`; }
     else if (phase === "handoff") logHtml = state.needSetup ? `<span class="you">Your side is set.</span> Send the link below. The other player sets up, then moves first.` : `<span class="you">Your move is in.</span> Send the link below to the other player.`;
     else if (info) logHtml = info;
     else if (state.turn !== me && !state.winner) logHtml = mode === "pass" ? `Waiting for <b>${theirs()}</b>.` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
-    else if (!state.winner && state.turn === me && state.pieces.some(x => x.side === me && canCut(state, x))) logHtml = `<span class="you">Your CTO is on ⚡.</span> Cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. Or make another move.`;
-    else if (!state.winner && (/to move\.$/.test(state.log) || (lastFight && lastFight.line && state.log === lastFight.line))) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then tap a lit square." : ""}`;
+    else if (!state.winner && state.turn === me && state.pieces.some(x => x.side === me && canCut(state, x))) logHtml = `<span class="you">Your CTO is on ⚡.</span> Cut the power: the 🧠 drops to ${BAL.CUT_TO} for good.`;
+    else if (!state.winner && (/to move\.$/.test(state.log) || (lastFight && lastFight.line && state.log === lastFight.line))) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then a lit square; red is a fight." : ""}`;
     else logHtml = color(state.log);
     if (mode === "live" && LIVE.note && phase !== "over") logHtml = `<b>${LIVE.note}</b>`;
     if (phase === "over"){
@@ -818,21 +783,22 @@ if (params.has("sim")){
       const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ` + (state.last.from[0] === state.last.to[0] && state.last.from[1] === state.last.to[1] ? `cut the power at ${sqName(...state.last.to)}.` : `${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`);
       html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}</div></div>`;
     } else html += `<div class="msg">${logHtml}</div>`;
+    html += bhtml;
     const cto = phase === "play" && state.turn === me && !busy && state.pieces.find(x => x.side === me && canCut(state, x));
-    if (cto) html += `<div class="actions"><button class="primary cutbtn" id="cut">⚡ CUT THE POWER</button></div>`;
     html += `<div class="actions">`;
     if (phase === "setup" && !(mode === "live" && LIVE.ready[me])) html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
     else if (phase === "setup") html += `<button class="ghost" id="restart">LEAVE</button>`;
     else if (phase === "handoff") html += `<button class="primary" id="share">SEND LINK</button><button class="ghost" id="copylink">COPY</button>`;
     else if (phase === "play"){
-      html += `<button class="ghost" id="scan" aria-pressed="${scanMode}" ${state.scans[me] && state.turn === me ? "" : "disabled"}>${me === "H" ? "SCAN" : "HACK"} (${state.scans[me]})</button>`;
+      // ⚡ takes the RULES slot when it applies, so the row (and the board above it) never moves
+      html += cto ? `<button class="primary cutbtn" id="cut">⚡ CUT THE POWER</button>` : `<button class="ghost" id="rules">RULES ↓</button>`;
       if (sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel)) html += `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>`;
       html += `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart">↻</button>`;
     }
     else if (phase === "over") html += `<button class="primary" id="again">PLAY AGAIN</button>`;
     html += `</div>`;
     if (phase === "handoff") html += `<div class="link" id="linkbox">${gameLink()}</div>`;
-    html += `</div></div><div class="right"><p class="more">↓ Rules and pieces</p>` + listHtml() + `</div>`;
+    html += `</div><div class="right" id="rulesbox"><p class="more">↓ Rules and pieces</p>` + listHtml() + `</div>`;
     app.innerHTML = html;
     // slide moved pieces from where they were
     if (!FAST && prev.size){
@@ -855,7 +821,7 @@ if (params.has("sim")){
     on("restart", () => { if (mode === "live"){ if (!confirm("Leave this live game?")) return; leaveLive(); } phase = "intro"; render(); });
     on("share", async () => { const url = gameLink(); sfx.tap(); try { if (navigator.share) await navigator.share({ title: "Kill Switch", text: "Your move in Kill Switch", url }); else { await navigator.clipboard.writeText(url); info = "Link copied. Paste it to the other player."; render(); } } catch (e) {} });
     on("copylink", async () => { sfx.tap(); try { await navigator.clipboard.writeText(gameLink()); info = "Link copied."; } catch (e) { info = "Select the link below and copy it."; } render(); });
-    on("scan", () => { sfx.tap(); scanMode = !scanMode; copyMode = false; sel = null; info = scanMode ? (me === "H" ? "Scan" : "Hack") + ": tap a hidden enemy piece to reveal it for good." : null; render(); });
+    on("rules", () => { sfx.tap(); document.getElementById("rulesbox").scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); });
     on("cut", () => { const cto = state.pieces.find(x => x.side === me && canCut(state, x)); if (cto) play({ p: cto, to: [cto.r, cto.c], cut: true }); });
     on("fline", () => { sfx.tap(); showLog(); });
     on("copybtn", () => { sfx.tap(); copyMode = !copyMode; render(); });
@@ -867,7 +833,7 @@ if (params.has("sim")){
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
     H:  { S: "flies any distance", M: "fights as 3, removes backdoors", A: "1; kills an 8 or 9 it attacks", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
-    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 10 on its own", K: "fights as 3, scans see a 7", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 10 on its own", K: "fights as 3, scanners see a 7", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
     const alive = (side, t, str) => state.pieces.filter(p => p.side === side && p.type === t && (str == null || p.str === str)).length;
@@ -891,31 +857,41 @@ if (params.has("sim")){
       ${specials(me).map(t => krow(me, t)).join("")}
       <div class="kh ${cls(me) === "h" ? "a" : "b"}">${theirs()} pieces <span class="kc">${state.pieces.filter(p => p.side !== me).length}<i> of ${ARMIES[other(me)].length} left</i></span></div>
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
-      ${aiSeen.length ? `<div class="seen">Scanned: ${aiSeen.map(chip).join("")}</div>` : ""}
+      ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
-      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides. Pieces never level up; only the AI's 🧠 grows, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a scan), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on ⚡ and cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. What stops an 8 or 9: a stronger piece, the same number (both fall), the 📢 whistleblower or 🦠 virus attacking it, or a trap. Scanned pieces stay face up; after a fight you have to remember what you saw. ${me === "H" ? "Scans" : "Hacks"}: ${state.scans[me]} left.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides. Pieces never level up; only the AI's 🧠 grows, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on ⚡ and cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. What stops an 8 or 9: a stronger piece, the same number (both fall), the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌐 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
     </div>`;
   }
+  // the side a solo game is played from: the start screen's choice, remembered on this phone
+  let soloSide = "H";
+  try { if (localStorage.getItem("ks-side") === "AI") soloSide = "AI"; } catch (e) {}
   function renderIntro(){
     app.innerHTML = `<div class="overlay"><div class="card">
       <div class="eyebrow">Stratego, but the AI gets smarter</div><h1>KILL SWITCH</h1>
       <div class="rules">
         <div class="rule"><div class="k b">🛑</div><div>Reach the AI's <b>kill switch</b> to win.</div></div>
-        <div class="rule"><div class="k a">🏢</div><div>Keep the AI off your <b>datacenter</b>.</div></div>
+        <div class="rule"><div class="k a">🌐</div><div>Keep the AI off <b>the Internet</b>, or it gets out.</div></div>
         <div class="rule"><div class="k a">?</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
         <div class="rule"><div class="k a">🧠</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> first.</div></div>
         <div class="rule"><div class="k b">⚡</div><div>At 10, get your CTO to ⚡ and <b>cut the power</b>.</div></div>
       </div>
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
-      <button class="primary" id="play">PLAY</button>
-      <div class="row2"><button class="ghost" id="playai">PLAY AS THE AI</button><button class="ghost" id="two">TWO PLAYER</button></div>
+      <div class="eyebrow">Play as</div>
+      <div class="seg" role="group" aria-label="Play as"><button class="h" id="asH" aria-pressed="${soloSide === "H"}">🧑‍💻 HUMANS</button><button class="ai" id="asAI" aria-pressed="${soloSide === "AI"}">🤖 THE AI</button></div>
+      <button class="primary" id="play">PLAY AS ${soloSide === "H" ? "HUMANS" : "THE AI"}</button>
+      <button class="ghost" id="two">TWO PLAYER</button>
       <div class="two" id="twobox" hidden><p>Play live with a friend on their own phone: create a game and send them the invite.</p>
         <button class="primary" id="create">CREATE GAME</button><button class="ghost" id="bylink">PLAY BY LINK</button>
         <div class="two" id="bylinkbox" hidden><p>Play by link: pass a link back and forth after every move. Start a game and send the link, or paste the link you were sent.</p>
         <div class="row2"><button class="ghost" id="newpass">NEW · I'M THE HUMANS</button><button class="ghost" id="newpassai">NEW · I'M THE AI</button></div>
         <textarea class="paste" id="paste" placeholder="Paste the link you were sent"></textarea><button class="ghost" id="openpass">OPEN LINK</button></div></div></div></div>`;
-    document.getElementById("play").addEventListener("click", () => { sfx.win(); start("solo", "H"); });
-    document.getElementById("playai").addEventListener("click", () => { sfx.win(); start("solo", "AI"); });
+    // in place, not a re-render: an open TWO PLAYER box and a pasted link stay
+    const pick = side => () => { sfx.tap(); soloSide = side; try { localStorage.setItem("ks-side", side); } catch (e) {}
+      document.getElementById("asH").setAttribute("aria-pressed", side === "H"); document.getElementById("asAI").setAttribute("aria-pressed", side === "AI");
+      document.getElementById("play").textContent = "PLAY AS " + (side === "H" ? "HUMANS" : "THE AI"); };
+    document.getElementById("asH").addEventListener("click", pick("H"));
+    document.getElementById("asAI").addEventListener("click", pick("AI"));
+    document.getElementById("play").addEventListener("click", () => { sfx.win(); start("solo", soloSide); });
     document.getElementById("two").addEventListener("click", () => { sfx.tap(); document.getElementById("twobox").hidden = false; });
     document.getElementById("create").addEventListener("click", () => { sfx.win(); createLive(); });
     document.getElementById("bylink").addEventListener("click", () => { sfx.tap(); document.getElementById("bylinkbox").hidden = false; });
@@ -926,7 +902,7 @@ if (params.has("sim")){
   function explain(p){
     p = face(p);
     const n = LEVELS_UP(p.type) ? `${roleName(p)} ${p.str}` : roleName(p);
-    return `<span class="${p.side === me ? "you" : "them"}">${iconOf(p)} ${cap(n)}.</span> ${ABOUT[p.type](p)}${p.side === me && sel && legalMoves(state, p).some(m => !m.cut) ? " Lit squares are where it can go; red means a fight." : ""}`;
+    return `<span class="${p.side === me ? "you" : "them"}">${iconOf(p)} ${cap(n)}.</span> ${ABOUT[p.type](p)}`;
   }
   function tap(r, c){
     if (busy) return;
@@ -940,11 +916,6 @@ if (params.has("sim")){
       sel = null; return render();
     }
     if (phase !== "play" || state.turn !== me) return;
-    if (scanMode){
-      if (mode === "live" && !LIVE.host){ if (p && p.side !== me && !p.revealed && state.scans[me] > 0 && send({ t: "scan", id: p.id })){ scanMode = false; info = null; sfx.reveal(); } return render(); }
-      if (p && p.side !== me && !p.revealed && state.scans[me] > 0){ p.revealed = true; state.scans[me]--; state.log = `${me === "H" ? "Scan" : "Hack"}: ${name(face(p))} at ${sqName(p.r, p.c)}.`; state.history.push({ round: state.round, side: me, text: state.log }); scanMode = false; info = null; sfx.reveal(); if (mode === "live") sendSync(); }
-      return render();
-    }
     if (p && p.side === me){ sfx.tap(); sel = sel && sel.id === p.id ? null : p; copyMode = false; info = sel ? explain(sel) : null; return render(); }
     if (p && p.side !== me && p.revealed && !sel){ sfx.tap(); info = explain(p); return render(); }
     if (sel){
@@ -977,7 +948,7 @@ if (params.has("sim")){
   // one Web Animation that holds its end state; a single keyframe animates from wherever the element is now
   const A = (el, frames, ms, easing = "ease", extra = {}) => fin(el.animate(frames, { duration: reduce ? 1 : ms, easing, fill: "forwards", ...extra }), reduce ? 1 : ms);
   const blk = el => el.querySelector(".blk"), topOf = el => el.querySelector(".ftop");
-  // a fight stand-in: the same block as on the board, in the fx layer (the same tilted plane, so the same coordinates)
+  // a fight stand-in: the same tile as on the board, in the fx layer over the board (the same coordinates)
   function cloneAt(p, rect, show){
     const fx = document.getElementById("fx"); if (!fx) return null;
     const el = document.createElement("div"); el.className = `clone ${cls(p.side)}`;
@@ -992,30 +963,32 @@ if (params.has("sim")){
     for (let i = 0; i < 18; i++){
       const s = fxAt("spk", c, f); if (color) s.style.background = color; else if (i % 3 === 0) s.style.background = "#fff";
       const a = Math.random() * Math.PI * 2, d = 30 + Math.random() * 50;
-      s.animate([{ transform: "translate3d(0,0,20px)", opacity: 1 }, { transform: `translate3d(${Math.cos(a) * d}px,${Math.sin(a) * d}px,${40 + Math.random() * 60}px)`, opacity: 0 }], { duration: 600 + Math.random() * 300, easing: "cubic-bezier(.1,.7,.3,1)" }).finished.then(() => s.remove(), () => s.remove());
+      s.animate([{ transform: "translate(0,0) scale(1.4)", opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px,${Math.sin(a) * d}px) scale(.6)`, opacity: 0 }], { duration: 600 + Math.random() * 300, easing: "cubic-bezier(.1,.7,.3,1)" }).finished.then(() => s.remove(), () => s.remove());
     }
   }
-  const lift = (el, z, ms = 220, k = 1) => A(blk(el), [{ transform: `translateZ(${z}px) scale(${k})` }], ms, "ease-out");
+  const LIFT = "translateY(-3px) scale(.92)"; // a stand-in held up a little: it is moving
+  const lift = (el, ms = 220) => A(blk(el), [{ transform: LIFT }], ms, "ease-out");
   const land = el => A(blk(el), [{ transform: "none" }], 220, "cubic-bezier(.3,1.6,.5,1)");
-  // a stand-in moves by left/top, never by a transform on the stand-in itself: iPhone Safari paints a finished transform on
-  // it back at its start once its block starts a 3D animation, which drew a trapped piece converting on the square it came from
+  // a stand-in moves by left/top, never by a transform on the stand-in itself: iPhone Safari painted a finished transform on
+  // it back at its start once its block started animating, which drew a trapped piece converting on the square it came from
   const slide = (el, c, f, ms, easing = "ease-out") => A(el, [{ left: c.ra.left + c.dx * f + "px", top: c.ra.top + c.dy * f + "px" }], ms, easing);
-  // knocked off the table: flies on from where it stands (f along the attack, sign: +1 forward, -1 back) and tumbles
+  // knocked off the board: flies on from where it stands (f along the attack, sign: +1 forward, -1 back), spinning and shrinking
   function knockOff(el, c, f, sign){
     const s = c.size, ux = c.dx / c.len, uy = c.dy / c.len;
     A(el.querySelector(".shd"), [{ opacity: 0 }], 150);
     A(el, [{ left: c.ra.left + c.dx * f + (ux * .9 - uy * .4) * s * sign + "px", top: c.ra.top + c.dy * f + (uy * .9 + ux * .4) * s * sign + "px" }], 380, "ease-out");
-    return A(blk(el), [{ transform: "translateZ(14px) rotateX(0) rotateZ(0) scale(1)" }, { transform: `translateZ(110px) rotateX(-220deg) rotateZ(${35 * sign}deg) scale(.75)`, offset: .55 }, { transform: `translateZ(50px) rotateX(-380deg) rotateZ(${60 * sign}deg) scale(0)` }], 380, "ease-out");
+    return A(blk(el), [{ transform: LIFT }, { transform: `translateY(-6px) rotate(${150 * sign}deg) scale(1.15)`, offset: .45 }, { transform: `rotate(${300 * sign}deg) scale(0)` }], 380, "ease-out");
   }
-  const sink = el => A(blk(el), [{ transform: "translateZ(-6px) scale(0)" }], 260, "ease-in");
-  async function flip3d(el, html){ await A(blk(el), [{ transform: "translateZ(24px) rotateY(90deg)" }], 90, "ease-in"); topOf(el).innerHTML = html; await A(blk(el), [{ transform: "translateZ(24px) rotateY(-90deg)" }, { transform: "translateZ(14px)" }], 150, "cubic-bezier(.3,1.5,.5,1)"); }
+  const sink = el => A(blk(el), [{ transform: "scale(0)", opacity: .4 }], 260, "ease-in");
+  // a hidden stand-in turns over (a flat card flip: perspective() on the tile itself)
+  async function flip3d(el, html){ await A(blk(el), [{ transform: "perspective(320px) translateY(-6px) rotateY(90deg)" }], 90, "ease-in"); topOf(el).innerHTML = html; await A(blk(el), [{ transform: "perspective(320px) translateY(-6px) rotateY(-90deg)" }, { transform: "perspective(320px) " + LIFT }], 150, "cubic-bezier(.3,1.5,.5,1)"); }
   // Bigger ranks, bigger fight: poke (1-3), clash (4-6), showdown (7+) by the higher rank in the fight.
   function fightTier(a, d){ const m = Math.max(a.type === "X" || LEVELS_UP(a.type) ? a.str : 0, d.type === "X" || LEVELS_UP(d.type) ? d.str : 0); return m >= 7 ? 2 : m >= 4 ? 1 : 0; }
   function shakeBoard(big){ const b = document.getElementById("board"); if (!b || reduce) return; b.classList.remove("shake", "big"); void b.offsetWidth; b.classList.add("shake"); if (big) b.classList.add("big"); }
   let lastFight = null; // the last fight's two pieces and result, for the line above the board
   // v0.20 clash: both pieces slide toward each other and meet in the middle, both face up for a moment, then the loser is
   // knocked off and the winner takes the defender's square (a tie: both fall). About 1.35 s (v0.22: the face-up moment holds 0.5 s longer so both numbers can be read); the winner's number floats after.
-  // A trap, datacenter or kill switch can't move: it stays put and the attacker comes the whole way.
+  // A trap, the Internet or the kill switch can't move: it stays put and the attacker comes the whole way.
   async function animateFight(before, ev){
     const a = before.pieces.find(x => x.r === state.last.from[0] && x.c === state.last.from[1]);
     const d = before.pieces.find(x => x.r === ev.r && x.c === ev.c);
@@ -1028,14 +1001,14 @@ if (params.has("sim")){
     for (const sq of [sqA, sqD]){ const pz = sq && sq.querySelector(".pz"); if (pz) pz.style.visibility = "hidden"; }
     app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach(q => q.classList.remove("can", "sel", "copy")); // the choice is made: unlight the board
     const font = getComputedStyle(sqA).fontSize; ca.style.fontSize = cd.style.fontSize = font;
-    const dx = rd.left - ra.left, dy = rd.top - ra.top, len = Math.hypot(dx, dy) || 1, L = len / (Math.abs(dx) / len * ra.width + Math.abs(dy) / len * ra.height); // L: the distance in squares (phone squares are taller than wide)
+    const dx = rd.left - ra.left, dy = rd.top - ra.top, len = Math.hypot(dx, dy) || 1, L = len / (Math.abs(dx) / len * ra.width + Math.abs(dy) / len * ra.height); // L: the distance in squares
     const c = { ra, dx, dy, len, size: ra.width, x0: ra.left + ra.width / 2, y0: ra.top + ra.height / 2 };
     // where they meet: halfway for neighbours; a slider from afar crosses most of the way and meets just short of the defender
     const meet = (L - .5) / L, gap = .34 / L; // each stops a third of a square short of the meeting point, so neither covers the other
     const still = d.type === "T" || d.type === "F", aPos = still ? 1 - 2 * gap : meet - gap, dPos = still ? 1 : meet + gap, hit = (aPos + dPos) / 2;
     trace("fight start");
     const ms = reduce ? 1 : Math.min(300, 190 + (L - 1) * 30);
-    await Promise.all([slide(ca, c, aPos, ms, "cubic-bezier(.5,0,.9,.6)"), slide(cd, c, dPos, ms, "cubic-bezier(.5,0,.9,.6)"), lift(ca, 14, ms, .9), lift(cd, 14, ms, .9)]);
+    await Promise.all([slide(ca, c, aPos, ms, "cubic-bezier(.5,0,.9,.6)"), slide(cd, c, dPos, ms, "cubic-bezier(.5,0,.9,.6)"), lift(ca, ms), lift(cd, ms)]);
     trace("clash");
     sfx.hit(); if (tier === 2) sfx.big();
     sparks(c, hit); if (tier >= 1) shakeBoard(tier === 2);
@@ -1056,9 +1029,9 @@ if (params.has("sim")){
       sink(cd); await slide(ca, c, 1, 200, "ease-in-out");
       // a fresh stand-in on the trap's square for the turn: iPhone Safari painted the moved one back on the square it
       // came from as soon as its block started turning, so the piece seemed to switch sides where it started
-      const turned = cloneAt({ ...a, side: d.side, revealed: true }, rd, true); turned.style.fontSize = font; blk(turned).style.transform = "translateZ(14px) scale(.9)"; ca.remove(); ca = turned; // the fight showed what it really is
+      const turned = cloneAt({ ...a, side: d.side, revealed: true }, rd, true); turned.style.fontSize = font; blk(turned).style.transform = LIFT; ca.remove(); ca = turned; // the fight showed what it really is
       sparks(c, 1, d.side === "H" ? "#5CC8FF" : "#F5A524");
-      await A(blk(ca), [{ transform: "translateZ(14px) scale(.9) rotateY(0)" }, { transform: "translateZ(8px) scale(.95) rotateY(360deg)" }, { transform: "none" }], 300);
+      await A(blk(ca), [{ transform: "perspective(320px) " + LIFT + " rotateY(0)" }, { transform: "perspective(320px) translateY(-2px) scale(.96) rotateY(360deg)" }, { transform: "none" }], 300);
     }
     else if (r === "convert"){ cd.classList.toggle("h"); cd.classList.toggle("ai"); await Promise.all([take(ca, 0), take(cd, 1)]); }
     else await Promise.all([take(ca, 1), sink(cd)]);
@@ -1179,6 +1152,7 @@ if (params.has("sim")){
       const ids = shuffle(hid.map(p => [p.type, p.str, !!p.seen]), Math.random);
       hid.forEach((p, k) => { [p.type, p.str, p.seen] = ids[k]; });
     }
+    o.scans = { H: 0, AI: 0 }; // a guest still on a page from before v0.23 reads it
     o.pieces.forEach(p => { p.id = al(p.id); });
     o.pieces.sort((a, b) => a.id - b.id); // the array order would give the real ids away
     return o;
@@ -1257,10 +1231,6 @@ if (params.has("sim")){
       if (!mv) return sendSync();
       return liveApply({ p, ...mv });
     });
-    else if (m.t === "scan") queue(() => { if (!(phase === "play" && state.turn === g)) return;
-      const p = state.pieces.find(x => x.id === unal(m.id));
-      if (p && p.side !== g && !p.revealed && state.scans[g] > 0){ p.revealed = true; state.scans[g]--; state.log = `${g === "H" ? "Scan" : "Hack"}: ${name(asSeenBy(p, g))} at ${sqName(p.r, p.c)}.`; state.history.push({ round: state.round, side: g, text: state.log }); sendSync(); render(); }
-    });
   }
   // host: apply a move (either player's), show it here and send it to the guest to show there at the same time
   function liveApply(move){
@@ -1277,7 +1247,7 @@ if (params.has("sim")){
   function liveStartGame(){
     me = LIVE.hostSide; document.body.classList.toggle("me-ai", me === "AI");
     state = newGame(seed + Math.floor(Math.random() * 1e6)); makeAlias();
-    phase = "setup"; sel = null; scanMode = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null; info = null;
+    phase = "setup"; sel = null; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null; info = null;
     LIVE.ready = { H: false, AI: false };
     sfx.win(); sendSync(); saveLive(); render();
   }
@@ -1338,7 +1308,7 @@ if (params.has("sim")){
     if (m.t === "sync") queue(() => {
       LIVE.hostSide = m.hostSide; me = other(m.hostSide); document.body.classList.toggle("me-ai", me === "AI");
       LIVE.ready = m.ready; lastFight = m.lastFight || lastFight; busy = false;
-      if (phase !== m.phase || !state) { sel = null; scanMode = false; info = null; }
+      if (phase !== m.phase || !state) { sel = null; info = null; }
       if (phase === "setup" && m.phase === "setup" && state && m.s && !LIVE.ready[me]) for (const p of m.s.pieces){ const mine = p.side === me && state.pieces.find(x => x.id === p.id); if (mine){ p.r = mine.r; p.c = mine.c; } } // keep the lineup you're arranging
       state = m.s; phase = m.phase; render();
     });
