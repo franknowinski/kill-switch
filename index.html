@@ -20,13 +20,13 @@ html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);
 body{min-height:100dvh;display:flex;flex-direction:column;overflow-x:clip;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 button{font:inherit;color:inherit;cursor:pointer}
 h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
-/* the board (v0.23): flat and top-down like a chess site, square squares, as large as the space allows.
-   .boardwrap is a size container; .stage takes the smaller of its width and height and holds the board and the fx layer,
-   so fight stand-ins use the same coordinates as the squares. Piece and number sizes follow the board (cqw). */
-.boardwrap{position:relative;flex:1;min-height:0;container-type:size;display:flex;align-items:center;justify-content:center;margin:6px 4px} /* no touch-action here: a swipe beside the board scrolls to the rules */
-.stage{position:relative;width:min(calc(100vw - 8px),calc(100svh - 200px));width:min(100cqw,100cqh);aspect-ratio:1;container-type:inline-size} /* the first width: browsers without container units (iOS 15) */
-.board{position:absolute;inset:0;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));gap:3px;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none}
-.sq{position:relative;border-radius:7px;background:var(--panel);border:1px solid var(--line);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:min(5.6vw,4.4svh);font-size:5.8cqw;min-width:0;min-height:0;padding:0;color:var(--fg)}
+/* the board (v0.27, back from v0.22): a tabletop tilted back with the browser's own CSS 3D. .zoom holds the perspective;
+   .tilt (inside) tilts the board and its fx layer together, so fight stand-ins use the same coordinates as the squares.
+   .boardwrap fills the space between the info on top and the buttons at the bottom. */
+.boardwrap{position:relative;flex:1;min-height:0;margin:8px 4px 16px} /* room under the near row: the blocks' front faces stand out of the board */
+.zoom{position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1);will-change:transform}
+.board{position:relative;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;aspect-ratio:1;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none}
+.sq{position:relative;border-radius:7px;background:var(--panel);border:1px solid var(--line);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:clamp(14px,4.6vw,22px);min-width:0;min-height:0;padding:0;color:var(--fg)}
 .sq.block{background:#070A0E;border-color:#0f151d}
 .sq.ai{color:var(--amber)}.sq.h{color:var(--blue)}
 .sq.can{box-shadow:inset 0 0 0 3px rgba(92,200,255,.55)}
@@ -36,31 +36,37 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .sq.over{background:#1a2a3a}
 /* ⚡ the power station: a faint bolt on the square; it lights up once the 🧠 is a 10 */
 .sq.power::after{content:"⚡";position:absolute;font-size:.8em;opacity:.35;pointer-events:none}
-.sq.power[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;z-index:2}
+.sq.power[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;transform:translateZ(calc(var(--ph) + 2px))}
 .sq.power.live{background:#2a2208;border-color:#8a6d12}.sq.power.live::after{opacity:1;animation:bolt 1.2s ease-in-out infinite}
 @keyframes bolt{50%{filter:drop-shadow(0 0 6px #ffd84a)}}
 .primary.cutbtn{background:#ffd84a;color:#1a1405;box-shadow:0 0 18px rgba(255,216,74,.45)}
-/* pieces (v0.23): a low raised tile seen from above: the top face, a few pixels of darker edge under it, a soft shadow */
-:root{--ph:4px}
-.pz,.clone{position:absolute;pointer-events:none;font-weight:700}.pz{inset:0}
-.clone{font-size:min(5.6vw,4.4svh);font-size:5.8cqw}
-.shd{position:absolute;inset:16% 8% 3% 13%;border-radius:8px;background:rgba(0,0,0,.6);filter:blur(2px)}
-.blk{position:absolute;inset:7% 8% 9%;border-radius:7px;transition:transform .15s}
+/* pieces: raised blocks with a top, a front and two sides, and a soft shadow (v0.17) */
+:root{--tilt:28deg;--ph:7px}
+.zoom{perspective:1100px;perspective-origin:50% -40%}
+.tilt{position:relative;transform-style:preserve-3d;transform:rotateX(var(--tilt));transform-origin:50% 100%;margin-top:-6%} /* the tilt leaves a gap above the far edge: pull it up */
+.board,.sq,.fx{transform-style:preserve-3d}
+.pz,.clone{position:absolute;transform-style:preserve-3d;pointer-events:none;font-weight:700}.pz{inset:0}
+.clone{font-size:clamp(14px,4.6vw,22px)}
+.shd{position:absolute;inset:18% 12% 6%;border-radius:8px;background:rgba(0,0,0,.6);filter:blur(3px);transform:translate3d(1px,3px,1px)}
+.blk{position:absolute;inset:8% 9% 12%;transform-style:preserve-3d;transition:transform .15s}
 .face{position:absolute;border-radius:6px}
-.ftop{inset:0 0 var(--ph);display:flex;align-items:center;justify-content:center;line-height:1;transition:box-shadow .15s}
-.h .blk{background:linear-gradient(#123150,#071422)}
+.ftop{inset:0;transform:translateZ(var(--ph));display:flex;align-items:center;justify-content:center;line-height:1;transition:box-shadow .15s}
+.ffr{left:2px;right:2px;bottom:0;height:var(--ph);transform-origin:bottom;transform:rotateX(-90deg);border-radius:0 0 6px 6px}
+.flf{top:2px;bottom:2px;left:0;width:var(--ph);transform-origin:left;transform:rotateY(-90deg)}
+.frt{top:2px;bottom:2px;right:0;width:var(--ph);transform-origin:right;transform:rotateY(90deg)}
 .h .ftop{background:linear-gradient(180deg,#1a4068,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue);border-top-color:#4f9fd0}
-.ai .blk{background:linear-gradient(#3a2808,#140d03)}
+.h .ffr{background:linear-gradient(#0d2238,#071422)}.h .flf,.h .frt{background:#0a1a2b}
 .ai .ftop{background:linear-gradient(180deg,#4a3209,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);border-top-color:#a8761e}
-.ftop .ic{font-size:1.02em;line-height:1}.ftop .ic.up,.floater .ic.up{font-size:.92em;transform:translate(-17%,-13%)} /* room for the number in the corner */
+.ai .ffr{background:linear-gradient(#2b1d06,#140d03)}.ai .flf,.ai .frt{background:#1f1504}
+.ftop .ic{font-size:1.02em;line-height:1}.ftop .ic.up,.floater .ic.up{font-size:.92em;transform:translate(-14%,-10%)} /* room for the number in the corner */
 .ftop .n{position:absolute;right:3%;bottom:3%;font-size:.5em;padding:.08em .26em;border-radius:.4em;background:rgba(0,0,0,.5);font-weight:700;line-height:1.1}
 .sq .q,.clone .q,.floater .q{color:var(--amber);opacity:.85}.sq.h .q,.clone.h .q{color:var(--blue)}
 .sq.asi .ftop{box-shadow:0 0 0 2px var(--red),0 0 14px rgba(255,92,92,.8)}
-.sq.sel .blk{transform:translateY(-3px) scale(1.08)}
+.sq.sel .blk{transform:translateZ(12px) scale(1.08)}
 .sq.sel .ftop{box-shadow:0 0 0 2px var(--blue),0 0 18px rgba(92,200,255,.6)}
 body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165,36,.6)}
 .sq:not(.sel) .blk.idle:not(.reveal){animation:bob 2.8s ease-in-out infinite;animation-delay:var(--d,0s)}
-@keyframes bob{50%{transform:translateY(-2px)}}
+@keyframes bob{50%{transform:translateZ(3px)}}
 .pz.drag{visibility:hidden}
 /* while dragging, a flat copy of the piece follows the finger above the table */
 .floater{position:fixed;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;transform:translate(-50%,-50%) scale(1.15);box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(92,200,255,.5)}
@@ -73,7 +79,7 @@ body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165
 .sq.can.ai{animation:pulser 1.1s ease-in-out infinite}
 @keyframes pulser{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,92,92,.4)}50%{box-shadow:inset 0 0 0 3px rgba(255,92,92,1)}}
 .blk.reveal{animation:flip3d .5s cubic-bezier(.3,1.4,.5,1)} /* the idle bob skips a revealing block, or it would hide the flip */
-@keyframes flip3d{0%{transform:perspective(320px) translateY(-4px) rotateY(-90deg)}100%{transform:none}}
+@keyframes flip3d{0%{transform:translateZ(30px) rotateY(-90deg)}100%{transform:none}}
 .sq.turned .ftop{animation:turnflash .7s ease-out}
 @keyframes turnflash{0%{filter:brightness(1)}30%{filter:brightness(2.2) saturate(2)}100%{filter:brightness(1)}}
 .fx{position:absolute;inset:0;pointer-events:none;z-index:3}
@@ -163,13 +169,25 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 .seg button[aria-pressed="true"].ai{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
 .lgs{display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow:auto;font-size:13px;line-height:1.4}
 .lgs div{padding:4px 2px;border-bottom:1px solid #182230}.lgs i{font-style:normal;color:var(--muted);font-size:11px;margin-right:6px}.lgs .mile{color:var(--amber)}
+/* phones: the board stretches to fill the space (squares taller than wide) with a flatter tilt, as in v0.22 */
+@media (max-width:859px){
+  .zoom,.tilt{height:100%}
+  .zoom{perspective:1300px;perspective-origin:50% -30%}
+  :root{--tilt:20deg;--ph:9px}
+  .tilt{margin-top:0}
+  .board{aspect-ratio:auto;height:100%;grid-template-rows:repeat(8,minmax(0,1fr))}
+  .sq,.clone{font-size:clamp(15px,5.4vw,28px)}
+}
 @media (min-width:860px){
   /* desktop: the same column, as wide as the board can be while everything fits the window's height */
   #app{align-items:center;padding:0 20px}
   .left{width:min(100%,calc(100svh - 200px));min-height:520px;padding:10px 0 16px}
   .hud,.actions{padding-left:0;padding-right:0}
   .fline,.msg,.link{margin-left:0;margin-right:0}.boardwrap{margin:8px 0}
-  .board{gap:4px}.sq{border-radius:9px}
+  .boardwrap{display:flex;flex-direction:column;justify-content:center;margin:14px 0 16px}
+  .left{width:min(100%,calc(100svh - 240px))}
+  .board{gap:4px}:root{--ph:9px}.tilt{margin-top:-1%}
+  .sq,.clone{font-size:calc(min(100vw - 40px, 100svh - 240px) * .048)}.sq{border-radius:9px}
   .msg{font-size:14px}
   .right{width:min(100%,760px)}
   .key{padding:14px 0 24px}
@@ -609,7 +627,7 @@ if (params.has("sim")){
   // pointer handling: tap, or drag an own piece and drop it on a lit square
   let ptr = null, dragEl = null; // ptr.cx/cy: the dragged square's centre on screen
   // the dragged piece's centre (on screen) decides the drop: the nearest legal square, as soon as it is nearer than the
-  // piece's own square (screen rects, so the page's scroll doesn't matter)
+  // piece's own square. Screen rects, not offsets: the board is tilted, so a finger's pixels aren't the board's pixels.
   const mid = el => { const q = el.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2, w: q.width, h: q.height }; };
   function dropTarget(from, x, y){
     const src = app.querySelector(`.sq[data-r="${from.r}"][data-c="${from.c}"]`); if (!src) return null;
@@ -641,8 +659,9 @@ if (params.has("sim")){
     lit.forEach(q => q && q.classList.add("can"));
     const msg = app.querySelector(".msg"); if (msg && info) msg.innerHTML = info;
   }
-  // the square under a touch, by its on-screen box: a touch in the gap between squares (or adjusted by the browser onto
-  // the board itself) still finds the nearest square
+  // the square under a touch, by geometry, not hit-testing: the squares lie in the same tilted plane as the board, and
+  // browsers' 3D hit-tests can return the board or a neighbour. Of the squares whose on-screen box holds the point, the
+  // nearest centre wins (a touch in the gap still finds the nearest square).
   function sqAt(e){
     let best = null, bd = Infinity;
     for (const q of app.querySelectorAll(".sq")){
@@ -675,7 +694,7 @@ if (params.has("sim")){
       dragEl = src.querySelector(".pz"); if (dragEl) dragEl.classList.add("drag");
       floater = document.createElement("div"); floater.className = "floater " + cls(p.side);
       floater.innerHTML = faceHtml(face(p));
-      Object.assign(floater.style, { width: m.w * .84 + "px", height: m.w * .84 + "px", fontSize: getComputedStyle(src).fontSize });
+      Object.assign(floater.style, { width: m.w * .82 + "px", height: m.w * .76 + "px", fontSize: getComputedStyle(src).fontSize });
       document.body.appendChild(floater);
       sfx.tap();
     }
@@ -723,8 +742,8 @@ if (params.has("sim")){
   function chip(x){ return `<span class="pc ${cls(x.side)}">${iconOf(x)}${LEVELS_UP(x.type) ? " " + x.str : ""}</span>`; }
   // p.mirror: a deepfake mid-fight shows the number it copied
   function faceHtml(p){ const n = LEVELS_UP(p.type) ? p.str : p.mirror; return n != null ? `<span class="ic up">${iconOf(p)}</span><span class="n">${n}</span>` : `<span class="ic">${iconOf(p)}</span>`; }
-  // a piece: a low tile (its top face over a darker edge) with a soft shadow under it
-  const blockHtml = (inner, idle, d) => `<i class="shd"></i><div class="blk${idle ? " idle" : ""}"${d ? ` style="--d:${d}"` : ""}><div class="face ftop">${inner}</div></div>`;
+  // a piece on the table: a block with a top, a front and two sides, and a soft shadow under it
+  const blockHtml = (inner, idle, d) => `<i class="shd"></i><div class="blk${idle ? " idle" : ""}"${d ? ` style="--d:${d}"` : ""}><i class="face ffr"></i><i class="face flf"></i><i class="face frt"></i><div class="face ftop">${inner}</div></div>`;
   const face = p => p;
   function pieceHtml(p, show){ return `<div class="pz">${blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`, p.side === me && p.id % 3 === 0, `-${(p.id * 7) % 28 / 10}s`)}</div>`; }
   const color = t => t.replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), (w, at, str) => str.slice(Math.max(0, at - 4), at) === "The " ? w : `<span class="you">${at === 0 ? "Your" : "your"}</span>`).replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
@@ -745,7 +764,7 @@ if (params.has("sim")){
     const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : live ? 100 : 0;
     const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? "power cut" : "superintelligent";
     let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span></div>`;
-    let bhtml = `<div class="boardwrap"><div class="stage"><div class="board" id="board">`;
+    let bhtml = `<div class="boardwrap"><div class="zoom" id="zoom"><div class="tilt"><div class="board" id="board">`;
     const cans = sel ? legalMoves(state, sel).filter(m => !m.cut) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
     const rowOrder = me === "H" ? [...Array(ROWS).keys()] : [...Array(ROWS).keys()].reverse(); // my side at the bottom
@@ -773,7 +792,7 @@ if (params.has("sim")){
       if (state.last && state.last.to[0] === r && state.last.to[1] === c) k.push("last");
       bhtml += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED.has(r+","+c) ? "disabled" : ""}>${inner}</button>`;
     }
-    bhtml += `</div><div class="fx" id="fx"></div></div><div class="toasts" id="toasts"></div></div>`;
+    bhtml += `</div><div class="fx" id="fx"></div></div></div><div class="toasts" id="toasts"></div></div>`;
     html += lastFight && phase !== "setup" ? `<button class="fline" id="fline">⚔️ <span>${fightLine(lastFight)}</span><small>log ›</small></button>` : `<div class="fline none" aria-hidden="true">⚔️ <span>&nbsp;</span></div>`;
     let logHtml;
     if (phase === "setup" && mode === "live" && LIVE.ready[me]) logHtml = `<span class="you">Your side is set.</span> Waiting for the other player to finish setting up<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
@@ -954,7 +973,7 @@ if (params.has("sim")){
   // one Web Animation that holds its end state; a single keyframe animates from wherever the element is now
   const A = (el, frames, ms, easing = "ease", extra = {}) => fin(el.animate(frames, { duration: reduce ? 1 : ms, easing, fill: "forwards", ...extra }), reduce ? 1 : ms);
   const blk = el => el.querySelector(".blk"), topOf = el => el.querySelector(".ftop");
-  // a fight stand-in: the same tile as on the board, in the fx layer over the board (the same coordinates)
+  // a fight stand-in: the same block as on the board, in the fx layer (the same tilted plane, so the same coordinates)
   function cloneAt(p, rect, show){
     const fx = document.getElementById("fx"); if (!fx) return null;
     const el = document.createElement("div"); el.className = `clone ${cls(p.side)}`;
@@ -969,25 +988,24 @@ if (params.has("sim")){
     for (let i = 0; i < 18; i++){
       const s = fxAt("spk", c, f); if (color) s.style.background = color; else if (i % 3 === 0) s.style.background = "#fff";
       const a = Math.random() * Math.PI * 2, d = 30 + Math.random() * 50;
-      s.animate([{ transform: "translate(0,0) scale(1.4)", opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px,${Math.sin(a) * d}px) scale(.6)`, opacity: 0 }], { duration: 600 + Math.random() * 300, easing: "cubic-bezier(.1,.7,.3,1)" }).finished.then(() => s.remove(), () => s.remove());
+      s.animate([{ transform: "translate3d(0,0,20px)", opacity: 1 }, { transform: `translate3d(${Math.cos(a) * d}px,${Math.sin(a) * d}px,${40 + Math.random() * 60}px)`, opacity: 0 }], { duration: 600 + Math.random() * 300, easing: "cubic-bezier(.1,.7,.3,1)" }).finished.then(() => s.remove(), () => s.remove());
     }
   }
-  const LIFT = "translateY(-3px) scale(.8)"; // a stand-in held up and a little smaller while it fights, so two meeting tiles touch without covering each other
+  const LIFT = "translateZ(14px) scale(.9)"; // a stand-in held up off the table while it fights
   const lift = (el, ms = 220) => A(blk(el), [{ transform: LIFT }], ms, "ease-out");
   const land = el => A(blk(el), [{ transform: "none" }], 220, "cubic-bezier(.3,1.6,.5,1)");
-  // a stand-in moves by left/top, never by a transform on the stand-in itself: iPhone Safari painted a finished transform on
-  // it back at its start once its block started animating, which drew a trapped piece converting on the square it came from
+  // a stand-in moves by left/top, never by a transform on the stand-in itself: iPhone Safari paints a finished transform on
+  // it back at its start once its block starts a 3D animation, which drew a trapped piece converting on the square it came from
   const slide = (el, c, f, ms, easing = "ease-out") => A(el, [{ left: c.ra.left + c.dx * f + "px", top: c.ra.top + c.dy * f + "px" }], ms, easing);
-  // knocked off the board: flies on from where it stands (f along the attack, sign: +1 forward, -1 back), spinning and shrinking
+  // knocked off the table: flies on from where it stands (f along the attack, sign: +1 forward, -1 back) and tumbles
   function knockOff(el, c, f, sign){
     const s = c.size, ux = c.dx / c.len, uy = c.dy / c.len;
     A(el.querySelector(".shd"), [{ opacity: 0 }], 150);
     A(el, [{ left: c.ra.left + c.dx * f + (ux * .9 - uy * .4) * s * sign + "px", top: c.ra.top + c.dy * f + (uy * .9 + ux * .4) * s * sign + "px" }], 380, "ease-out");
-    return A(blk(el), [{ transform: LIFT }, { transform: `translateY(-6px) rotate(${150 * sign}deg) scale(1.15)`, offset: .45 }, { transform: `rotate(${300 * sign}deg) scale(0)` }], 380, "ease-out");
+    return A(blk(el), [{ transform: "translateZ(14px) rotateX(0) rotateZ(0) scale(1)" }, { transform: `translateZ(110px) rotateX(-220deg) rotateZ(${35 * sign}deg) scale(.75)`, offset: .55 }, { transform: `translateZ(50px) rotateX(-380deg) rotateZ(${60 * sign}deg) scale(0)` }], 380, "ease-out");
   }
-  const sink = el => A(blk(el), [{ transform: "scale(0)", opacity: .4 }], 260, "ease-in");
-  // a hidden stand-in turns over (a flat card flip: perspective() on the tile itself)
-  async function flip3d(el, html){ await A(blk(el), [{ transform: "perspective(320px) translateY(-6px) rotateY(90deg)" }], 90, "ease-in"); topOf(el).innerHTML = html; await A(blk(el), [{ transform: "perspective(320px) translateY(-6px) rotateY(-90deg)" }, { transform: "perspective(320px) " + LIFT }], 150, "cubic-bezier(.3,1.5,.5,1)"); }
+  const sink = el => A(blk(el), [{ transform: "translateZ(-6px) scale(0)" }], 260, "ease-in");
+  async function flip3d(el, html){ await A(blk(el), [{ transform: "translateZ(24px) rotateY(90deg)" }], 90, "ease-in"); topOf(el).innerHTML = html; await A(blk(el), [{ transform: "translateZ(24px) rotateY(-90deg)" }, { transform: LIFT }], 150, "cubic-bezier(.3,1.5,.5,1)"); }
   // Bigger ranks, bigger fight: poke (1-3), clash (4-6), showdown (7+) by the higher rank in the fight.
   function fightTier(a, d){ const m = Math.max(a.type === "X" || LEVELS_UP(a.type) ? a.str : 0, d.type === "X" || LEVELS_UP(d.type) ? d.str : 0); return m >= 7 ? 2 : m >= 4 ? 1 : 0; }
   function shakeBoard(big){ const b = document.getElementById("board"); if (!b || reduce) return; b.classList.remove("shake", "big"); void b.offsetWidth; b.classList.add("shake"); if (big) b.classList.add("big"); }
@@ -1038,7 +1056,7 @@ if (params.has("sim")){
       // came from as soon as its block started turning, so the piece seemed to switch sides where it started
       const turned = cloneAt({ ...a, side: d.side, revealed: true }, rd, true); turned.style.fontSize = font; blk(turned).style.transform = LIFT; ca.remove(); ca = turned; // the fight showed what it really is
       sparks(c, 1, d.side === "H" ? "#5CC8FF" : "#F5A524");
-      await A(blk(ca), [{ transform: "perspective(320px) " + LIFT + " rotateY(0)" }, { transform: "perspective(320px) translateY(-2px) scale(.96) rotateY(360deg)" }, { transform: "none" }], 300);
+      await A(blk(ca), [{ transform: LIFT + " rotateY(0)" }, { transform: "translateZ(8px) scale(.95) rotateY(360deg)" }, { transform: "none" }], 300);
     }
     else if (r === "convert"){ cd.classList.toggle("h"); cd.classList.toggle("ai"); await Promise.all([take(ca, 0), take(cd, 1)]); }
     else await Promise.all([take(ca, 1), sink(cd)]);
