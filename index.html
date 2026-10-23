@@ -179,7 +179,7 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
   .left .top,.left .lvl{display:none}
   .hud{display:flex}
   .hud{order:0}.dock{order:1}.boardwrap{order:2} /* the dock above the board, so the board's near edge is the screen's bottom */
-  .boardwrap{flex:1;min-height:0;margin:2px 4px 0}
+  .boardwrap{flex:1;min-height:0;margin:2px 4px 20px} /* v0.22: 20px under the board (above the safe area), so the bottom row isn't on the screen's edge */
   .zoom,.tilt{height:100%}
   .zoom{perspective:1300px;perspective-origin:50% -30%}
   :root{--tilt:20deg;--ph:9px}
@@ -1014,7 +1014,7 @@ if (params.has("sim")){
   function shakeBoard(big){ const b = document.getElementById("board"); if (!b || reduce) return; b.classList.remove("shake", "big"); void b.offsetWidth; b.classList.add("shake"); if (big) b.classList.add("big"); }
   let lastFight = null; // the last fight's two pieces and result, for the line above the board
   // v0.20 clash: both pieces slide toward each other and meet in the middle, both face up for a moment, then the loser is
-  // knocked off and the winner takes the defender's square (a tie: both fall). About 0.85 s; the winner's number floats after.
+  // knocked off and the winner takes the defender's square (a tie: both fall). About 1.35 s (v0.22: the face-up moment holds 0.5 s longer so both numbers can be read); the winner's number floats after.
   // A trap, datacenter or kill switch can't move: it stays put and the attacker comes the whole way.
   async function animateFight(before, ev){
     const a = before.pieces.find(x => x.r === state.last.from[0] && x.c === state.last.from[1]);
@@ -1044,7 +1044,7 @@ if (params.has("sim")){
     const flips = [];
     if (masked(a)) flips.push(flip3d(ca, faceHtml(a)));
     if (masked(d)) flips.push(flip3d(cd, faceHtml(d)));
-    await Promise.all([...flips, wait(reduce ? 0 : [200, 240, 300][tier])]);
+    await Promise.all([...flips, wait(reduce ? 0 : [700, 740, 800][tier])]); // both face up, meeting: long enough to read both numbers
     trace("resolve");
     const r = ev.result;
     const aWins = r === "win" || r === "flag" || r === "defuse";
