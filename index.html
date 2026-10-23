@@ -201,7 +201,7 @@ const onPower = (r, c) => r === POWER_SQ[0] && c === POWER_SQ[1];
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
 // M remover (engineer / hacker), C scanner (reveals adjacent hidden enemies), R replicator (cut in v0.11.27: nobody understood it; the engine still understands it),
 // A whistleblower / virus (the spy: kills an 8 or 9 when attacking, else dies; both sides have one), I self-improver (grows itself
-// to 10, superintelligence), K deepfake (the AI's bluff: fights as its number, but a scanner sees a 7 until a fight shows it), X fighter.
+// to 10, superintelligence), K deepfake (the AI's mirror: in a fight it copies the other piece's number, so both fall, except against a 🧠 at 10), X fighter.
 // P persuader was cut in v0.11.13; the engine still understands it.
 // 22 a side: flag, 3 traps, 3 sliders, 2 or 3 removers, scanners, specials, 9 fighters. Two front-row squares start empty.
 const ARMIES = {
@@ -211,7 +211,7 @@ const ARMIES = {
        ["X",3],["X",4],["X",4],["X",5],["X",5],["X",7],["X",7],["X",8]],
 };
 const GAPS = 2;
-const LEVELS_UP = t => t !== "F" && t !== "T";
+const LEVELS_UP = t => t !== "F" && t !== "T" && t !== "K"; // pieces with a number (the deepfake has none: it copies)
 const COPYABLE = t => !["F","T","R","I"].includes(t);
 // where a piece likes to start: higher = further back
 const PLACE = { X: p => p.str, K: () => 3, S: () => 1, M: () => 2, A: () => 4, C: () => 3, R: () => 4, P: () => 3, I: () => 6 };
@@ -336,8 +336,6 @@ function sideMoves(s, side){
 }
 function clone(s){ return { ...s, pieces: s.pieces.map(p => ({ ...p })), copies: { ...s.copies }, events: [], history: s.history.slice(-40) }; }
 const snap = x => ({ id: x.id, side: x.side, type: x.type, str: x.str, hidden: !x.revealed });
-// what `viewer` knows a piece to be: a deepfake looks like a 7 to the other side until a fight shows what it is
-const asSeenBy = (q, viewer) => q.type === "K" && q.side !== viewer && !q.seen ? { ...q, type: "X", str: 7 } : q;
 function apply(s0, move){
   const s = clone(s0);
   const p = s.pieces.find(x => x.id === move.p.id);
@@ -366,7 +364,7 @@ function apply(s0, move){
   }
   else if (!q){
     p.r = r; p.c = c;
-    s.history.push({ round: s.round, side, text: `${side === "H" || p.revealed ? name(asSeenBy(p, "H")) : "AI piece"} ${from} → ${to}`, mv: { from, to, open: !!p.revealed } });
+    s.history.push({ round: s.round, side, text: `${side === "H" || p.revealed ? name(p) : "AI piece"} ${from} → ${to}`, mv: { from, to, open: !!p.revealed } });
   }
   else {
     const ev = { kind: "fight", r, c, a: snap(p), d: snap(q), result: "", line: "" };
@@ -377,6 +375,12 @@ function apply(s0, move){
       if (p.type === "M"){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} removed the ${roleName(q)}.`; }
       else if (isSuper(p)){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} saw through the ${roleName(q)} and removed it.`; }
       else { const was = name(p); kill(q); p.r = r; p.c = c; convert(p, q.side); ev.result = "trapped"; line = `${was} fell into a ${roleName(q)} and switched sides.`; } // named before it switches: "Human operative 7 fell into a backdoor" // it moves onto the trap's square
+    }
+    // the 🎭 deepfake copies whatever it fights, attacking or defending, so both fall; only a 🧠 at 10 sees through it
+    // (that one falls through to the plain number fight below and wins). Traps and flags were handled above.
+    else if ((p.type === "K" || q.type === "K") && !isSuper(p.type === "K" ? q : p)){
+      const fake = p.type === "K" ? p : q, real = fake === p ? q : p;
+      kill(p); kill(q); ev.result = "tie"; ev.mirror = real.str; line = `${name(fake)} copied ${name(real)}; both fell.`;
     }
     else if (p.type === "A"){
       if (q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX && LEVELS_UP(q.type)){ kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} took out ${name(q)}.`; }
@@ -392,7 +396,7 @@ function apply(s0, move){
     s.events.push(ev);
     s.history.push({ round: s.round, side, text: line, a: ev.a, d: ev.d, result: ev.result, at: to });
   }
-  for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `${who(sc.side)} ${roleName(sc)} spotted ${name(asSeenBy(e, sc.side))} at ${sqName(e.r, e.c)}.` }); }
+  for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `${who(sc.side)} ${roleName(sc)} spotted ${name(e)} at ${sqName(e.r, e.c)}.` }); }
   s.last = { from: [move.p.r, move.p.c], to: [r,c], side };
   const hadRsi = s.rsi;
   s.rsi = !!brainOf(s);
@@ -439,7 +443,7 @@ function botMove(s, side, r){
   const toPower = (rr, cc) => Math.abs(rr - POWER_SQ[0]) + Math.abs(cc - POWER_SQ[1]);
   let best = null, bestScore = -Infinity;
   for (const m of moves){
-    const p = m.p, [tr,tc] = m.to, q0 = m.cut ? null : at(s, tr, tc), q = q0 && asSeenBy(q0, side);
+    const p = m.p, [tr,tc] = m.to, q = m.cut ? null : at(s, tr, tc);
     let sc = r() * 2;
     if (ten){
       if (isCTO(p)) sc += (toPower(p.r, p.c) - toPower(tr, tc)) * 20 + (onPower(tr, tc) ? 40 : 0);
@@ -449,10 +453,12 @@ function botMove(s, side, r){
     if (m.cut) sc += 900; // below taking a known kill switch (+1000): winning beats cutting
     else if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 10 + src.str * 4 : -50; }
     else if (q){
-      if (p.type === "A") sc += known(q) && q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX && LEVELS_UP(q.type) ? 200 : -150;
+      if (p.type === "K" && !(known(q) && (q.type === "F" || q.type === "T"))) sc += known(q) ? (isSuper(q) ? -120 : q.str * 6 - 10) : 8; // the deepfake trades itself for what it hits: best on a big number
+      else if (p.type === "A") sc += known(q) && q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX && LEVELS_UP(q.type) ? 200 : -150;
       else if (known(q)){
         if (q.type === "F") sc += 1000;
         else if (q.type === "T") sc += p.type === "M" || isSuper(p) ? 80 : -1000;
+        else if (q.type === "K") sc += isSuper(p) ? 80 : 10 - p.str * 4; // a known deepfake takes the attacker with it: send something small
         else if (q.type === "I" && p.str > q.str) sc += 300;
         else if (p.str > q.str) sc += 60 + q.str * 4 + (p.type === "P" ? 25 : 0);
         else if (p.str === q.str) sc += -4;
@@ -469,7 +475,7 @@ function botMove(s, side, r){
       if (p.type === "I" && !isSuper(p)) sc -= 30;
       sc += (tr - p.r) * fwd * 3;
       if (p.type === "S" && Math.abs(tr - p.r) + Math.abs(tc - p.c) > 1) sc -= 2;
-      for (const [dr,dc] of DIRS){ const e0 = at(s, tr+dr, tc+dc), e = e0 && asSeenBy(e0, side); if (e && e.side !== side && known(e) && LEVELS_UP(e.type) && e.str > p.str) sc -= 15; }
+      for (const [dr,dc] of DIRS){ const e = at(s, tr+dr, tc+dc); if (e && e.side !== side && known(e) && (p.type === "K" ? false : e.type === "K" ? p.str >= 5 : LEVELS_UP(e.type) && e.str > p.str)) sc -= 15; } // a known deepfake next door trades with a big piece; the deepfake itself fears no number
       if (p.type === "R" && s.copies[side] > 0){ let bestN = 0; for (const [dr,dc] of DIRS){ const e = at(s, tr+dr, tc+dc); if (e && e.side === side && COPYABLE(e.type)) bestN = Math.max(bestN, e.str); } sc += bestN * 2; }
       if (s.last && s.last.side === side && s.last.to[0] === p.r && s.last.to[1] === p.c && s.last.from[0] === tr && s.last.from[1] === tc) sc -= 10;
     }
@@ -513,7 +519,7 @@ const ABOUT = {
   F: p => p.side === "H" ? "Can't move. If the AI reaches it, it gets out onto the Internet." : "Can't move. If the humans reach it, the AI is shut down.",
   R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
   I: () => `Grows +1 every ${BAL.RSI_EVERY} rounds; at ${BAL.ASI} it beats everything.`,
-  K: () => "Fights as a 3, but a 📡 scanner sees a 7 until a fight shows it.",
+  K: () => `Copies the number of whatever it fights, so both fall. Not a 🧠 at ${BAL.ASI}.`,
 };
 // tiny synthesized sounds, no files
 const SFX = { ctx: null, on: true };
@@ -715,12 +721,13 @@ if (params.has("sim")){
   }
   const cls = s => s === "H" ? "h" : "ai";
   function chip(x){ return `<span class="pc ${cls(x.side)}">${iconOf(x)}${LEVELS_UP(x.type) ? " " + x.str : ""}</span>`; }
-  function faceHtml(p){ return LEVELS_UP(p.type) ? `<span class="ic up">${iconOf(p)}</span><span class="n">${p.str}</span>` : `<span class="ic">${iconOf(p)}</span>`; }
+  // p.mirror: a deepfake mid-fight shows the number it copied
+  function faceHtml(p){ const n = LEVELS_UP(p.type) ? p.str : p.mirror; return n != null ? `<span class="ic up">${iconOf(p)}</span><span class="n">${n}</span>` : `<span class="ic">${iconOf(p)}</span>`; }
   // a piece: a low tile (its top face over a darker edge) with a soft shadow under it
   const blockHtml = (inner, idle, d) => `<i class="shd"></i><div class="blk${idle ? " idle" : ""}"${d ? ` style="--d:${d}"` : ""}><div class="face ftop">${inner}</div></div>`;
-  const face = p => phase === "over" ? p : asSeenBy(p, me);
+  const face = p => p;
   function pieceHtml(p, show){ return `<div class="pz">${blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`, p.side === me && p.id % 3 === 0, `-${(p.id * 7) % 28 / 10}s`)}</div>`; }
-  const color = t => t.replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), '<span class="you">Your</span>').replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
+  const color = t => t.replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), (w, at, str) => str.slice(Math.max(0, at - 4), at) === "The " ? w : `<span class="you">${at === 0 ? "Your" : "your"}</span>`).replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
   // FLIP: remember where every piece was drawn, then slide it from there after a re-render
   function snapshotRects(){
     const m = new Map();
@@ -833,7 +840,7 @@ if (params.has("sim")){
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
     H:  { S: "flies any distance", M: "fights as 3, removes backdoors", A: "1; kills an 8 or 9 it attacks", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
-    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 10 on its own", K: "fights as 3, scanners see a 7", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 10 on its own", K: "copies its foe: both fall", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
     const alive = (side, t, str) => state.pieces.filter(p => p.side === side && p.type === t && (str == null || p.str === str)).length;
@@ -848,7 +855,7 @@ if (params.has("sim")){
     };
     const myRanks = [...new Set(ARMIES[me].filter(([t]) => t === "X").map(([, n]) => n))].sort((a, b) => b - a);
     const specials = side => ["S","M","A","C","I","K","R","T","F"].filter(t => ARMIES[side].some(([tt]) => tt === t));
-    const theirAgents = state.pieces.filter(p => p.side !== me).map(face).filter(p => p.type === "X"); // a masked deepfake counts as an agent
+    const theirAgents = state.pieces.filter(p => p.side !== me && p.type === "X");
     const aiHidden = theirAgents.filter(p => !p.revealed).length;
     const aiSeen = theirAgents.filter(p => p.revealed).sort((a, b) => b.str - a.str);
     return `<div class="key">
@@ -859,7 +866,7 @@ if (params.has("sim")){
       <div class="kr" data-side="${other(me)}" data-type="X" data-str="3"><span class="pc ${cls(other(me))}">?</span><span class="kn">agents</span><span class="kp">start ${Math.min(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))} to ${Math.max(...ARMIES[other(me)].filter(([t]) => t === "X").map(([, n]) => n))}, hidden</span><span class="kc">${aiHidden}<i> hidden</i></span></div>
       ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
-      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides. Pieces never level up; only the AI's 🧠 grows, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on ⚡ and cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. What stops an 8 or 9: a stronger piece, the same number (both fall), the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌐 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides. Pieces never level up; only the AI's 🧠 grows, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on ⚡ and cut the power: the 🧠 drops to ${BAL.CUT_TO} for good. What stops an 8 or 9: a stronger piece, the same number (both fall), the 🎭 deepfake (it copies the number: both fall), the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌐 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
     </div>`;
   }
   // the side a solo game is played from: the start screen's choice, remembered on this phone
@@ -966,7 +973,7 @@ if (params.has("sim")){
       s.animate([{ transform: "translate(0,0) scale(1.4)", opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px,${Math.sin(a) * d}px) scale(.6)`, opacity: 0 }], { duration: 600 + Math.random() * 300, easing: "cubic-bezier(.1,.7,.3,1)" }).finished.then(() => s.remove(), () => s.remove());
     }
   }
-  const LIFT = "translateY(-3px) scale(.92)"; // a stand-in held up a little: it is moving
+  const LIFT = "translateY(-3px) scale(.8)"; // a stand-in held up and a little smaller while it fights, so two meeting tiles touch without covering each other
   const lift = (el, ms = 220) => A(blk(el), [{ transform: LIFT }], ms, "ease-out");
   const land = el => A(blk(el), [{ transform: "none" }], 220, "cubic-bezier(.3,1.6,.5,1)");
   // a stand-in moves by left/top, never by a transform on the stand-in itself: iPhone Safari painted a finished transform on
@@ -996,7 +1003,8 @@ if (params.has("sim")){
     if (!ra || !rd) return;
     const tier = fightTier(a, d);
     const sqA = app.querySelector(`.sq[data-r="${a.r}"][data-c="${a.c}"]`), sqD = app.querySelector(`.sq[data-r="${ev.r}"][data-c="${ev.c}"]`);
-    const masked = x => x.side !== me && (!x.revealed || face(x) !== x);
+    const masked = x => x.side !== me && !x.revealed;
+    const shown = x => ev.mirror != null && x.type === "K" ? { ...x, mirror: ev.mirror } : x; // the deepfake takes the other's number as they meet
     let ca = cloneAt(face(a), ra, a.side === me || a.revealed); const cd = cloneAt(face(d), rd, d.side === me || d.revealed);
     for (const sq of [sqA, sqD]){ const pz = sq && sq.querySelector(".pz"); if (pz) pz.style.visibility = "hidden"; }
     app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach(q => q.classList.remove("can", "sel", "copy")); // the choice is made: unlight the board
@@ -1004,7 +1012,7 @@ if (params.has("sim")){
     const dx = rd.left - ra.left, dy = rd.top - ra.top, len = Math.hypot(dx, dy) || 1, L = len / (Math.abs(dx) / len * ra.width + Math.abs(dy) / len * ra.height); // L: the distance in squares
     const c = { ra, dx, dy, len, size: ra.width, x0: ra.left + ra.width / 2, y0: ra.top + ra.height / 2 };
     // where they meet: halfway for neighbours; a slider from afar crosses most of the way and meets just short of the defender
-    const meet = (L - .5) / L, gap = .34 / L; // each stops a third of a square short of the meeting point, so neither covers the other
+    const meet = (L - .5) / L, gap = .34 / L; // each stops a third of a square short of the meeting point
     const still = d.type === "T" || d.type === "F", aPos = still ? 1 - 2 * gap : meet - gap, dPos = still ? 1 : meet + gap, hit = (aPos + dPos) / 2;
     trace("fight start");
     const ms = reduce ? 1 : Math.min(300, 190 + (L - 1) * 30);
@@ -1015,8 +1023,8 @@ if (params.has("sim")){
     if (tier === 2 && !reduce){ const fl = document.createElement("div"); fl.className = "flash"; document.body.appendChild(fl); setTimeout(() => fl.remove(), 700); }
     // the hidden one turns over as they meet; then both stay face up for a moment
     const flips = [];
-    if (masked(a)) flips.push(flip3d(ca, faceHtml(a)));
-    if (masked(d)) flips.push(flip3d(cd, faceHtml(d)));
+    if (masked(a) || shown(a) !== a) flips.push(flip3d(ca, faceHtml(shown(a))));
+    if (masked(d) || shown(d) !== d) flips.push(flip3d(cd, faceHtml(shown(d))));
     await Promise.all([...flips, wait(reduce ? 0 : [700, 740, 800][tier])]); // both face up, meeting: long enough to read both numbers
     trace("resolve");
     const r = ev.result;
@@ -1077,6 +1085,7 @@ if (params.has("sim")){
   function fightLine(ev){
     const who = (x, first) => `<span class="${x.side === me ? "you" : "them"}">${x.side === me ? (first ? "Your" : "your") : (first ? "Their" : "their")} ${iconOf(x)}${LEVELS_UP(x.type) ? x.str : ""}</span>`;
     const A = who(ev.a, true), D = who(ev.d, false);
+    if (ev.mirror != null){ const fakeA = ev.a.type === "K"; return `${who(fakeA ? ev.a : ev.d, true)} deepfake copied ${who(fakeA ? ev.d : ev.a, false)}; both fell`; }
     return ev.result === "tie" ? `${A} and ${D} both fell` : ev.result === "lose" ? `${A} lost to ${D}` : ev.result === "trapped" ? `${A} fell into ${D} and switched sides`
       : ev.result === "defuse" ? `${A} removed ${D}` : ev.result === "convert" ? `${A} turned ${D}` : ev.result === "flag" ? `${A} took ${D}` : `${A} beat ${D}`;
   }
@@ -1084,7 +1093,7 @@ if (params.has("sim")){
   function floatWinner(ev){
     const sq = app.querySelector(`.sq[data-r="${ev.r}"][data-c="${ev.c}"]`); if (!sq) return;
     const m = mid(sq), r = ev.result, el = document.createElement("div");
-    const num = x => LEVELS_UP(x.type) ? x.str : iconOf(x);
+    const num = x => x.type === "K" && ev.mirror != null ? iconOf(x) + ev.mirror : LEVELS_UP(x.type) ? x.str : iconOf(x); // a deepfake: 🎭9 ✕ 9
     if (r === "tie"){ el.className = "float n"; el.innerHTML = `<span class="${cls(ev.a.side) === "h" ? "b" : "a"}">${num(ev.a)}</span><span class="x">✕</span><span class="${cls(ev.d.side) === "h" ? "b" : "a"}">${num(ev.d)}</span>`; }
     else if (r === "trapped"){ el.className = "float " + cls(ev.d.side); el.textContent = iconOf(ev.d); }
     else { const w = r === "lose" ? ev.d : ev.a; el.className = "float " + cls(w.side); el.textContent = num(w); }
