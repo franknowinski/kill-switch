@@ -893,7 +893,7 @@ if (params.has("sim")){
       // ⚡ takes the RULES slot when it applies, so the row (and the board above it) never moves
       html += cto ? `<button class="primary cutbtn" id="cut">⚡ CUT THE POWER</button>` : `<button class="ghost" id="rules">RULES ↓</button>`;
       if (sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel)) html += `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>`;
-      html += `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart">↻</button>`;
+      html += `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart" aria-label="${mode === "live" ? "Home (your game is saved in My games)" : "Home"}" title="${mode === "live" ? "Home (your game is saved in My games)" : "Home"}">🏠</button>`;
     }
     else if (phase === "over") html += `<button class="primary" id="again">PLAY AGAIN</button>`;
     html += `</div>`;
