@@ -33,7 +33,6 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .sq.can.ai{box-shadow:inset 0 0 0 3px var(--red)}
 .sq.copy{box-shadow:inset 0 0 0 3px var(--green)}
 .sq.last{box-shadow:inset 0 0 0 2px rgba(255,255,255,.3)}
-.sq.over{background:#1a2a3a}
 /* 🏢 the humans' datacenter: a square they place in setup. Dim; lit once the 🧠 is a 10 (the CTO can cut the power there); dark after the cut */
 .sq.dc::after{content:"🏢";position:absolute;font-size:.8em;opacity:.45;pointer-events:none}
 .sq.dc[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;transform:translateZ(calc(var(--ph) + 2px))}
@@ -76,8 +75,9 @@ body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165
 .sq:not(.sel) .blk.idle:not(.reveal){animation:bob 2.8s ease-in-out infinite;animation-delay:var(--d,0s)}
 @keyframes bob{50%{transform:translateZ(3px)}}
 .pz.drag{visibility:hidden}
-/* while dragging, a flat copy of the piece follows the finger above the table */
-.floater{position:fixed;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;transform:translate(-50%,-50%) scale(1.15);box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(92,200,255,.5)}
+/* while dragging, a flat copy of the piece follows the finger above the table. It sits at the top left of the screen and
+   is moved by a transform only (set each frame from the code; v0.33, DEV-291), so a drag does no layout work */
+.floater{position:fixed;left:0;top:0;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;will-change:transform;box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(92,200,255,.5)}
 .floater.h{background:linear-gradient(180deg,#1a4068,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue)}
 .floater.ai{background:linear-gradient(180deg,#4a3209,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(245,165,36,.5)}
 .floater .n{position:absolute;right:4%;bottom:4%;font-size:.5em;padding:.08em .26em;border-radius:.4em;background:rgba(0,0,0,.5)}
@@ -86,6 +86,8 @@ body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165
 @keyframes pulse{0%,100%{box-shadow:inset 0 0 0 3px rgba(92,200,255,.35)}50%{box-shadow:inset 0 0 0 3px rgba(92,200,255,.9)}}
 .sq.can.ai{animation:pulser 1.1s ease-in-out infinite}
 @keyframes pulser{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,92,92,.4)}50%{box-shadow:inset 0 0 0 3px rgba(255,92,92,1)}}
+/* where a drag lands if you let go now (v0.33, DEV-291): steady and bright, over the lit squares' pulse */
+.sq.over,.sq.can.ai.over{animation:none;background:#2b5a85;border-color:#fff;box-shadow:inset 0 0 0 3px #fff,0 0 18px 2px rgba(92,200,255,.9)}
 .blk.reveal{animation:flip3d .5s cubic-bezier(.3,1.4,.5,1)} /* the idle bob skips a revealing block, or it would hide the flip */
 @keyframes flip3d{0%{transform:translateZ(30px) rotateY(-90deg)}100%{transform:none}}
 .sq.turned .ftop{animation:turnflash .7s ease-out}
@@ -692,41 +694,45 @@ if (params.has("sim")){
   const bot = rng(seed ^ 0xBEEF);
   const FAST = params.has("over") || params.has("fast");
   // pointer handling: tap, or drag an own piece and drop it on a lit square
-  let ptr = null, dragEl = null; // ptr.cx/cy: the dragged square's centre on screen
-  // the dragged piece's centre (on screen) decides the drop: the square it is over, if that square is lit; still over its
-  // own square, a flick. Screen rects, not offsets: the board is tilted, so a finger's pixels aren't the board's pixels.
+  let ptr = null, dragEl = null; // ptr.cx/cy: the dragged square's centre on screen; ptr.x/y: where the finger went down
   const mid = el => { const q = el.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2, w: q.width, h: q.height }; };
-  // v0.32 (DEV-290), like chess.com: let go off the board, or over a square it can't go to, and nothing happens (the
-  // piece goes back). "Over" a square: inside its on-screen box, grown by a little toward its neighbours so the gaps
-  // between squares count, but never past the board's outer edge (just past the edge is off the board).
-  function squareUnder(x, y){
-    let best = null, bd = Infinity;
-    const topRow = me === "H" ? 0 : ROWS - 1, botRow = ROWS - 1 - topRow;
-    for (const q of app.querySelectorAll(".sq")){
-      const r = q.getBoundingClientRect(), pad = r.width * .08, cx = r.left + r.width / 2, cy = r.top + r.height / 2, d = Math.hypot(cx - x, cy - y);
-      const row = +q.dataset.r, col = +q.dataset.c;
-      const l = r.left - (col > 0 ? pad : 0), rt = r.right + (col < COLS - 1 ? pad : 0), t = r.top - (row !== topRow ? pad : 0), b = r.bottom + (row !== botRow ? pad : 0);
-      if (x >= l && x <= rt && y >= t && y <= b && d < bd){ bd = d; best = q; }
-    }
-    return best;
+  // v0.33 (DEV-291), like chess.com on a phone. v0.32 only dropped a piece if you let go inside a lit square's on-screen
+  // box, judged by the dragged piece's centre, not the finger: on the iPhone the finger hides the square, the far rows are
+  // small, and grabbing a piece off its centre shifted the drop by up to half a square, so many drops missed and the
+  // piece went back. Now the finger decides, magnetically: of the lit squares and the piece's own, the nearest to the
+  // finger in squares (each square's own on-screen size, so a small far row counts the same as a near one) wins if it is
+  // within DRAG.snap squares; that square is highlighted live, and that is where it lands. The piece's own square
+  // nearest: a flick (below). Let go off the board (more than DRAG.edge squares past its edge) or nowhere near a lit
+  // square, and nothing happens: the piece glides back (v0.32's cancel stays). A mouse is precise: a smaller snap, no lift.
+  // The squares are measured once when a drag starts; a move only does arithmetic and one transform, once a frame.
+  const DRAG = { snap: { touch: .85, mouse: .6 }, edge: .4, lift: 1.1, scale: 1.3 }; // in squares, except scale
+  function measureBoard(){
+    return [...app.querySelectorAll(".sq")].map(q => { const b = q.getBoundingClientRect(); return { q, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; });
   }
   function dropTarget(from, x, y){
-    const src = app.querySelector(`.sq[data-r="${from.r}"][data-c="${from.c}"]`); if (!src) return null;
-    const cands = phase === "setup" ? [...app.querySelectorAll(".sq")].filter(q => !q.disabled && SETUP_ROWS[me].includes(+q.dataset.r)) : [...app.querySelectorAll(".sq.can,.sq.copy")];
-    const s = mid(src), under = squareUnder(x, y);
-    if (!under) return null; // off the board: cancel
-    if (under !== src) return cands.includes(under) ? under : null; // over a lit square: there; over any other: cancel
-    let best = null, bd = Infinity;
-    // a flick: the piece hasn't reached a square, so go the way it was pulled. Of the lit squares within 40° of the drag
-    // direction, take the one nearest the finger (a short flick picks the next square, a long one goes further for sliders).
-    // let go still on (most of) the piece's own square: that cancels, as it always has; it has to be pulled off to flick
-    const vx = x - s.x, vy = y - s.y, vl = Math.hypot(vx, vy); if (vl < Math.max(8, s.w * .4)) return null;
-    for (const q of cands){
-      if (q === src) continue; const m = mid(q), ux = m.x - s.x, uy = m.y - s.y, ul = Math.hypot(ux, uy);
-      if ((vx * ux + vy * uy) / (vl * ul) < Math.cos(40 * Math.PI / 180)) continue;
-      const d = Math.hypot(m.x - x, m.y - y); if (!best || d < bd){ bd = d; best = q; }
+    let g = from.geo; if (!g || !g[0].q.isConnected) g = from.geo = measureBoard(); // a render mid-drag replaced the squares
+    const src = g.find(m => +m.q.dataset.r === from.r && +m.q.dataset.c === from.c); if (!src) return null;
+    const lit = phase === "setup" ? (m => !m.q.disabled && SETUP_ROWS[me].includes(+m.q.dataset.r)) : (m => m.q.classList.contains("can") || m.q.classList.contains("copy"));
+    const dist = m => Math.hypot((x - m.x) / m.w, (y - m.y) / m.h); // in squares of that square's size
+    let edge = Infinity, best = null, bd = Infinity;
+    for (const m of g){
+      edge = Math.min(edge, Math.max(Math.abs(x - m.x) / m.w, Math.abs(y - m.y) / m.h) - .5); // how far outside the nearest square
+      if (m !== src && !lit(m)) continue;
+      const d = dist(m); if (d < bd){ bd = d; best = m; }
     }
-    return best;
+    if (edge > DRAG.edge) return null; // off the board: cancel
+    if (best && best !== src) return bd <= DRAG.snap[from.touch ? "touch" : "mouse"] ? best.q : null; // near a lit square: there; nowhere near one: cancel
+    // a flick: the finger is still nearest the piece's own square, so go the way it was pulled. Of the lit squares within
+    // 40° of the drag direction, take the one nearest the finger (a short flick picks the next square, a long one goes
+    // further for sliders). Let go still on (most of) the piece's own square: that cancels, as it always has.
+    const vx = x - from.x, vy = y - from.y, vl = Math.hypot(vx, vy); if (vl < Math.max(8, src.w * .4)) return null;
+    best = null; bd = Infinity;
+    for (const m of g){
+      if (m === src || !lit(m)) continue; const ux = m.x - src.x, uy = m.y - src.y, ul = Math.hypot(ux, uy);
+      if ((vx * ux + vy * uy) / (vl * ul) < Math.cos(40 * Math.PI / 180)) continue;
+      const d = dist(m); if (d < bd){ bd = d; best = m; }
+    }
+    return best && best.q;
   }
   const noSlide = new Set(); // a dropped piece is already where it lands: skip its slide on the next render
   let floater = null;
@@ -757,15 +763,32 @@ if (params.has("sim")){
     const board = document.getElementById("board"); if (!board) return;
     board.addEventListener("pointerdown", e => {
       const sq = sqAt(e); if (!sq || sq.disabled || busy) return;
-      ptr = { r: +sq.dataset.r, c: +sq.dataset.c, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
+      ptr = { r: +sq.dataset.r, c: +sq.dataset.c, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, touch: e.pointerType !== "mouse" };
     });
+  }
+  // the lifted piece, placed by a transform. A finger: drawn bigger and above the finger, so the square under it shows
+  // (DRAG.lift squares up). A mouse: where it was grabbed, under the pointer.
+  const floatAt = (d, x, y) => d.touch ? [x, y - d.h * DRAG.lift, DRAG.scale] : [d.cx + x - d.x, d.cy + y - d.y, 1.15];
+  const place = (f, [x, y, k]) => { f.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%) scale(${k})`; };
+  // once a frame while dragging: move the lifted piece, and light the square it would land on (only when that changes)
+  function paint(d){
+    d.raf = 0; if (!floater || ptr !== d) return;
+    place(floater, floatAt(d, d.fx, d.fy));
+    const t = dropTarget(d, d.fx, d.fy);
+    if (t !== d.over){ if (d.over) d.over.classList.remove("over"); if (t) t.classList.add("over"); d.over = t; }
   }
   // back (a cancelled drop): the lifted piece glides back to its square {x, y} first, then the piece shows there again
   function endDrag(back){
     const f = floater, d = dragEl; floater = null; dragEl = null;
     const done = () => { if (f) f.remove(); if (d) d.classList.remove("drag"); };
     if (!back || !f || reduce || FAST) return done();
-    fin(f.animate([{ left: back.x + "px", top: back.y + "px", transform: "translate(-50%,-50%) scale(1)" }], { duration: 180, easing: "cubic-bezier(.3,.7,.4,1)", fill: "forwards" }), 180).then(done); // fin: settles even if the page is hidden mid-glide
+    fin(f.animate([{ transform: `translate3d(${back.x}px,${back.y}px,0) translate(-50%,-50%) scale(1)` }], { duration: 180, easing: "cubic-bezier(.3,.7,.4,1)", fill: "forwards" }), 180).then(done); // fin: settles even if the page is hidden mid-glide
+  }
+  function liftPiece(src, html, cl){
+    floater = document.createElement("div"); floater.className = "floater " + cl; floater.innerHTML = html;
+    const m = ptr.geo.find(g => g.q === src) || mid(src); ptr.cx = m.x; ptr.cy = m.y; ptr.h = m.h;
+    Object.assign(floater.style, { width: m.w * .82 + "px", height: m.w * .76 + "px", fontSize: getComputedStyle(src).fontSize });
+    place(floater, floatAt(ptr, ptr.fx, ptr.fy)); document.body.appendChild(floater); sfx.tap();
   }
   window.addEventListener("pointermove", e => {
     if (!ptr || e.pointerId !== ptr.id) return;
@@ -776,51 +799,41 @@ if (params.has("sim")){
       if (dcPick && phase === "setup"){ ptr.still = true; return; } // the 🏢 is picked up: this touch only says where it goes
       const p = at(state, ptr.r, ptr.c), setupOpen = phase === "setup" && !(mode === "live" && LIVE.ready[me]);
       const can = p && p.side === me && (setupOpen || (phase === "play" && state.turn === me));
+      ptr.fx = e.clientX; ptr.fy = e.clientY;
       // the humans' 🏢 in setup drags like a piece (v0.28: on the iPhone it couldn't be dragged, and a tap that moved a few
       // pixels was dropped, so it seemed stuck)
       if (!p && setupOpen && me === "H" && onDC(state, ptr.r, ptr.c)){
         ptr.moved = true; ptr.dc = true; sel = null; dcPick = true;
         app.querySelectorAll(".sq.sel,.sq.can").forEach(q => q.classList.remove("sel", "can"));
-        const src = app.querySelector(`.sq[data-r="${ptr.r}"][data-c="${ptr.c}"]`), m = mid(src); src.classList.add("pick");
+        const src = app.querySelector(`.sq[data-r="${ptr.r}"][data-c="${ptr.c}"]`); src.classList.add("pick");
         app.querySelectorAll(".sq").forEach(q => { if (!q.disabled && SETUP_ROWS.H.includes(+q.dataset.r) && q !== src) q.classList.add("can"); });
-        ptr.cx = m.x; ptr.cy = m.y;
-        floater = document.createElement("div"); floater.className = "floater h"; floater.innerHTML = `<span class="ic">🏢</span>`;
-        Object.assign(floater.style, { width: m.w * .82 + "px", height: m.w * .76 + "px", fontSize: getComputedStyle(src).fontSize });
-        document.body.appendChild(floater); sfx.tap();
+        ptr.geo = measureBoard(); liftPiece(src, `<span class="ic">🏢</span>`, "h");
       }
       else if (!can){ ptr.still = true; return; } // nothing to drag here: let it end as a tap if the finger barely moved
       else {
-      ptr.moved = true;
-      if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; lightMoves(); }
-      const src = app.querySelector(`.sq[data-id="${p.id}"]`), m = mid(src);
-      ptr.cx = m.x; ptr.cy = m.y;
-      dragEl = src.querySelector(".pz"); if (dragEl) dragEl.classList.add("drag");
-      floater = document.createElement("div"); floater.className = "floater " + cls(p.side);
-      floater.innerHTML = faceHtml(face(p));
-      Object.assign(floater.style, { width: m.w * .82 + "px", height: m.w * .76 + "px", fontSize: getComputedStyle(src).fontSize });
-      document.body.appendChild(floater);
-      sfx.tap();
+        ptr.moved = true;
+        if (!sel || sel.id !== p.id){ sel = p; copyMode = false; info = phase === "play" ? explain(p) : null; lightMoves(); }
+        const src = app.querySelector(`.sq[data-id="${p.id}"]`);
+        dragEl = src.querySelector(".pz"); if (dragEl) dragEl.classList.add("drag");
+        ptr.geo = measureBoard(); liftPiece(src, faceHtml(face(p)), cls(p.side)); // measured after the lit squares and the message are in
       }
     }
-    if (floater){
-      floater.style.left = ptr.cx + dx + "px"; floater.style.top = ptr.cy + dy + "px";
-      app.querySelectorAll(".sq.over").forEach(x => x.classList.remove("over"));
-      const t = dropTarget(ptr, ptr.cx + dx, ptr.cy + dy); if (t) t.classList.add("over");
-    }
+    if (floater){ ptr.fx = e.clientX; ptr.fy = e.clientY; if (!ptr.raf){ const d = ptr; d.raf = requestAnimationFrame(() => paint(d)); } }
     e.preventDefault();
   }, { passive: false });
+  const unlight = d => { if (d.raf) cancelAnimationFrame(d.raf); d.raf = 0; if (d.over) d.over.classList.remove("over"); d.over = null; };
   window.addEventListener("pointerup", e => {
     if (!ptr || e.pointerId !== ptr.id) return;
     const was = ptr; ptr = null;
     if (!was.moved) return was.still && Math.hypot(e.clientX - was.x, e.clientY - was.y) > 28 ? undefined : tap(was.r, was.c);
-    app.querySelectorAll(".sq.over").forEach(x => x.classList.remove("over"));
-    const t = dropTarget(was, was.cx + e.clientX - was.x, was.cy + e.clientY - was.y);
+    unlight(was);
+    const t = dropTarget(was, e.clientX, e.clientY);
     if (t && sel) noSlide.add(String(sel.id));
     endDrag(t ? null : { x: was.cx, y: was.cy }); // no target: nothing is played or sent, and the piece glides home
     if (was.dc){ if (t) tap(+t.dataset.r, +t.dataset.c); else { dcPick = Math.hypot(e.clientX - was.x, e.clientY - was.y) < 28; render(); } return; } // dcPick is set: the drop puts the 🏢 there; a wobbly tap leaves it picked up, like a piece
     if (t) tap(+t.dataset.r, +t.dataset.c);
   });
-  window.addEventListener("pointercancel", () => { const was = ptr; ptr = null; endDrag(); if (was && was.dc){ dcPick = false; render(); } }); // a call or a system swipe: put a dragged 🏢 back
+  window.addEventListener("pointercancel", () => { const was = ptr; ptr = null; if (was) unlight(was); endDrag(); if (was && was.dc){ dcPick = false; render(); } }); // a call or a system swipe: put a dragged 🏢 back
   function start(m = "solo", side = "H"){
     mode = m; me = side; document.body.classList.toggle("me-ai", me === "AI");
     state = newGame(seed + Math.floor(Math.random()*1e6)); phase = "setup"; sel = null; dcPick = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null;
