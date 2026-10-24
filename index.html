@@ -42,7 +42,10 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
    .boardwrap fills the space between the info on top and the buttons at the bottom. */
 .boardwrap{position:relative;flex:1;min-height:0;margin:8px 4px 16px} /* room under the near row: the blocks' front faces stand out of the board */
 .zoom{position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1);will-change:transform}
-.board{position:relative;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;aspect-ratio:1;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none}
+.board{position:relative;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;aspect-ratio:1;user-select:none;-webkit-user-select:none;touch-action:pan-y;-webkit-touch-callout:none}
+/* v0.36 (DEV-294): on a phone the board is most of the screen, so a vertical swipe on it scrolls the page (to the rules).
+   pan-y lets it; a touch that starts on a square you can drag from right now is held by the board's touchmove listener
+   (bindPointer), not by touch-action on the squares: the browser's hit-test of the tilted board misses whole rows */
 .sq{position:relative;border-radius:7px;background:var(--panel);border:1px solid var(--line);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:clamp(14px,4.6vw,22px);min-width:0;min-height:0;padding:0;color:var(--fg)}
 .sq.block{background:#070A0E;border-color:#0f151d}
 .sq.ai{color:var(--amber)}.sq.h{color:var(--blue)}
@@ -1020,7 +1023,7 @@ if (params.has("sim")){
   const bot = rng(seed ^ 0xBEEF);
   const FAST = params.has("over") || params.has("fast");
   // pointer handling: tap, or drag an own piece and drop it on a lit square
-  let ptr = null, dragEl = null; // ptr.cx/cy: the dragged square's centre on screen; ptr.x/y: where the finger went down
+  let ptr = null, dragEl = null, holdTouch = false; // ptr.cx/cy: the dragged square's centre on screen; ptr.x/y: where the finger went down
   const mid = el => { const q = el.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2, w: q.width, h: q.height }; };
   // v0.33 (DEV-291), like chess.com on a phone. v0.32 only dropped a piece if you let go inside a lit square's on-screen
   // box, judged by the dragged piece's centre, not the finger: on the iPhone the finger hides the square, the far rows are
@@ -1087,6 +1090,11 @@ if (params.has("sim")){
   }
   function bindPointer(){
     const board = document.getElementById("board"); if (!board) return;
+    // v0.36 (DEV-294): a touch that starts on a square you can drag from (.grab: your pieces on your turn and in setup,
+    // the 🏢 in setup) or, with a piece picked, on a square it can go to, keeps the page still; any other swipe
+    // scrolls. Decided by sqAt's geometry when the finger goes down; the first touchmove's preventDefault is what holds it.
+    board.addEventListener("touchstart", e => { if (e.touches.length > 1) return; const sq = sqAt(e.touches[0]); holdTouch = !!sq && sq.matches(".grab,.can,.copy"); }, { passive: true }); // a second finger keeps the first one's hold
+    board.addEventListener("touchmove", e => { if (holdTouch && e.cancelable) e.preventDefault(); }, { passive: false });
     board.addEventListener("pointerdown", e => {
       const sq = sqAt(e); if (!sq || sq.disabled || busy) return;
       ptr = { r: +sq.dataset.r, c: +sq.dataset.c, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, touch: e.pointerType !== "mouse" };
@@ -1145,7 +1153,7 @@ if (params.has("sim")){
       }
     }
     if (floater){ ptr.fx = e.clientX; ptr.fy = e.clientY; if (!ptr.raf){ const d = ptr; d.raf = requestAnimationFrame(() => paint(d)); } }
-    e.preventDefault();
+    e.preventDefault(); // only once a drag has started: every other touch returned above, so a swipe stays the browser's
   }, { passive: false });
   const unlight = d => { if (d.raf) cancelAnimationFrame(d.raf); d.raf = 0; if (d.over) d.over.classList.remove("over"); d.over = null; };
   window.addEventListener("pointerup", e => {
@@ -1195,6 +1203,9 @@ if (params.has("sim")){
     app.querySelectorAll(".sq[data-id]").forEach(el => m.set(el.dataset.id, { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth }));
     return m;
   }
+  // 🔊 and 🏠, during play and at the end. Live, 🏠 leaves the room (the game stays in My games until it's over and seen)
+  const soundHome = () => { const t = mode === "live" && phase !== "over" ? "Home (your game is saved in My games)" : "Home";
+    return `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart" aria-label="${t}" title="${t}">🏠</button>`; };
   function render(opts = {}){
     if (phase === "intro") return renderIntro();
     if (phase === "lobby" || phase === "joining") return renderLobby();
@@ -1209,6 +1220,8 @@ if (params.has("sim")){
     let bhtml = `<div class="boardwrap"><div class="zoom" id="zoom"><div class="tilt"><div class="board" id="board">`;
     const cans = sel ? legalMoves(state, sel).filter(m => !m.cut) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
+    const setupOpen = phase === "setup" && !(mode === "live" && LIVE.ready[me]), myTurn = phase === "play" && state.turn === me && !state.winner;
+    const grab = (p, r, c) => p ? p.side === me && (setupOpen || myTurn) : setupOpen && me === "H" && onDC(state, r, c); // what pointermove lets you drag
     const rowOrder = me === "H" ? [...Array(ROWS).keys()] : [...Array(ROWS).keys()].reverse(); // my side at the bottom
     for (const r of rowOrder) for (let c = 0; c < COLS; c++){
       const p = at(state, r, c);
@@ -1227,6 +1240,7 @@ if (params.has("sim")){
         nowSides.set(String(p.id), p.side);
         if (prevSides.has(String(p.id)) && prevSides.get(String(p.id)) !== p.side) turns.push(String(p.id));
       }
+      if (grab(p, r, c)) k.push("grab");
       if (sel && sel.r === r && sel.c === c) k.push("sel");
       if (phase === "setup" && sel && !p && SETUP_ROWS[me].includes(r) && !BLOCKED.has(r+","+c)) k.push("can");
       if (phase === "setup" && dcPick && me === "H" && SETUP_ROWS.H.includes(r) && !BLOCKED.has(r+","+c) && !onDC(state, r, c)) k.push("can"); // where the 🏢 can go
@@ -1250,7 +1264,7 @@ if (params.has("sim")){
     if (phase === "over"){
       const win = state.winner === me, draw = state.winner === "D";
       const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ` + (state.last.from[0] === state.last.to[0] && state.last.from[1] === state.last.to[1] ? `cut the power at ${sqName(...state.last.to)}.` : `${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`);
-      html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}</div></div>`;
+      html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}${mode === "live" && !LIVE.online[LIVE.host ? "guest" : "host"] ? ` · <span class="lvnote" id="friendleft">Your friend left.</span>` : ""}</div></div>`;
     } else html += `<div class="msg">${logHtml}</div>`;
     html += bhtml;
     const cto = phase === "play" && state.turn === me && !busy && state.pieces.find(x => x.side === me && canCut(state, x));
@@ -1261,9 +1275,9 @@ if (params.has("sim")){
       // ⚡ takes the RULES slot when it applies, so the row (and the board above it) never moves
       html += cto ? `<button class="primary cutbtn" id="cut">⚡ CUT THE POWER</button>` : `<button class="ghost" id="rules">RULES ↓</button>`;
       if (sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel)) html += `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>`;
-      html += `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart" aria-label="${mode === "live" ? "Home (your game is saved in My games)" : "Home"}" title="${mode === "live" ? "Home (your game is saved in My games)" : "Home"}">🏠</button>`;
+      html += soundHome();
     }
-    else if (phase === "over") html += `<button class="primary" id="again">PLAY AGAIN</button>`;
+    else if (phase === "over") html += `<button class="primary" id="again">PLAY AGAIN</button>` + soundHome(); // v0.36 (DEV-294): 🔊 and 🏠 here too
     html += `</div>`;
     html += `</div><div class="right" id="rulesbox"><p class="more">↓ Rules and pieces</p>` + listHtml() + `</div>`;
     app.innerHTML = html;
@@ -1665,6 +1679,9 @@ if (params.has("sim")){
         if (LIVE.ws !== ws) return clearInterval(LIVE.beatT);
         if (Date.now() - LIVE.heard > 25000){ LIVE.ws = null; ws.onclose = null; try { ws.close(); } catch (e) {} return lost(true); }
         try { ws.send("ping"); } catch (e) {}
+        // v0.36 (DEV-294): on the end screen, ask again who is here, so "Your friend left." shows when they go home (the
+        // server's goodbye broadcast still counts the closing socket). An existing message; nothing new for the server
+        if (phase === "over") send({ t: "hello", moveSeq: LIVE.moveSeq });
       }, 10000);
     };
     ws.onmessage = e => { if (LIVE.ws !== ws) return; LIVE.heard = Date.now(); if (e.data === "pong") return; let m; try { m = JSON.parse(e.data); } catch (x) { return; } onServer(m); };
@@ -1702,6 +1719,8 @@ if (params.has("sim")){
     if (m.t !== "sync" && m.t !== "turn") return;
     queue(() => {
       const moved = m.t === "turn" && m.before && m.moveSeq !== LIVE.moveSeq;
+      const friend = (m.seat === "host" ? "guest" : "host"), still = m.t === "sync" && phase === "over" && m.phase === "over" && state && m.moveSeq === LIVE.moveSeq && !!(m.online || {})[friend] === !!LIVE.online[friend];
+      if (still) return; // the end screen's check found nothing new: no re-render
       Object.assign(LIVE, { seat: m.seat, host: m.seat === "host", hostSide: m.hostSide, guestIn: m.guestIn, online: m.online || {}, ready: m.ready, note: null, fail: null, moveSeq: m.moveSeq });
       me = m.you; document.body.classList.toggle("me-ai", me === "AI");
       rememberGame(LIVE.code, { token: LIVE.token, seat: m.seat, moveSeq: m.moveSeq, seenOver: m.phase === "over" });
