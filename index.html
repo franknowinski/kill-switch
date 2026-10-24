@@ -206,7 +206,7 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 .pill.am{color:var(--amber);border-color:var(--amber-line);background:linear-gradient(90deg,rgba(245,165,36,.22) var(--p,0%),rgba(14,20,28,.88) var(--p,0%))}
 .fline{display:flex;gap:8px;align-items:center;margin:4px 8px 0;padding:6px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:13px;color:var(--fg);text-align:left;width:auto;font-family:var(--mono);flex-shrink:0}
 .fline span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fline.none{visibility:hidden} /* holds its row before the first fight, so the board doesn't jump when it appears */.fline small{color:var(--muted);font-size:11px;flex-shrink:0}
+.fline.none{color:var(--muted);border-style:dashed} /* holds its row before the first fight, so the board doesn't jump when it appears; v0.39 (DEV-297): says so instead of a blank band */.fline small{color:var(--muted);font-size:11px;flex-shrink:0}
 .fline .you{color:var(--blue)}.fline .them{color:var(--amber)}body.me-ai .fline .you{color:var(--amber)}body.me-ai .fline .them{color:var(--blue)}
 .more{text-align:center;font-size:12px;color:var(--muted);letter-spacing:1px;margin:14px 0 0}
 /* after a fight the winner's number rises from the square and fades; never blocks a tap */
@@ -221,6 +221,12 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 .seg.lv{grid-template-columns:1fr 1fr 1fr}.seg.lv{margin-top:-6px}.seg.lv button{min-height:36px;font-size:14px;padding:0 4px}
 .seg.lv button[aria-pressed="true"]{background:#1B2633;border-color:var(--fg);color:var(--fg)} /* v0.35: the bot's level, beside the side picker */
 .pill.lvl{color:var(--muted)}
+/* v0.39 (DEV-297): the narrowest phones (iPhone SE 1st gen, 320px) tighten the pills so all three fit on one line, "🧠 superintelligence" in full
+   (one line: a wrap would move the board when the pill text changes mid-game) */
+@media (max-width:359px){.hud{gap:4px}.pill{padding:5px 7px;letter-spacing:0}}
+/* home-screen app (DEV-297, the user: "the top r1 and grows in 6 can be a bit lower"): the pills drop 10px from the status bar /
+   Dynamic Island (the body already pads by the safe area), and the fight line gives the same 10px back, so the board doesn't move */
+.standalone .hud{padding-top:16px}.standalone .fline{margin-top:2px;padding-top:2px;padding-bottom:2px}
 .lgs{display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow:auto;font-size:13px;line-height:1.4}
 .lgs div{padding:4px 2px;border-bottom:1px solid #182230}.lgs i{font-style:normal;color:var(--muted);font-size:11px;margin-right:6px}.lgs .mile{color:var(--amber)}
 /* phones: the board stretches to fill the space (squares taller than wide) with a flatter tilt, as in v0.22 */
@@ -648,6 +654,7 @@ function simulate(games, seed0 = 1){
 // unseen pieces is common knowledge, though not which is which), which enemy pieces have moved or slid, the 🏢 and the 🧠's number.
 const BOT_LEVELS = ["easy", "medium", "hard"];
 const BOT_NAME = { easy: "Easy", medium: "Medium", hard: "Hard" };
+const LEVEL_TAG = { easy: "EASY", medium: "MED", hard: "HARD" }; // the hud pill (v0.39, DEV-297): short, so "🧠 superintelligence" fits beside it at 320px
 const toLevel = v => BOT_LEVELS.includes(v) ? v : "medium";
 // a bot for one game at a level: (s, side, r) => move. HARD keeps notes through the game, so make one per game.
 function levelBot(level){ const mem = {}; return level === "easy" ? (s, side, r) => easyMove(s, side, r) : level === "hard" ? (s, side, r) => hardMove(s, side, r, mem) : botMove; }
@@ -1028,7 +1035,9 @@ const sfx = {
 };
 const app = document.getElementById("app");
 { const ua = navigator.userAgent, v = /Version\/(\d+)/.exec(ua); // iPhone Safari 26+ (not Chrome or Firefox for iOS, not a home-screen app)
-  if (/iPhone|iPod/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua) && v && +v[1] >= 26 && !navigator.standalone) document.documentElement.classList.add("ios-bar"); }
+  if (/iPhone|iPod/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua) && v && +v[1] >= 26 && !navigator.standalone) document.documentElement.classList.add("ios-bar");
+  // v0.39 (DEV-297): opened from the home screen (no Safari bars), the pills sat just under the status bar / Dynamic Island
+  if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) document.documentElement.classList.add("standalone"); }
 const params = new URLSearchParams(location.search);
 if (params.has("sim")){
   const res = simulate(Number(params.get("sim")) || 200);
@@ -1246,8 +1255,8 @@ if (params.has("sim")){
     const drainNow = phase === "play" && !state.winner && !!state.drainOn; // v0.38 (DEV-295): the CTO is on the 🏢 draining the 🧠: it pulses (s.drainOn: public, set by apply)
     // the bar: the growth clock; once the drain has started, how much of the 🧠 is left (its number is public: it grew in the open)
     const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : state.cut && brain ? 100 * brain.str / BAL.MAX_STR : live ? 100 : 0;
-    const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? (brain.str <= 0 ? "0 · fragile" : `${brain.str} · ${drainNow ? "draining" : "held"}`) : "superintelligent";
-    let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span>${mode === "solo" && phase !== "setup" ? `<span class="pill lvl">vs ${gameLevel.toUpperCase()}</span>` : ""}${mode === "live" && phase === "play" && !state.winner ? `<span class="pill turn ${state.turn === me ? "mine" : ""}" id="turnpill">${state.turn === me ? "YOUR MOVE" : "THEIR MOVE"}</span>` : ""}</div>`;
+    const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? (brain.str <= 0 ? "0 · fragile" : `${brain.str} · ${drainNow ? "draining" : "held"}`) : "superintelligence";
+    let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span>${mode === "solo" && phase !== "setup" ? `<span class="pill lvl">vs ${LEVEL_TAG[gameLevel] || gameLevel.toUpperCase()}</span>` : ""}${mode === "live" && phase === "play" && !state.winner ? `<span class="pill turn ${state.turn === me ? "mine" : ""}" id="turnpill">${state.turn === me ? "YOUR MOVE" : "THEIR MOVE"}</span>` : ""}</div>`;
     let bhtml = `<div class="boardwrap"><div class="zoom" id="zoom"><div class="tilt"><div class="board" id="board">`;
     const cans = sel ? legalMoves(state, sel) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
@@ -1282,7 +1291,7 @@ if (params.has("sim")){
       bhtml += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED.has(r+","+c) ? "disabled" : ""}>${inner}</button>`;
     }
     bhtml += `</div><div class="fx" id="fx"></div></div></div><div class="toasts" id="toasts"></div></div>`;
-    html += lastFight && phase !== "setup" ? `<button class="fline" id="fline">⚔️ <span>${fightLine(lastFight)}</span><small>log ›</small></button>` : `<div class="fline none" aria-hidden="true">⚔️ <span>&nbsp;</span></div>`;
+    html += lastFight && phase !== "setup" ? `<button class="fline" id="fline">⚔️ <span>${fightLine(lastFight)}</span><small>log ›</small></button>` : `<div class="fline none">⚔️ <span>${state.winner ? "No fights this game" : phase === "setup" || state.round <= 1 ? "No fights yet" : "The last fight shows here"}</span></div>`;
     let logHtml;
     if (phase === "setup" && mode === "live" && LIVE.ready[me]) logHtml = `<span class="you">Your side is set.</span> Waiting for the other player to finish setting up<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
     else if (phase === "setup" && dcPick && me === "H") logHtml = `<span class="you">🏢 picked up.</span> Tap a lit square for it; a piece there swaps with it.`;
@@ -1598,7 +1607,7 @@ if (params.has("sim")){
   }
   function toast(text, big, extra){
     const box = document.getElementById("toasts"); if (!box) return;
-    const el = document.createElement("div"); el.className = "toast" + (big ? " big" : "") + (extra ? " " + extra : ""); el.textContent = text;
+    const el = document.createElement("div"); el.className = "toast" + (big ? " big" : "") + (extra ? " " + extra : ""); el.textContent = text.replace(/ · /g, "\u00a0· "); // v0.39 (DEV-297): the "·" stays on the first line when a toast wraps
     if (params.has("hold")) el.style.setProperty("--hold", "999s");
     box.appendChild(el); setTimeout(() => el.remove(), params.has("hold") ? 1e9 : big ? 3800 : 2200);
   }
