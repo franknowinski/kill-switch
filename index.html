@@ -53,10 +53,13 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .sq.can.ai{box-shadow:inset 0 0 0 3px var(--red)}
 .sq.copy{box-shadow:inset 0 0 0 3px var(--green)}
 .sq.last{box-shadow:inset 0 0 0 2px rgba(255,255,255,.3)}
-/* 🏢 the humans' datacenter: a square they place in setup. Dim; lit once the 🧠 is a 10 (the CTO can cut the power there); dark after the cut */
+/* 🏢 the humans' datacenter: a square they place in setup. Dim; lit once the 🧠 is a 10 (the CTO drains it there); pulsing
+   while the CTO stands on it and drains the 🧠 (v0.38, DEV-295); dark once the drain has started and nobody is draining */
 .sq.dc::after{content:"🏢";position:absolute;font-size:.8em;opacity:.45;pointer-events:none}
 .sq.dc[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;transform:translateZ(calc(var(--ph) + 2px))}
 .sq.dc.live{background:#2a2208;border-color:#8a6d12}.sq.dc.live::after{opacity:1;animation:bolt 1.2s ease-in-out infinite}
+.sq.dc.drain{background:#2a2208;border-color:#ffd84a;animation:drainpulse 1.1s ease-in-out infinite}.sq.dc.drain::after{opacity:1;animation:bolt 1.1s ease-in-out infinite}
+@keyframes drainpulse{0%,100%{box-shadow:inset 0 0 0 2px rgba(255,216,74,.3)}50%{box-shadow:inset 0 0 0 3px rgba(255,216,74,1),0 0 12px rgba(255,216,74,.55)}}
 .sq.dc.off::after{opacity:.18;filter:grayscale(1)}
 .sq.dc.pick{box-shadow:inset 0 0 0 3px var(--blue)}
 /* ↑ a piece that took power from the datacenter (+1, once) */
@@ -66,7 +69,6 @@ h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
 .trn{position:absolute;left:11%;bottom:14%;font-size:.42em;font-weight:700;line-height:1;padding:.12em .28em;border-radius:.5em;font-style:normal;pointer-events:none;transform:translateZ(calc(var(--ph) + 3px));color:#06121C}
 .trn.h{background:var(--blue)}.trn.ai{background:var(--amber)}
 .pc .trn,.kr .trn{position:static;transform:none;font-size:9px;margin-left:3px;padding:1px 3px}
-.primary.cutbtn{background:#ffd84a;color:#1a1405;box-shadow:0 0 18px rgba(255,216,74,.45)}
 /* pieces: raised blocks with a top, a front and two sides, and a soft shadow (v0.17) */
 :root{--tilt:28deg;--ph:7px}
 .zoom{perspective:1100px;perspective-origin:50% -40%}
@@ -192,7 +194,7 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 .toasts{position:absolute;left:0;right:0;top:8px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:4}
 .toast{padding:7px 14px;border-radius:999px;background:#2A1C08;border:1px solid var(--amber);color:var(--amber);font-family:var(--display);font-size:13px;letter-spacing:1px;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:tin .25s ease-out, tout .5s ease-in forwards;animation-delay:0s,var(--hold,1.6s);max-width:calc(100vw - 32px);text-align:center;text-wrap:balance}
 .toast.big{font-size:17px;padding:12px 20px;background:#3a0f0f;border-color:var(--red);color:#fff;--hold:3.2s}
-.toast.cut{background:#2a2208;border-color:#ffd84a;color:#ffd84a}
+.toast.drain{background:#2a2208;border-color:#ffd84a;color:#ffd84a}
 @keyframes tin{from{opacity:0;transform:translateY(-12px) scale(.9)}to{opacity:1;transform:none}}
 @keyframes tout{to{opacity:0;transform:translateY(-10px)}}
 #app{display:flex;flex-direction:column;width:100%}
@@ -255,7 +257,7 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 }
 .ranks .kr .kn{white-space:normal;overflow:visible;line-height:1.15} /* "self-improver", "rogue agent" wrap rather than being cut off */
 @media (max-width:360px){.ranks .kr{gap:6px;padding:4px 6px}.ranks .kr .kn{font-size:12px}}
-@media (prefers-reduced-motion:reduce){.blk.idle,.blk.reveal,.sq.can,.sq.can.ai,.sq.dc.live::after,.sq.turned .ftop,.board.shake,.toast{animation:none!important}.blk{transition:none}}
+@media (prefers-reduced-motion:reduce){.blk.idle,.blk.reveal,.sq.can,.sq.can.ai,.sq.dc.live::after,.sq.dc.drain,.sq.dc.drain::after,.sq.turned .ftop,.board.shake,.toast{animation:none!important}.blk{transition:none}}
 </style>
 </head>
 <body>
@@ -272,11 +274,15 @@ const BAL = {
   AGI: 8, ASI: 10,  // the 🧠's milestones: AGI at 8, superintelligence at 10
   SPY_MIN: 8, SPY_MAX: 9, // the whistleblower / virus kills a piece this strong when it attacks it, and loses to anything else
   BOOST_MIN: 5, BOOST_MAX: 6, // an AI fighter this strong when it steps on the 🏢 takes +1 there, once (v0.28: 1 to 7, any numbered piece; v0.29: fighters 5 to 6)
+  DRAIN: 1,         // v0.38 (DEV-295): the 🧠 loses this much at the end of each human turn the CTO stands on the 🏢, once it has been a 10 (was: one tap cut it to 0)
 };
 // 🏢 the humans' datacenter (v0.27): a square on their setup rows that they place in setup (s.dc); it starts on their back
 // row (v0.28). No piece starts on it; any piece can stand on it. An AI fighter that is a 5 or 6 when it moves onto it gets +1,
-// once per piece, until the power is cut (v0.29: so a 🐝 5 becomes 6 and a 🤖 6 becomes 7; never the 🦾 7 or 👾 8, the 🧠,
-// the deepfake, or a non-fighter, whose value is its ability). A turned piece goes by its current side, type and number. The CTO cuts the power there once the 🧠 is a 10: the 🧠 is then fragile (0, loses every fight), for good.
+// once per piece, until the power drain starts (v0.29: so a 🐝 5 becomes 6 and a 🤖 6 becomes 7; never the 🦾 7 or 👾 8, the 🧠,
+// the deepfake, or a non-fighter, whose value is its ability). A turned piece goes by its current side, type and number.
+// v0.38 (DEV-295): once the 🧠 has been a 10, each human turn that ends with the CTO on the 🏢 drains it by BAL.DRAIN
+// (10 → 9 → 8 …). s.cut means the drain has started: the 🧠 never grows again and the 🏢 gives no more +1s. Above 0 it fights
+// with its number; at 0 it is fragile (loses every fight). The CTO leaving or dying stops the drain; nothing regrows.
 const onDC = (s, r, c) => !!s.dc && s.dc[0] === r && s.dc[1] === c;
 const BOOSTS = p => p.side === "AI" && p.type === "X" && p.str >= BAL.BOOST_MIN && p.str <= BAL.BOOST_MAX;
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
@@ -413,15 +419,17 @@ function legalMoves(s, p){
       r += dr; c += dc;
     }
   }
-  if (canCut(s, p)) out.push({ to: [p.r, p.c], cut: true });
   return out;
 }
 const brainOf = s => s.pieces.find(x => x.type === "I" && x.side === "AI");
 const isSuper = p => p.type === "I" && p.str >= BAL.ASI;
+const isFragile = p => p.type === "I" && p.str <= 0; // a 🧠 drained to 0 loses every fight (v0.38; v0.27–v0.37: after the cut)
 // the humans' own 9: not an AI piece the 🏢 raised to 9 that a honeypot then turned human
 const isCTO = p => p.side === "H" && homeSide(p) === "H" && p.type === "X" && (p.base ?? p.str) === 9;
-// the humans' CTO on the 🏢 datacenter while the 🧠 is a 10 can spend its turn to cut the power
-function canCut(s, p){ const b = brainOf(s); return !s.cut && !!b && isSuper(b) && isCTO(p) && onDC(s, p.r, p.c); }
+// the 🧠 has been a 10 (s.asi) and has something left to lose: the humans' CTO on the 🏢 drains it
+const drainable = s => { const b = brainOf(s); return !!b && s.asi && b.str > 0; };
+// the CTO is on the 🏢 now: if the humans' turn ends like this, the 🧠 loses BAL.DRAIN
+const draining = s => drainable(s) && s.pieces.some(p => isCTO(p) && onDC(s, p.r, p.c));
 function sideMoves(s, side){
   const out = [];
   for (const p of s.pieces) if (p.side === side) for (const m of legalMoves(s, p)) out.push({ p, ...m });
@@ -440,13 +448,7 @@ function apply(s0, move){
   const convert = (x, to) => { x.side = to; x.revealed = false; x.seen = true; };
   const from = sqName(p.r, p.c), to = sqName(r, c);
   let line = "";
-  if (move.cut){
-    const b = brainOf(s); b.str = 0; s.cut = true;
-    line = "Power cut: the 🧠 is fragile now. Any piece that finds it kills it.";
-    s.events.push({ kind: "cut" });
-    s.history.push({ round: s.round, side, text: line, mile: true });
-  }
-  else if (move.copy){
+  if (move.copy){
     const src = copySource(s, p);
     s.copies[side]--;
     s.pieces.push({ id: Math.max(...s.pieces.map(x => x.id)) + 1, side, type: src.type, str: src.str, revealed: false, r, c });
@@ -469,9 +471,9 @@ function apply(s0, move){
       else if (isSuper(p)){ kill(q); p.r = r; p.c = c; ev.result = "defuse"; line = `${name(p)} saw through the ${roleName(q)} and removed it.`; }
       else { const was = name(p); kill(q); p.r = r; p.c = c; convert(p, q.side); ev.result = "trapped"; line = `${was} fell into a ${roleName(q)} and switched sides: ${name(p).replace(/^\S+ /, "")}.`; } // named before it switches, then as what it is now: "Human whistleblower fell into a backdoor and switched sides: turned 🦠 virus (was 📢 whistleblower)." It moves onto the trap's square.
     }
-    // after the power cut the 🧠 is fragile: it loses every fight, attacking or defending, to any piece (traps work as usual)
-    else if (s.cut && (p.type === "I" || q.type === "I")){
-      if (q.type === "I"){ kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} found the fragile 🧠 and took it out.`; }
+    // a 🧠 drained to 0 is fragile: it loses every fight, attacking or defending, to any piece (traps work as usual)
+    else if (isFragile(p) || isFragile(q)){
+      if (isFragile(q)){ kill(q); p.r = r; p.c = c; ev.result = "win"; line = `${name(p)} found the fragile 🧠 and took it out.`; }
       else { kill(p); ev.result = "lose"; line = `The fragile 🧠 attacked ${name(q)} and fell.`; }
     }
     // the 🎭 deepfake copies whatever it fights, attacking or defending, so both fall; only a 🧠 at 10 sees through it
@@ -495,9 +497,9 @@ function apply(s0, move){
     s.history.push({ round: s.round, side, text: line, a: ev.a, d: ev.d, result: ev.result, at: to });
   }
   for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `${who(sc.side)} ${roleName(sc)} spotted ${name(e)} at ${sqName(e.r, e.c)}.` }); }
-  // the datacenter's power: an AI fighter that is a 5 or 6 (BOOSTS) and ends its move on the 🏢 gets +1, once per piece, until the cut
+  // the datacenter's power: an AI fighter that is a 5 or 6 (BOOSTS) and ends its move on the 🏢 gets +1, once per piece, until the drain starts
   const mover = s.pieces.find(x => x.id === move.p.id);
-  if (!move.cut && mover && !s.cut && BOOSTS(mover) && !mover.boosted && onDC(s, mover.r, mover.c) && mover.str < BAL.MAX_STR){
+  if (mover && !s.cut && BOOSTS(mover) && !mover.boosted && onDC(s, mover.r, mover.c) && mover.str < BAL.MAX_STR){
     const was = mover.str; mover.base = mover.base ?? was; mover.str++; mover.boosted = true; // base: it keeps its character (a 🤖 bot with a 7)
     const t = `${who(mover.side)} ${roleName(mover)} took power from the datacenter: ${was} → ${mover.str}.`;
     s.events.push({ kind: "boost", r: mover.r, c: mover.c, id: mover.id, from: was, to: mover.str }); s.history.push({ round: s.round, side: mover.side, text: `${t} (Fighters 5–6 get +1, once.)` });
@@ -508,6 +510,15 @@ function apply(s0, move){
   s.rsi = !!brainOf(s);
   if (hadRsi && !s.rsi && !s.winner){ line += " The 🧠 is gone."; s.history.push({ round: s.round, side: "H", text: "The AI's self-improver is gone. The AI stops growing." }); }
   s.log = line || (side === "H" ? "AI to move." : "Humans to move.");
+  // the power drain: a human turn that ends with the CTO on the 🏢, once the 🧠 has been a 10, takes BAL.DRAIN off it
+  if (!s.winner && side === "H" && draining(s)){
+    const b = brainOf(s), was = b.str, first = !s.cut;
+    b.str = Math.max(0, b.str - BAL.DRAIN); s.cut = true;
+    const t = b.str > 0 ? `Power draining: the 🧠 drops to ${b.str}.` : "Power out: the 🧠 is at 0 and fragile. Any piece that finds it kills it.";
+    s.events.push({ kind: "drain", from: was, to: b.str, first });
+    s.history.push({ round: s.round, side, text: first ? `${t} It stops growing for good, and the 🏢 gives no more +1s.` : t, mile: first || b.str === 0 });
+    s.log = line ? `${line} 🧠 ${was} → ${b.str}.` : t; // after a fight line, short: the message box is two lines
+  }
   if (!s.winner){
     if (side === "AI"){
       s.round++;
@@ -525,6 +536,10 @@ function apply(s0, move){
     s.turn = other(side);
     if (!s.winner && sideMoves(s, s.turn).length === 0){ s.winner = other(s.turn); s.log = s.turn === "H" ? "The humans have nothing left that can move." : "The AI has nothing left that can move."; }
   }
+  // public: the CTO is on the 🏢 draining the 🧠. Worked out here on the true board, because each side's view hides (and the
+  // server shuffles) the other side's pieces, so the AI's phone can't tell which piece is the CTO; the drain itself is announced.
+  // Only once a drain has happened (s.cut): a CTO parked on the 🏢 before the 🧠 reaches 10 stays a secret until its first drain
+  s.drainOn = !s.winner && s.cut && draining(s);
   return s;
 }
 const who = side => side === "H" ? "Human" : "AI";
@@ -565,21 +580,25 @@ function botMove(s, side, r){
   if (!moves.length) return null;
   const fwd = side === "H" ? -1 : 1;
   const enemyBack = side === "H" ? 0 : ROWS - 1;
-  const brain = brainOf(s), ten = brain && isSuper(brain) ? brain : null; // a live 10: the humans take the CTO home to the 🏢, the AI tries to stop it
+  const brain = brainOf(s), high = drainable(s) ? brain : null, drainNow = draining(s); // a 🧠 that has been a 10: the humans take the CTO home to the 🏢 and park it, the AI tries to knock it off
   const toDC = (rr, cc) => s.dc ? Math.abs(rr - s.dc[0]) + Math.abs(cc - s.dc[1]) : 0;
   let best = null, bestScore = -Infinity;
   for (const m of moves){
-    const p = m.p, [tr,tc] = m.to, q = m.cut ? null : at(s, tr, tc);
+    const p = m.p, [tr,tc] = m.to, q = at(s, tr, tc);
     let sc = r() * 2;
-    if (ten){
-      if (isCTO(p)) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 20 + (onDC(s, tr, tc) ? 40 : 0);
+    if (high){
+      if (isCTO(p)) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 20 + (onDC(s, tr, tc) ? 40 : 0) - (onDC(s, p.r, p.c) ? 120 : 0); // parked: it stays while the 🧠 drains
       if (side === "AI" && q && onDC(s, tr, tc) && (isSuper(p) || p.type === "A")) sc += 40; // whatever stands on the 🏢 is probably the CTO: send what beats a 9
     }
-    if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted && !m.cut){ if (onDC(s, tr, tc)) sc += 30; else sc += (toDC(p.r, p.c) - toDC(tr, tc)) * .6; } // the datacenter's +1
-    if (side === "AI" && s.cut && p.type === "I"){ if (q) sc -= 300; for (const [dr,dc] of DIRS){ const e = at(s, tr+dr, tc+dc); if (e && e.side !== side) sc -= 40; } } // the fragile 🧠 hides
-    if (side === "H" && s.cut && q && !known(q)) sc += 6; // after the cut: hunt the fragile 🧠
-    if (m.cut) sc += 900; // below taking a known kill switch (+1000): winning beats cutting
-    else if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 10 + src.str * 4 : -50; }
+    // the drain is public (each step is announced), so the piece on the 🏢 is the CTO: the AI sends what beats or trades a 9
+    if (side === "AI" && drainNow && (p.type === "A" || p.type === "K" || (p.type === "I" && p.str >= 9))){
+      if (q && onDC(s, tr, tc)) sc += p.type === "A" && !known(q) ? 350 : 60; // the virus: as if the 9 were known (its blind-attack -150 undone)
+      else if (!q) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 4;
+    }
+    if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted){ if (onDC(s, tr, tc)) sc += 30; else sc += (toDC(p.r, p.c) - toDC(tr, tc)) * .6; } // the datacenter's +1
+    if (side === "AI" && isFragile(p)){ if (q) sc -= 300; for (const [dr,dc] of DIRS){ const e = at(s, tr+dr, tc+dc); if (e && e.side !== side) sc -= 40; } } // the fragile 🧠 hides
+    if (side === "H" && brain && isFragile(brain) && q && !known(q)) sc += 6; // a 🧠 at 0: hunt it
+    if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 10 + src.str * 4 : -50; }
     else if (q){
       if (p.type === "K" && !(known(q) && (q.type === "F" || q.type === "T"))) sc += known(q) ? (isSuper(q) ? -120 : q.str * 6 - 10) : 8; // the deepfake trades itself for what it hits: best on a big number
       else if (p.type === "A") sc += known(q) && q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX && LEVELS_UP(q.type) ? 200 : -150;
@@ -619,7 +638,7 @@ function simulate(games, seed0 = 1){
     if (s.winner === "H") h++; else if (s.winner === "D") draws++; else ai++;
     rounds += s.round; if (s.agi) agi++; if (s.asi) asi++; if (!s.rsi) rsiDead++; if (s.cut) cuts++;
   }
-  return { games, humanWins: h, aiWins: ai, draws, avgRounds: Math.round(rounds / games), agiGames: agi, asiGames: asi, brainKilled: rsiDead, powerCut: cuts, boostsPerGame: +(boosts / games).toFixed(2) };
+  return { games, humanWins: h, aiWins: ai, draws, avgRounds: Math.round(rounds / games), agiGames: agi, asiGames: asi, brainKilled: rsiDead, powerDrained: cuts, boostsPerGame: +(boosts / games).toFixed(2) };
 }
 // ENGINE-END
 // Bot levels (v0.35, DEV-293): EASY / MEDIUM / HARD for solo games. They live out here, after ENGINE-END, so the two-player
@@ -650,13 +669,13 @@ const EASY = { SHARP: .5, SPOT: .25 };
 function easyMove(s, side, r){
   const moves = sideMoves(s, side); if (!moves.length) return null;
   if (r() < EASY.SHARP){
-    const m = botMove(s, side, r), q = m.cut ? null : at(s, m.to[0], m.to[1]);
-    if (!(m.cut || (q && known(q) && q.type === "F")) || r() < EASY.SPOT) return m;
+    const m = botMove(s, side, r), q = at(s, m.to[0], m.to[1]);
+    if (!(q && known(q) && q.type === "F") || r() < EASY.SPOT) return m;
   }
   const fwd = side === "H" ? -1 : 1;
   let best = null, bs = -Infinity;
   for (const m of moves){
-    if (m.cut || m.copy) continue;
+    if (m.copy) continue;
     const p = m.p, q = at(s, m.to[0], m.to[1]);
     let sc = r() * 10 + (m.to[0] - p.r) * fwd * 3 + (q ? 3 : 0);
     if (q && known(q) && q.type === "F" && r() > EASY.SPOT) sc -= 50; // doesn't notice it
@@ -676,15 +695,15 @@ const HARD = { FLAG: 400, CTO_LEAD: 10, CTO_RISK: 30, BRAIN: 1, TOP: 25, WORLDS:
 const HV = { F: 0, T: 4, S: 2, M: 4.5, A: 5, C: 3.5, K: 6, R: 4, P: 4 };
 const XV = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6.5, 7: 8.5, 8: 11, 9: 14, 10: 16 };
 function hardVal(s, p){
-  if (p.type === "X") return (XV[p.str] || p.str) + (isCTO(p) && !s.cut && brainOf(s) ? 6 : 0);
-  if (p.type === "I") return s.cut ? 2 : 14 + p.str * 2;
+  if (p.type === "X") return (XV[p.str] || p.str) + (isCTO(p) && brainOf(s) && brainOf(s).str > 0 ? 6 : 0);
+  if (p.type === "I") return isFragile(p) ? 2 : 14 + p.str * 2;
   return HV[p.type];
 }
 // a attacks d: what happens (the same rules as apply, for a piece that may only be a guess)
 function fightOf(s, a, d){
   if (d.type === "F") return "flag";
   if (d.type === "T") return a.type === "M" || isSuper(a) ? "defuse" : "trapped";
-  if (s.cut && (a.type === "I" || d.type === "I")) return d.type === "I" ? "win" : "lose";
+  if (isFragile(a) || isFragile(d)) return isFragile(d) ? "win" : "lose";
   if ((a.type === "K" || d.type === "K") && !isSuper(a.type === "K" ? d : a)) return "tie";
   if (a.type === "A") return d.str >= BAL.SPY_MIN && d.str <= BAL.SPY_MAX && LEVELS_UP(d.type) ? "win" : "lose";
   return a.str > d.str ? "win" : a.str === d.str ? "tie" : "lose";
@@ -734,9 +753,11 @@ function hardMove(s, side, r, mem){
   if (!moves.length) return null;
   const foe = other(side), fwd = side === "H" ? -1 : 1;
   const odds = hardOdds(s, side, mem);
-  const kinds = q => known(q) ? [{ type: q.type, str: q.str, side: q.side, w: 1, base: q.base, id: q.id }] : odds.get(q.id) || [];
+  const brain = brainOf(s), ten = brain && isSuper(brain) ? brain : null, high = drainable(s), drainNow = draining(s);
+  // the piece on the 🏢 while the 🧠 drains is the CTO: every step of the drain is announced, so that much is public
+  const outed = q => drainNow && q.side === "H" && onDC(s, q.r, q.c);
+  const kinds = q => known(q) || outed(q) ? [{ type: q.type, str: q.str, side: q.side, w: 1, base: q.base, id: q.id }] : odds.get(q.id) || [];
   const myFlag = s.pieces.find(p => p.side === side && p.type === "F");
-  const brain = brainOf(s), ten = brain && isSuper(brain) && !s.cut ? brain : null;
   const dist = (a, b, c, d) => Math.abs(a - c) + Math.abs(b - d);
   const toDC = (rr, cc) => s.dc ? dist(rr, cc, s.dc[0], s.dc[1]) : 0;
   const ctoAlive = s.pieces.some(isCTO);
@@ -789,9 +810,9 @@ function hardMove(s, side, r, mem){
   }
   const scored = [];
   for (const m of moves){
-    const p = m.p, [tr, tc] = m.to, q = m.cut ? null : at(s, tr, tc);
+    const p = m.p, [tr, tc] = m.to, q = at(s, tr, tc);
     let sc = r();
-    if (!m.cut && !m.copy && myFlag){ // the flag first: a move that lets an enemy reach it is a lost game
+    if (!m.copy && myFlag){ // the flag first: a move that lets an enemy reach it is a lost game
       let pWin = 1, pTrap = 0;
       if (q){ pWin = 0; for (const k of kinds(q)){ const f = fightOf(s, p, k); if (f === "win" || f === "defuse" || f === "flag") pWin += k.w; else if (f === "trapped") pTrap += k.w; } }
       const turned = { ...p, side: foe, seen: true }; // trapped: it stands there for them now, and they all know what it is
@@ -799,8 +820,7 @@ function hardMove(s, side, r, mem){
         + (pWin + pTrap < 1 ? (1 - pWin - pTrap) * flagThreat(p.r, p.c, tr, tc, p, q) : 0);
       sc -= t * HARD.FLAG;
     }
-    if (m.cut){ sc += 900; }
-    else if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 4 + src.str : -50; }
+    if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 4 + src.str : -50; }
     else if (q){
       // a fight: the odds-weighted result
       let ev = 0, pWin = 0;
@@ -817,12 +837,13 @@ function hardMove(s, side, r, mem){
         ev += k.w * v;
       }
       sc += ev * 10;
-      if (!known(q)) sc += 4 + flagOdds.reduce((a, [x, w]) => a + (x.id === q.id ? w * 30 : 0), 0); // what it learns, more when it might be the flag
+      if (!known(q) && !outed(q)) sc += 4 + flagOdds.reduce((a, [x, w]) => a + (x.id === q.id ? w * 30 : 0), 0); // what it learns, more when it might be the flag
       if (pWin > 0) sc -= pWin * risk(p, tr, tc, true, q.id) * 10; // the winner stands there, seen
       sc += risk(p, p.r, p.c, shown(p)) * 10 * .5; // and it leaves where it was in danger
       if (myFlag){ const d = dist(tr, tc, myFlag.r, myFlag.c); if (d <= 2) sc += (d === 1 ? 60 : 25) * pWin; } // an attacker at the gate
-      if (isCTO(p) && brain && !s.cut && !known(q)) sc -= HARD.CTO_RISK; // the CTO keeps out of blind fights: it is needed at the 🏢
-      if (ten && side === "AI" && onDC(s, tr, tc)) sc += 200 * pWin; // whatever stands on the 🏢 is probably the CTO
+      if (isCTO(p) && brain && brain.str > 0 && !known(q)) sc -= HARD.CTO_RISK; // the CTO keeps out of blind fights: it is needed at the 🏢
+      if (isCTO(p) && drainNow) sc -= 100; // and it doesn't step off the 🏢 while the 🧠 drains
+      if ((ten || drainNow) && side === "AI" && onDC(s, tr, tc)) sc += 200 * pWin; // whatever stands on the 🏢 is probably (draining: surely) the CTO
       if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted && onDC(s, tr, tc)) sc += 30 * pWin;
     } else {
       // a plain move: get out of danger, don't walk into it, and go where it counts
@@ -848,15 +869,17 @@ function hardMove(s, side, r, mem){
         if (f === "win" || f === "defuse" || f === "flag") sc += (d0 - d1) * Math.min(20, hardVal(s, e)) * .6;
       }
       // the CTO stays home and walks to the 🏢 in time for the 🧠's 10 (its number and the growth clock are public)
-      if (isCTO(p) && brain && !s.cut){
-        const eta = (BAL.ASI - brain.str) * BAL.RSI_EVERY, w = ten || eta <= toDC(p.r, p.c) * 2 + HARD.CTO_LEAD ? 25 : 4;
+      if (isCTO(p) && brain && brain.str > 0 && (high || !s.asi)){
+        const eta = (BAL.ASI - brain.str) * BAL.RSI_EVERY, w = high || eta <= toDC(p.r, p.c) * 2 + HARD.CTO_LEAD ? 25 : 4;
         sc += (toDC(p.r, p.c) - toDC(tr, tc)) * w + (onDC(s, tr, tc) ? 60 : 0) - (onDC(s, p.r, p.c) ? 80 : 0) - step * 2;
       }
       if (ten){
-        if (side === "AI" && p === ten && ctoAlive) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 12; // the 10 goes to sit on the 🏢: no cut
+        if (side === "AI" && p === ten && ctoAlive) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 12; // the 10 goes to sit on the 🏢: no drain
       }
+      // the CTO is draining the 🧠: the AI closes in on the 🏢 with what beats or trades a 9 (the virus, the deepfake, a 🧠 still 9+)
+      if (side === "AI" && drainNow && (p.type === "A" || p.type === "K" || (p.type === "I" && p.str >= 9))) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 12;
       if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted){ if (onDC(s, tr, tc)) sc += 30; else sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 1.5; }
-      if (side === "AI" && s.cut && p.type === "I") sc -= 10;
+      if (side === "AI" && isFragile(p)) sc -= 10;
       if (s.last && s.last.side === side && s.last.to[0] === p.r && s.last.to[1] === p.c && s.last.from[0] === tr && s.last.from[1] === tc) sc -= 8;
       if (myFlag && dist(p.r, p.c, myFlag.r, myFlag.c) === 1 && p.type !== "S") sc -= 3; // keep the guard
     }
@@ -934,7 +957,7 @@ const reglyph = t => t.replace(OLD_GLYPHS, g => NEW_ICON[g]);
 const cap = s => s[0].toUpperCase() + s.slice(1);
 // what a piece does, short: the message box above the board is two lines (the rules below say the rest)
 const ABOUT = {
-  X: (p, s) => isCTO(p) ? `Higher wins. At 🧠${BAL.ASI}, stand on 🏢 and cut the power.` : BOOSTS(p) && !p.boosted && !(s && s.cut) ? "Higher number wins; same, both fall. +1 once on the 🏢." : "Higher number wins a fight; the same number, both fall.",
+  X: (p, s) => isCTO(p) ? `Higher wins. At 🧠${BAL.ASI}, park on 🏢: −${BAL.DRAIN} a turn.` : BOOSTS(p) && !p.boosted && !(s && s.cut) ? "Higher number wins; same, both fall. +1 once on the 🏢." : "Higher number wins a fight; the same number, both fall.",
   S: p => `${charSide(p) === "H" ? "Flies" : "Scuttles"} any distance in a straight line.`,
   M: p => p.side === "H" ? "Fights as a 3, and removes a backdoor safely." : "Fights as a 3, and removes a honeypot safely.",
   A: p => `Takes out an ${BAL.SPY_MIN} or ${BAL.SPY_MAX} it attacks; loses any other attack.`,
@@ -942,7 +965,7 @@ const ABOUT = {
   T: p => p.side === "H" ? "Can't move. An AI piece that attacks it joins the humans." : "Can't move. A human piece that attacks it joins the AI.",
   F: p => p.side === "H" ? "Can't move. If the AI reaches it, it gets out onto the Internet." : "Can't move. If the humans reach it, the AI is shut down.",
   R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
-  I: () => `Grows +1 every ${BAL.RSI_EVERY} rounds; at ${BAL.ASI} it beats everything.`,
+  I: (p, s) => s && s.cut ? (p.str > 0 ? `Drained to ${p.str}: fights as a ${p.str} and never grows again.` : "Drained to 0: fragile, any piece that finds it kills it.") : `Grows +1 every ${BAL.RSI_EVERY} rounds; at ${BAL.ASI} it beats everything. The CTO on 🏢 drains it.`,
   K: () => `Copies the number of whatever it fights, so both fall. Not a 🧠 at ${BAL.ASI}.`,
 };
 // tiny synthesized sounds, no files
@@ -1075,7 +1098,7 @@ if (params.has("sim")){
     const src = app.querySelector(`.sq[data-r="${sel.r}"][data-c="${sel.c}"]`); if (src) src.classList.add("sel");
     const lit = phase === "setup"
       ? [...app.querySelectorAll(".sq")].filter(q => !q.disabled && !q.dataset.id && SETUP_ROWS[me].includes(+q.dataset.r))
-      : legalMoves(state, sel).filter(m => !m.cut).map(m => app.querySelector(`.sq[data-r="${m.to[0]}"][data-c="${m.to[1]}"]`));
+      : legalMoves(state, sel).map(m => app.querySelector(`.sq[data-r="${m.to[0]}"][data-c="${m.to[1]}"]`));
     lit.forEach(q => q && q.classList.add("can"));
     const msg = app.querySelector(".msg"); if (msg && info) msg.innerHTML = info;
   }
@@ -1097,7 +1120,8 @@ if (params.has("sim")){
     // the 🏢 in setup) or, with a piece picked, on a square it can go to, keeps the page still; any other swipe
     // scrolls. Decided by sqAt's geometry when the finger goes down; the first touchmove's preventDefault is what holds it.
     // v0.37 (DEV-296): so does any of your own pieces (.own), on their turn too and while the bot thinks, so reaching
-    // for a piece too early never scrolls the page; empty squares, lakes and their pieces scroll; at game over, all of it.
+    // for a piece too early never scrolls the page (.grab now only adds the 🏢 in setup). Empty squares, lakes and their
+    // pieces scroll, except the squares a picked piece can go to (.can/.copy: tap-to-move); at game over, all of it.
     board.addEventListener("touchstart", e => { if (e.touches.length > 1) return; const sq = sqAt(e.touches[0]); holdTouch = !!sq && sq.matches(".grab,.can,.copy,.own"); }, { passive: true }); // a second finger keeps the first one's hold
     board.addEventListener("touchmove", e => { if (holdTouch && e.cancelable) e.preventDefault(); }, { passive: false });
     board.addEventListener("pointerdown", e => {
@@ -1217,13 +1241,15 @@ if (params.has("sim")){
     const prev = snapshotRects();
     const brainIn = BAL.RSI_EVERY - ((state.round - 1) % BAL.RSI_EVERY);
     const brain = brainOf(state);
-    const grows = state.rsi && brain && brain.str < BAL.MAX_STR && !state.cut; // a 🧠 at MAX_STR, or with the power cut, never grows again
+    const grows = state.rsi && brain && brain.str < BAL.MAX_STR && !state.cut; // a 🧠 at MAX_STR, or once the drain has started, never grows again
     const live = !!(brain && isSuper(brain)) && !state.cut; // a 10 on the board: the 🏢 lights up
-    const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : live ? 100 : 0;
-    const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? "power cut" : "superintelligent";
+    const drainNow = phase === "play" && !state.winner && !!state.drainOn; // v0.38 (DEV-295): the CTO is on the 🏢 draining the 🧠: it pulses (s.drainOn: public, set by apply)
+    // the bar: the growth clock; once the drain has started, how much of the 🧠 is left (its number is public: it grew in the open)
+    const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : state.cut && brain ? 100 * brain.str / BAL.MAX_STR : live ? 100 : 0;
+    const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? (brain.str <= 0 ? "0 · fragile" : `${brain.str} · ${drainNow ? "draining" : "held"}`) : "superintelligent";
     let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span>${mode === "solo" && phase !== "setup" ? `<span class="pill lvl">vs ${gameLevel.toUpperCase()}</span>` : ""}${mode === "live" && phase === "play" && !state.winner ? `<span class="pill turn ${state.turn === me ? "mine" : ""}" id="turnpill">${state.turn === me ? "YOUR MOVE" : "THEIR MOVE"}</span>` : ""}</div>`;
     let bhtml = `<div class="boardwrap"><div class="zoom" id="zoom"><div class="tilt"><div class="board" id="board">`;
-    const cans = sel ? legalMoves(state, sel).filter(m => !m.cut) : [];
+    const cans = sel ? legalMoves(state, sel) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
     const setupOpen = phase === "setup" && !(mode === "live" && LIVE.ready[me]), myTurn = phase === "play" && state.turn === me && !state.winner;
     const grab = (p, r, c) => p ? p.side === me && (setupOpen || myTurn) : setupOpen && me === "H" && onDC(state, r, c); // what pointermove lets you drag
@@ -1232,7 +1258,7 @@ if (params.has("sim")){
       const p = at(state, r, c);
       const k = ["sq"];
       if (BLOCKED.has(r+","+c)) k.push("block");
-      if (onDC(state, r, c)){ k.push("dc"); if (live) k.push("live"); if (state.cut) k.push("off"); if (dcPick && phase === "setup") k.push("pick"); }
+      if (onDC(state, r, c)){ k.push("dc"); if (drainNow) k.push("drain"); else if (live) k.push("live"); else if (state.cut) k.push("off"); if (dcPick && phase === "setup") k.push("pick"); }
       let inner = "", idAttr = "";
       if (p){
         k.push(cls(p.side));
@@ -1263,23 +1289,21 @@ if (params.has("sim")){
     else if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} ${me === "H" ? "Swap two (🏢 too)." : "Swap two, then START."}`; }
     else if (info) logHtml = info;
     else if (state.turn !== me && !state.winner) logHtml = mode === "live" ? `Waiting for <b>${SIDE_NAME[other(me)]}</b><span class="dots"><i>.</i><i>.</i><i>.</i></span>${LIVE.online[LIVE.host ? "guest" : "host"] ? "" : " They're away; your friend sees the board when they're back."}` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
-    else if (!state.winner && state.turn === me && state.pieces.some(x => x.side === me && canCut(state, x))) logHtml = `<span class="you">Your CTO is on 🏢.</span> Cut the power: the 🧠 turns fragile for good.`;
+    else if (!state.winner && state.turn === me && me === "H" && drainNow && !(lastFight && lastFight.line && state.log === lastFight.line)) logHtml = `<span class="you">Your CTO is on 🏢.</span> The 🧠 is ${brain.str}: it drops ${BAL.DRAIN} each turn you end with the CTO there.`;
     else if (!state.winner && (/to move\.$/.test(state.log) || (lastFight && lastFight.line && state.log === lastFight.line))) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then a lit square; red is a fight." : ""}`;
     else logHtml = color(state.log);
     if (mode === "live" && LIVE.note && phase !== "over") logHtml = `<b class="recon">${LIVE.note}</b> Your game is safe on the server.`;
     if (phase === "over"){
       const win = state.winner === me, draw = state.winner === "D";
-      const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ` + (state.last.from[0] === state.last.to[0] && state.last.from[1] === state.last.to[1] ? `cut the power at ${sqName(...state.last.to)}.` : `${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`);
+      const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`;
       html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}${mode === "live" && !LIVE.online[LIVE.host ? "guest" : "host"] ? ` · <span class="lvnote" id="friendleft">Your friend left.</span>` : ""}</div></div>`;
     } else html += `<div class="msg">${logHtml}</div>`;
     html += bhtml;
-    const cto = phase === "play" && state.turn === me && !busy && state.pieces.find(x => x.side === me && canCut(state, x));
     html += `<div class="actions${phase === "over" ? " end" : ""}">`;
     if (phase === "setup" && !(mode === "live" && LIVE.ready[me])) html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
     else if (phase === "setup") html += `<button class="ghost" id="restart">LEAVE</button>`;
     else if (phase === "play"){
-      // ⚡ takes the RULES slot when it applies, so the row (and the board above it) never moves
-      html += cto ? `<button class="primary cutbtn" id="cut">⚡ CUT THE POWER</button>` : `<button class="ghost" id="rules">RULES ↓</button>`;
+      html += `<button class="ghost" id="rules">RULES ↓</button>`; // v0.38 (DEV-295): no ⚡ CUT THE POWER any more: the drain needs no button
       if (sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel)) html += `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>`;
       html += soundHome();
     }
@@ -1307,7 +1331,6 @@ if (params.has("sim")){
     on("lineup", () => { sfx.tap(); dcPick = false; const cur = state.forms[me], n = FORMATIONS[me].length; layoutSide(state, me, cur == null ? 0 : cur + 1 >= n ? null : cur + 1, Math.random); sel = null; render(); }); on("go", begin); on("again", () => { if (mode === "live"){ sfx.tap(); if (!send({ t: "again" })) info = "Not connected. Reconnecting…"; return; } phase = "intro"; render(); });
     on("restart", () => { if (mode === "live") leaveLive(); phase = "intro"; render(); }); // live: the game waits on the server, in My games
     on("rules", () => { sfx.tap(); document.getElementById("rulesbox").scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); });
-    on("cut", () => { const cto = state.pieces.find(x => x.side === me && canCut(state, x)); if (cto) play({ p: cto, to: [cto.r, cto.c], cut: true }); });
     on("fline", () => { sfx.tap(); showLog(); });
     on("copybtn", () => { sfx.tap(); copyMode = !copyMode; render(); });
     // a key row explains a piece type, so it is never disguised (seen: true)
@@ -1329,7 +1352,7 @@ if (params.has("sim")){
       const lvl = t === "X" ? str : ARMIES[side].find(([tt]) => tt === t)[1];
       const ch = `<span class="pc tok ${cls(side)}"><span class="ic">${iconOf({ side, home: side, type: t, str: lvl })}</span>${LEVELS_UP(t) ? `<span class="n">${lvl}</span>` : ""}</span>`;
       const nm = roleName({ side, home: side, type: t, str: lvl });
-      return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${t === "X" && !state.cut && BOOSTS({ side, type: t, str }) ? ` <span class="kb" title="+1 at the 🏢, once">↑🏢</span>` : ""}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "cuts the power at 🏢" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
+      return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${t === "X" && !state.cut && BOOSTS({ side, type: t, str }) ? ` <span class="kb" title="+1 at the 🏢, once">↑🏢</span>` : ""}</span><span class="kp">${t === "X" ? (side === "H" && str === 9 ? "drains the 🧠 on 🏢" : "higher number wins") : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
     };
     const ranks = side => [...new Set(ARMIES[side].filter(([t]) => t === "X").map(([, n]) => n))].sort((a, b) => b - a);
     const specials = side => ["S","M","A","C","I","K","R","T","F"].filter(t => ARMIES[side].some(([tt]) => tt === t));
@@ -1349,7 +1372,7 @@ if (params.has("sim")){
       ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
       ${turnedRow(joinedThem, "theirs")}
-      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and cut the power: the 🧠 is fragile for good (still hidden), and any piece that finds it kills it. Until the cut, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌍 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and drain it: each human turn that ends with the CTO there, the 🧠 loses ${BAL.DRAIN} (10 → 9 → 8 …, and it never grows again). Below 10 it fights with its number like any piece (a 9 or 8 falls to the 📢 whistleblower; the 🎭 deepfake trades with it); at 0 it is fragile (still hidden), and any piece that finds it kills it. If the CTO leaves or falls, the drain stops where it is. Until the drain starts, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌍 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
     </div>`;
   }
   // the side a solo game is played from: the start screen's choice, remembered on this phone
@@ -1368,7 +1391,7 @@ if (params.has("sim")){
         <div class="rule"><div class="k a">🌍</div><div>Keep the AI off <b>the Internet</b>, or it gets out.</div></div>
         <div class="rule"><div class="k a">?</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
         <div class="rule"><div class="k a">🧠</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> first.</div></div>
-        <div class="rule"><div class="k b">🏢</div><div>At 10, get your CTO to your 🏢 and <b>cut the power</b>.</div></div>
+        <div class="rule"><div class="k b">🏢</div><div>At 10, park your CTO on your 🏢: it <b>drains the 🧠</b> 1 a turn.</div></div>
       </div>
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
       <div class="eyebrow">Play as</div>
@@ -1391,8 +1414,11 @@ if (params.has("sim")){
     document.getElementById("joinform").addEventListener("submit", e => { e.preventDefault(); sfx.tap(); openGame(document.getElementById("joincode").value); });
     renderMyGames();
   }
-  const DC_INFO = () => state.cut ? `<span class="you">🏢 ${me === "H" ? "Your" : "The humans'"} datacenter.</span> The power is cut: it gives nothing now.` : me === "H" ? `<span class="you">🏢 Your datacenter.</span> AI fighters 5–6 get +1 here, once. At 🧠${BAL.ASI} your CTO cuts the power here.`
-    : `<span class="you">🏢 The humans' datacenter.</span> Your fighters 5–6 get +1 here, once.`;
+  // v0.38 (DEV-295): the CTO drains the 🧠 here, 1 a turn, once it has been a 10
+  const DC_INFO = () => { const b = brainOf(state), head = `<span class="you">🏢 ${me === "H" ? "Your" : "The humans'"} datacenter.</span>`;
+    if (state.cut) return `${head} ${!b ? "The 🧠 is gone." : b.str <= 0 ? "The 🧠 is drained to 0: fragile." : state.drainOn ? `The CTO is draining the 🧠: ${b.str} now, −${BAL.DRAIN} each human turn it stays.` : `The 🧠 is down to ${b.str}. ${me === "H" ? "Your CTO back here drains it on." : "If their CTO comes back, it drains on."}`} No more +1s.`;
+    return me === "H" ? `${head} AI fighters 5–6 get +1 here, once. Once the 🧠 is a ${BAL.ASI}, each turn you end with your CTO here takes ${BAL.DRAIN} off it.`
+      : `${head} Your fighters 5–6 get +1 here, once. Once your 🧠 is a ${BAL.ASI}, their CTO standing here drains it ${BAL.DRAIN} a turn.`; };
   function explain(p){
     p = face(p);
     const n = (isTurned(p) ? "turned " : "") + (LEVELS_UP(p.type) ? `${roleName(p)} ${p.str}` : roleName(p));
@@ -1418,7 +1444,7 @@ if (params.has("sim")){
     if (!p && !sel && onDC(state, r, c)){ sfx.tap(); info = DC_INFO(); return render(); }
     if (p && p.side !== me && p.revealed && !sel){ sfx.tap(); info = explain(p); return render(); }
     if (sel){
-      const mv = legalMoves(state, sel).find(m => !m.cut && m.to[0] === r && m.to[1] === c && !!m.copy === copyMode);
+      const mv = legalMoves(state, sel).find(m => m.to[0] === r && m.to[1] === c && !!m.copy === copyMode);
       if (mv) play({ p: sel, ...mv });
     }
   }
@@ -1427,14 +1453,14 @@ if (params.has("sim")){
     if (mode === "live"){
       sel = null; copyMode = false; info = null;
       // the server checks it and sends it back to both phones; until then the board just waits
-      if (!send({ t: "move", id: move.p.id, to: move.to, copy: !!move.copy, cut: !!move.cut })){ info = "Not connected to the game server. Reconnecting…"; return render(); }
+      if (!send({ t: "move", id: move.p.id, to: move.to, copy: !!move.copy })){ info = "Not connected to the game server. Reconnecting…"; return render(); }
       busy = true; noSlide.clear(); app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach(q => q.classList.remove("can", "sel", "copy"));
       const msg = app.querySelector(".msg"); if (msg) msg.innerHTML = `Sending your move<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
       return;
     }
     const before = state; state = apply(state, move); sel = null; copyMode = false; info = null;
-    // a big alert (AGI, superintelligence, power cut) gets time on screen before the bot moves or the hand-off screen replaces it
-    const big = !FAST && state.events.some(e => e.kind === "cut" || e.kind === "agi" || e.kind === "asi");
+    // a big alert (AGI, superintelligence, the drain starting or reaching 0) gets time on screen before the bot moves or the hand-off screen replaces it
+    const big = !FAST && state.events.some(e => (e.kind === "drain" && (e.first || e.to === 0)) || e.kind === "agi" || e.kind === "asi");
     afterMove(before).then(() => { if (state.winner) return; setTimeout(botTurn, FAST ? 0 : big ? 1800 : 420); });
   }
   const wait = ms => new Promise(res => setTimeout(res, ms));
@@ -1556,9 +1582,13 @@ if (params.has("sim")){
       if (e.kind === "reveal") sfx.reveal();
       if (e.kind === "rsi"){ toast("🧠 the self-improver grew"); sfx.level(); }
       if (e.kind === "agi"){ toast("THE AI HAS REACHED AGI", true); sfx.big(); }
-      if (e.kind === "asi"){ toast("SUPERINTELLIGENCE · cut the power at 🏢", true); sfx.big(); }
+      if (e.kind === "asi"){ toast(me === "H" ? "SUPERINTELLIGENCE · park your CTO on 🏢" : "SUPERINTELLIGENCE · keep their CTO off 🏢", true); sfx.big(); }
       if (e.kind === "boost"){ toast(`🏢 ${e.from} → ${e.to} · fighters 5–6 get +1, once`); sfx.level(); }
-      if (e.kind === "cut"){ toast("⚡ POWER CUT · the 🧠 is fragile", true, "cut"); sfx.big(); shakeBoard(true); }
+      // v0.38 (DEV-295): one toast per step of the drain; the first and the last (0: fragile) are big
+      if (e.kind === "drain"){
+        if (e.to > 0){ toast(`⚡ Power draining: the 🧠 drops to ${e.to}`, e.first, "drain"); if (e.first){ sfx.big(); shakeBoard(true); } else sfx.level(); }
+        else { toast("⚡ POWER OUT · the 🧠 is at 0, fragile", true, "drain"); sfx.big(); shakeBoard(true); }
+      }
     }
     if (state.winner){
       const win = state.winner === me;
