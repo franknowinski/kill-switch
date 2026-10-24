@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs>
+      <linearGradient id="w3h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFBA45"/><stop offset=".55" stop-color="#F5A524"/><stop offset="1" stop-color="#E08A0B"/></linearGradient>
+      <radialGradient id="w3g"><stop offset="0" stop-color="#FF5C5C" stop-opacity=".55"/><stop offset="1" stop-color="#FF5C5C" stop-opacity="0"/></radialGradient>
+      
+    </defs>
+    <path d="M21.23 6 L42.77 6 L58 21.23 L58 42.77 L42.77 58 L21.23 58 L6 42.77 L6 21.23 Z" fill="url(#w3h)"/>
+    
+    <path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z" fill="#06121C"/>
+    
+    <circle cx="39.14" cy="31.53" r="10.17" fill="url(#w3g)"/>
+    <circle cx="39.14" cy="31.53" r="4.42" fill="#FF5C5C"/>
+    </svg>
