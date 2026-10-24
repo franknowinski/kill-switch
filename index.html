@@ -591,6 +591,13 @@ function simulate(games, seed0 = 1){
 if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, simulate, rng, BAL, ARMIES, FORMATIONS, layoutSide, name, isTurned, iconOf, BOOSTS };
 </script>
 <script>
+// v0.32 (DEV-290): the humans' 🌍 Internet, 🛸 drone and 🔧 engineer (were 🌐, 🚁 and 🧑‍🔧). The engine above keeps the
+// old glyphs so the two-player server's copy of it (killswitch-server cuts it out of this page) stays the same and needs
+// no redeploy; the page swaps the new ones in here, and in text the server wrote (a turned piece's name in the log).
+const NEW_ICON = { "🌐": "🌍", "🚁": "🛸", "🧑‍🔧": "🔧" };
+Object.assign(ICON.H, { F: "🌍", S: "🛸", M: "🔧" });
+const OLD_GLYPHS = new RegExp(Object.keys(NEW_ICON).join("|"), "gu");
+const reglyph = t => t.replace(OLD_GLYPHS, g => NEW_ICON[g]);
 const cap = s => s[0].toUpperCase() + s.slice(1);
 // what a piece does, short: the message box above the board is two lines (the rules below say the rest)
 const ABOUT = {
@@ -686,15 +693,30 @@ if (params.has("sim")){
   const FAST = params.has("over") || params.has("fast");
   // pointer handling: tap, or drag an own piece and drop it on a lit square
   let ptr = null, dragEl = null; // ptr.cx/cy: the dragged square's centre on screen
-  // the dragged piece's centre (on screen) decides the drop: the nearest legal square, as soon as it is nearer than the
-  // piece's own square. Screen rects, not offsets: the board is tilted, so a finger's pixels aren't the board's pixels.
+  // the dragged piece's centre (on screen) decides the drop: the square it is over, if that square is lit; still over its
+  // own square, a flick. Screen rects, not offsets: the board is tilted, so a finger's pixels aren't the board's pixels.
   const mid = el => { const q = el.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2, w: q.width, h: q.height }; };
+  // v0.32 (DEV-290), like chess.com: let go off the board, or over a square it can't go to, and nothing happens (the
+  // piece goes back). "Over" a square: inside its on-screen box, grown by a little toward its neighbours so the gaps
+  // between squares count, but never past the board's outer edge (just past the edge is off the board).
+  function squareUnder(x, y){
+    let best = null, bd = Infinity;
+    const topRow = me === "H" ? 0 : ROWS - 1, botRow = ROWS - 1 - topRow;
+    for (const q of app.querySelectorAll(".sq")){
+      const r = q.getBoundingClientRect(), pad = r.width * .08, cx = r.left + r.width / 2, cy = r.top + r.height / 2, d = Math.hypot(cx - x, cy - y);
+      const row = +q.dataset.r, col = +q.dataset.c;
+      const l = r.left - (col > 0 ? pad : 0), rt = r.right + (col < COLS - 1 ? pad : 0), t = r.top - (row !== topRow ? pad : 0), b = r.bottom + (row !== botRow ? pad : 0);
+      if (x >= l && x <= rt && y >= t && y <= b && d < bd){ bd = d; best = q; }
+    }
+    return best;
+  }
   function dropTarget(from, x, y){
     const src = app.querySelector(`.sq[data-r="${from.r}"][data-c="${from.c}"]`); if (!src) return null;
     const cands = phase === "setup" ? [...app.querySelectorAll(".sq")].filter(q => !q.disabled && SETUP_ROWS[me].includes(+q.dataset.r)) : [...app.querySelectorAll(".sq.can,.sq.copy")];
-    const s = mid(src); let best = null, bd = Math.hypot(x - s.x, y - s.y);
-    for (const q of cands){ if (q === src) continue; const m = mid(q), d = Math.hypot(m.x - x, m.y - y); if (d < bd){ bd = d; best = q; } }
-    if (best) return best;
+    const s = mid(src), under = squareUnder(x, y);
+    if (!under) return null; // off the board: cancel
+    if (under !== src) return cands.includes(under) ? under : null; // over a lit square: there; over any other: cancel
+    let best = null, bd = Infinity;
     // a flick: the piece hasn't reached a square, so go the way it was pulled. Of the lit squares within 40° of the drag
     // direction, take the one nearest the finger (a short flick picks the next square, a long one goes further for sliders).
     // let go still on (most of) the piece's own square: that cancels, as it always has; it has to be pulled off to flick
@@ -738,7 +760,13 @@ if (params.has("sim")){
       ptr = { r: +sq.dataset.r, c: +sq.dataset.c, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
     });
   }
-  function endDrag(){ if (floater){ floater.remove(); floater = null; } if (dragEl){ dragEl.classList.remove("drag"); dragEl = null; } }
+  // back (a cancelled drop): the lifted piece glides back to its square {x, y} first, then the piece shows there again
+  function endDrag(back){
+    const f = floater, d = dragEl; floater = null; dragEl = null;
+    const done = () => { if (f) f.remove(); if (d) d.classList.remove("drag"); };
+    if (!back || !f || reduce || FAST) return done();
+    fin(f.animate([{ left: back.x + "px", top: back.y + "px", transform: "translate(-50%,-50%) scale(1)" }], { duration: 180, easing: "cubic-bezier(.3,.7,.4,1)", fill: "forwards" }), 180).then(done); // fin: settles even if the page is hidden mid-glide
+  }
   window.addEventListener("pointermove", e => {
     if (!ptr || e.pointerId !== ptr.id) return;
     const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
@@ -788,7 +816,7 @@ if (params.has("sim")){
     app.querySelectorAll(".sq.over").forEach(x => x.classList.remove("over"));
     const t = dropTarget(was, was.cx + e.clientX - was.x, was.cy + e.clientY - was.y);
     if (t && sel) noSlide.add(String(sel.id));
-    endDrag();
+    endDrag(t ? null : { x: was.cx, y: was.cy }); // no target: nothing is played or sent, and the piece glides home
     if (was.dc){ if (t) tap(+t.dataset.r, +t.dataset.c); else { dcPick = Math.hypot(e.clientX - was.x, e.clientY - was.y) < 28; render(); } return; } // dcPick is set: the drop puts the 🏢 there; a wobbly tap leaves it picked up, like a piece
     if (t) tap(+t.dataset.r, +t.dataset.c);
   });
@@ -820,7 +848,7 @@ if (params.has("sim")){
   // ↺ turned: only on a face you can see, so a hidden piece that switched sides never stands out to the side it left
   const turnedHtml = p => isTurned(p) ? `<i class="trn ${cls(homeSide(p))}" title="turned">↺</i>` : "";
   function pieceHtml(p, show){ return `<div class="pz">${blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`, p.side === me && p.id % 3 === 0, `-${(p.id * 7) % 28 / 10}s`)}${p.boosted ? `<i class="bst">↑</i>` : ""}${show ? turnedHtml(p) : ""}</div>`; }
-  const color = t => t.replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), (w, at, str) => str.slice(Math.max(0, at - 4), at) === "The " ? w : `<span class="you">${at === 0 ? "Your" : "your"}</span>`).replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
+  const color = t => reglyph(t).replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), (w, at, str) => str.slice(Math.max(0, at - 4), at) === "The " ? w : `<span class="you">${at === 0 ? "Your" : "your"}</span>`).replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
   // FLIP: remember where every piece was drawn, then slide it from there after a re-render
   function snapshotRects(){
     const m = new Map();
@@ -961,7 +989,7 @@ if (params.has("sim")){
       ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
       ${turnedRow(joinedThem, "theirs")}
-      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and cut the power: the 🧠 is fragile for good (still hidden), and any piece that finds it kills it. Until the cut, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌐 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and cut the power: the 🧠 is fragile for good (still hidden), and any piece that finds it kills it. Until the cut, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌍 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
     </div>`;
   }
   // the side a solo game is played from: the start screen's choice, remembered on this phone
@@ -973,7 +1001,7 @@ if (params.has("sim")){
       <div class="games" id="mygames" hidden></div>
       <div class="rules">
         <div class="rule"><div class="k b">🛑</div><div>Reach the AI's <b>kill switch</b> to win.</div></div>
-        <div class="rule"><div class="k a">🌐</div><div>Keep the AI off <b>the Internet</b>, or it gets out.</div></div>
+        <div class="rule"><div class="k a">🌍</div><div>Keep the AI off <b>the Internet</b>, or it gets out.</div></div>
         <div class="rule"><div class="k a">?</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
         <div class="rule"><div class="k a">🧠</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> first.</div></div>
         <div class="rule"><div class="k b">🏢</div><div>At 10, get your CTO to your 🏢 and <b>cut the power</b>.</div></div>
