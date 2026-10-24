@@ -150,6 +150,9 @@ body.me-ai .pill.turn.mine{background:var(--amber);border-color:var(--amber)}
 .pc.h{background:var(--blue-bg);border:1px solid #1f4b6b;color:var(--blue)}
 .pc.ai{background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber)}
 .actions{display:flex;gap:8px;padding:0 8px;flex-shrink:0}.actions .ghost,.actions .primary{min-height:44px}.actions .primary{font-size:16px}
+/* game over (v0.37, DEV-296): PLAY AGAIN · RULES ↓ · 🔊 · 🏠 on one line, each label on one line, down to 320 px */
+.actions.end button{white-space:nowrap;padding:0 4px}
+@media (max-width:360px){.actions.end .primary{font-size:14px;letter-spacing:.5px}.actions.end .ghost:not(.sm){font-size:13px;letter-spacing:.5px}.actions.end .ghost.sm{flex-basis:44px}}
 .ghost{flex:1;min-height:46px;border-radius:12px;border:1px solid var(--line2);background:transparent;font-family:var(--display);font-weight:700;letter-spacing:1px;font-size:15px}
 .ghost[aria-pressed="true"]{border-color:var(--green);color:var(--green);background:#0d2418}
 .ghost:disabled{opacity:.4}
@@ -1093,7 +1096,9 @@ if (params.has("sim")){
     // v0.36 (DEV-294): a touch that starts on a square you can drag from (.grab: your pieces on your turn and in setup,
     // the 🏢 in setup) or, with a piece picked, on a square it can go to, keeps the page still; any other swipe
     // scrolls. Decided by sqAt's geometry when the finger goes down; the first touchmove's preventDefault is what holds it.
-    board.addEventListener("touchstart", e => { if (e.touches.length > 1) return; const sq = sqAt(e.touches[0]); holdTouch = !!sq && sq.matches(".grab,.can,.copy"); }, { passive: true }); // a second finger keeps the first one's hold
+    // v0.37 (DEV-296): so does any of your own pieces (.own), on their turn too and while the bot thinks, so reaching
+    // for a piece too early never scrolls the page; empty squares, lakes and their pieces scroll; at game over, all of it.
+    board.addEventListener("touchstart", e => { if (e.touches.length > 1) return; const sq = sqAt(e.touches[0]); holdTouch = !!sq && sq.matches(".grab,.can,.copy,.own"); }, { passive: true }); // a second finger keeps the first one's hold
     board.addEventListener("touchmove", e => { if (holdTouch && e.cancelable) e.preventDefault(); }, { passive: false });
     board.addEventListener("pointerdown", e => {
       const sq = sqAt(e); if (!sq || sq.disabled || busy) return;
@@ -1241,6 +1246,7 @@ if (params.has("sim")){
         if (prevSides.has(String(p.id)) && prevSides.get(String(p.id)) !== p.side) turns.push(String(p.id));
       }
       if (grab(p, r, c)) k.push("grab");
+      if (p && p.side === me && phase !== "over") k.push("own"); // v0.37 (DEV-296): holds the finger (bindPointer), whoever's turn it is
       if (sel && sel.r === r && sel.c === c) k.push("sel");
       if (phase === "setup" && sel && !p && SETUP_ROWS[me].includes(r) && !BLOCKED.has(r+","+c)) k.push("can");
       if (phase === "setup" && dcPick && me === "H" && SETUP_ROWS.H.includes(r) && !BLOCKED.has(r+","+c) && !onDC(state, r, c)) k.push("can"); // where the 🏢 can go
@@ -1268,7 +1274,7 @@ if (params.has("sim")){
     } else html += `<div class="msg">${logHtml}</div>`;
     html += bhtml;
     const cto = phase === "play" && state.turn === me && !busy && state.pieces.find(x => x.side === me && canCut(state, x));
-    html += `<div class="actions">`;
+    html += `<div class="actions${phase === "over" ? " end" : ""}">`;
     if (phase === "setup" && !(mode === "live" && LIVE.ready[me])) html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
     else if (phase === "setup") html += `<button class="ghost" id="restart">LEAVE</button>`;
     else if (phase === "play"){
@@ -1277,7 +1283,7 @@ if (params.has("sim")){
       if (sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel)) html += `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>`;
       html += soundHome();
     }
-    else if (phase === "over") html += `<button class="primary" id="again">PLAY AGAIN</button>` + soundHome(); // v0.36 (DEV-294): 🔊 and 🏠 here too
+    else if (phase === "over") html += `<button class="primary" id="again">PLAY AGAIN</button><button class="ghost" id="rules">RULES ↓</button>` + soundHome(); // v0.36 (DEV-294): 🔊 and 🏠 here too; v0.37 (DEV-296): RULES ↓
     html += `</div>`;
     html += `</div><div class="right" id="rulesbox"><p class="more">↓ Rules and pieces</p>` + listHtml() + `</div>`;
     app.innerHTML = html;
