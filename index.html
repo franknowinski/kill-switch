@@ -210,6 +210,9 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 .seg button{min-height:48px;border-radius:10px;border:1px solid transparent;background:transparent;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:1px;color:var(--muted)}
 .seg button[aria-pressed="true"].h{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
 .seg button[aria-pressed="true"].ai{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
+.seg.lv{grid-template-columns:1fr 1fr 1fr}.seg.lv{margin-top:-6px}.seg.lv button{min-height:36px;font-size:14px;padding:0 4px}
+.seg.lv button[aria-pressed="true"]{background:#1B2633;border-color:var(--fg);color:var(--fg)} /* v0.35: the bot's level, beside the side picker */
+.pill.lvl{color:var(--muted)}
 .lgs{display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow:auto;font-size:13px;line-height:1.4}
 .lgs div{padding:4px 2px;border-bottom:1px solid #182230}.lgs i{font-style:normal;color:var(--muted);font-size:11px;margin-right:6px}.lgs .mile{color:var(--amber)}
 /* phones: the board stretches to fill the space (squares taller than wide) with a flatter tilt, as in v0.22 */
@@ -613,7 +616,306 @@ function simulate(games, seed0 = 1){
   return { games, humanWins: h, aiWins: ai, draws, avgRounds: Math.round(rounds / games), agiGames: agi, asiGames: asi, brainKilled: rsiDead, powerCut: cuts, boostsPerGame: +(boosts / games).toFixed(2) };
 }
 // ENGINE-END
-if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, simulate, rng, BAL, ARMIES, FORMATIONS, layoutSide, name, isTurned, iconOf, BOOSTS };
+// Bot levels (v0.35, DEV-293): EASY / MEDIUM / HARD for solo games. They live out here, after ENGINE-END, so the two-player
+// server's copy of the engine (cut from between the markers) stays the same: live games have no bot. MEDIUM is botMove
+// above, unchanged. Neither of the others cheats: each reads only what its side could know: pieces it has seen (known), what
+// the other army still has hidden (it started as ARMIES, and every fight, switch and 🏢 boost is public, so the pool of
+// unseen pieces is common knowledge, though not which is which), which enemy pieces have moved or slid, the 🏢 and the 🧠's number.
+const BOT_LEVELS = ["easy", "medium", "hard"];
+const BOT_NAME = { easy: "Easy", medium: "Medium", hard: "Hard" };
+const toLevel = v => BOT_LEVELS.includes(v) ? v : "medium";
+// a bot for one game at a level: (s, side, r) => move. HARD keeps notes through the game, so make one per game.
+function levelBot(level){ const mem = {}; return level === "easy" ? (s, side, r) => easyMove(s, side, r) : level === "hard" ? (s, side, r) => hardMove(s, side, r, mem) : botMove; }
+// the bot's own setup: MEDIUM keeps the lineup newGame dealt it; EASY a careless spread with its flag out of the back row;
+// HARD one of the lineups that did best in the sims (HARD.FORMS)
+function botSetup(s, side, level, r){
+  if (level === "hard") layoutSide(s, side, HARD.FORMS[side][Math.floor(r() * HARD.FORMS[side].length)], r);
+  if (level !== "easy") return s;
+  layoutSide(s, side, null, r);
+  const flag = s.pieces.find(p => p.side === side && p.type === "F");
+  const mid = s.pieces.filter(p => p.side === side && p.r === SETUP_ROWS[side][1] && p.type !== "T");
+  const swap = mid[Math.floor(r() * mid.length)];
+  if (swap){ const t = [flag.r, flag.c]; flag.r = swap.r; flag.c = swap.c; swap.r = t[0]; swap.c = t[1]; }
+  return s;
+}
+// EASY: a beginner. Some moves are botMove's; the rest are careless: forward, or a blind attack with whatever is nearest,
+// big pieces included. It misses most wins it could see.
+const EASY = { SHARP: .5, SPOT: .25 };
+function easyMove(s, side, r){
+  const moves = sideMoves(s, side); if (!moves.length) return null;
+  if (r() < EASY.SHARP){
+    const m = botMove(s, side, r), q = m.cut ? null : at(s, m.to[0], m.to[1]);
+    if (!(m.cut || (q && known(q) && q.type === "F")) || r() < EASY.SPOT) return m;
+  }
+  const fwd = side === "H" ? -1 : 1;
+  let best = null, bs = -Infinity;
+  for (const m of moves){
+    if (m.cut || m.copy) continue;
+    const p = m.p, q = at(s, m.to[0], m.to[1]);
+    let sc = r() * 10 + (m.to[0] - p.r) * fwd * 3 + (q ? 3 : 0);
+    if (q && known(q) && q.type === "F" && r() > EASY.SPOT) sc -= 50; // doesn't notice it
+    if (p.type === "I" && !isSuper(p)) sc -= 6;
+    if (s.last && s.last.side === side && s.last.to[0] === p.r && s.last.to[1] === p.c && s.last.from[0] === m.to[0] && s.last.from[1] === m.to[1]) sc -= 5;
+    if (sc > bs){ bs = sc; best = m; }
+  }
+  return best || moves[0];
+}
+// HARD: weighs every move by what it expects to happen. Each hidden enemy piece gets odds for what it could be, from the
+// unseen pool, then sharpened: a piece that moved is no flag or trap, one that slid is a slider, the back row that never
+// moved holds the flag, traps and 🧠. A fight is scored as the odds-weighted gain or loss; every move also counts the risk
+// to the piece it moved (and the one it leaves), any line it opens to its own flag, the hunt for the flag (and, as the
+// humans, the small 🧠), the CTO's walk to the 🏢 in time for the 🧠's 10, and the AI fighters' +1 there. The best TOP
+// moves are then played out in WORLDS guessed worlds, one reply deep (see hardWorld). About 15 ms a move at 4× CPU throttle.
+const HARD = { FLAG: 400, CTO_LEAD: 10, CTO_RISK: 30, BRAIN: 1, TOP: 25, WORLDS: 12, LOOK: 10, GATE_MINE: 40, GATE_THEIRS: 20, FORMS: { H: [0, 2], AI: [0, 3] } };
+const HV = { F: 0, T: 4, S: 2, M: 4.5, A: 5, C: 3.5, K: 6, R: 4, P: 4 };
+const XV = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6.5, 7: 8.5, 8: 11, 9: 14, 10: 16 };
+function hardVal(s, p){
+  if (p.type === "X") return (XV[p.str] || p.str) + (isCTO(p) && !s.cut && brainOf(s) ? 6 : 0);
+  if (p.type === "I") return s.cut ? 2 : 14 + p.str * 2;
+  return HV[p.type];
+}
+// a attacks d: what happens (the same rules as apply, for a piece that may only be a guess)
+function fightOf(s, a, d){
+  if (d.type === "F") return "flag";
+  if (d.type === "T") return a.type === "M" || isSuper(a) ? "defuse" : "trapped";
+  if (s.cut && (a.type === "I" || d.type === "I")) return d.type === "I" ? "win" : "lose";
+  if ((a.type === "K" || d.type === "K") && !isSuper(a.type === "K" ? d : a)) return "tie";
+  if (a.type === "A") return d.str >= BAL.SPY_MIN && d.str <= BAL.SPY_MAX && LEVELS_UP(d.type) ? "win" : "lose";
+  return a.str > d.str ? "win" : a.str === d.str ? "tie" : "lose";
+}
+// Ids are dealt army by army in ARMIES order (the flag first), so an enemy piece's id or its place in s.pieces says what it
+// is: HARD never orders or breaks a tie by them, only by square
+const bySquare = (a, b) => a.r - b.r || a.c - b.c;
+// what this side may know of the other's hidden pieces: id -> [{ type, str, side, w }], odds summing to 1
+function hardOdds(s, side, mem){
+  const foe = other(side), hidden = s.pieces.filter(q => q.side === foe && !known(q)).sort(bySquare);
+  const pool = new Map(); // the unseen pool: kinds and counts only
+  for (const q of hidden){ const k = q.type + q.str; const e = pool.get(k); if (e) e.n++; else pool.set(k, { type: q.type, str: q.str, side: foe, n: 1 }); }
+  const kinds = [...pool.values()].sort((a, b) => a.type < b.type ? -1 : a.type > b.type ? 1 : a.str - b.str), back = foe === "H" ? ROWS - 1 : 0;
+  // a prior for each piece, then rows and columns balanced (a few rounds) so each kind's odds add up to how many are left
+  const W = hidden.map(q => kinds.map(k => {
+    const moved = mem.moved.has(q.id), depth = Math.abs(q.r - back);
+    if (mem.slid.has(q.id)) return k.type === "S" ? 1 : 0;
+    if (k.type === "F" || k.type === "T") return moved ? 0 : depth === 0 ? 3 : depth === 1 ? 1 : .3;
+    if (k.type === "I") return moved ? (isSuper(k) ? 1 : .15) : depth === 0 ? 3 : .4;
+    return moved ? 1.2 : 1;
+  }));
+  for (let it = 0; it < 4; it++){
+    kinds.forEach((k, j) => { let t = 0; for (const row of W) t += row[j]; if (t > 0) for (const row of W) row[j] *= k.n / t; });
+    for (const row of W){ let t = 0; for (const x of row) t += x; if (t > 0) for (let j = 0; j < row.length; j++) row[j] /= t; }
+  }
+  const odds = new Map();
+  hidden.forEach((q, i) => odds.set(q.id, kinds.map((k, j) => ({ type: k.type, str: k.str, side: foe, w: W[i][j] })).filter(x => x.w > .001)));
+  return odds;
+}
+// keep notes: which enemy pieces have moved, which slid more than one square (only a slider can)
+function hardNote(s, side, mem){
+  if (mem.seed !== s.seed || !mem.moved || s.round < (mem.round || 0)){ mem.seed = s.seed; mem.moved = new Set(); mem.slid = new Set(); mem.seen = null; }
+  mem.round = s.round;
+  const L = s.last;
+  if (L && L.side !== side && L !== mem.seen){
+    mem.seen = L;
+    const q = at(s, L.to[0], L.to[1]);
+    if (q && q.side === L.side && !(L.from[0] === L.to[0] && L.from[1] === L.to[1])){
+      mem.moved.add(q.id);
+      if (Math.abs(L.from[0] - L.to[0]) + Math.abs(L.from[1] - L.to[1]) > 1) mem.slid.add(q.id);
+    }
+  }
+}
+function hardMove(s, side, r, mem){
+  hardNote(s, side, mem);
+  const moves = sideMoves(s, side);
+  if (!moves.length) return null;
+  const foe = other(side), fwd = side === "H" ? -1 : 1;
+  const odds = hardOdds(s, side, mem);
+  const kinds = q => known(q) ? [{ type: q.type, str: q.str, side: q.side, w: 1, base: q.base, id: q.id }] : odds.get(q.id) || [];
+  const myFlag = s.pieces.find(p => p.side === side && p.type === "F");
+  const brain = brainOf(s), ten = brain && isSuper(brain) && !s.cut ? brain : null;
+  const dist = (a, b, c, d) => Math.abs(a - c) + Math.abs(b - d);
+  const toDC = (rr, cc) => s.dc ? dist(rr, cc, s.dc[0], s.dc[1]) : 0;
+  const ctoAlive = s.pieces.some(isCTO);
+  // where the enemy flag probably is: each hidden piece's odds of being it (a known one is certain)
+  const foes = s.pieces.filter(q => q.side === foe).sort(bySquare); // by square, so a tie never falls to the order the pieces were dealt in
+  const pOf = (q, t) => known(q) ? (q.type === t ? 1 : 0) : (odds.get(q.id) || []).reduce((a, k) => a + (k.type === t ? k.w : 0), 0);
+  const flagOdds = foes.map(q => [q, pOf(q, "F")]).filter(x => x[1] > .02).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  // the humans also hunt the 🧠 while it is small: it never moves before 10, so it hides among the unmoved back row
+  const goals = side === "H" && brain && !isSuper(brain) ? foes.map(q => [q, pOf(q, "F") + HARD.BRAIN * pOf(q, "I")]).filter(x => x[1] > .02).sort((a, b) => b[1] - a[1]).slice(0, 4) : flagOdds;
+  // the risk to my piece p standing on (rr,cc): the worst an enemy next to it could do on its move. An enemy that knows p
+  // attacks when it wins; a blind one sometimes. A fight it loses is a gain.
+  const shown = p => p.revealed || p.seen;
+  function risk(p, rr, cc, isKnown, skip){
+    let worst = 0;
+    for (const [dr, dc] of DIRS){
+      const e = at(s, rr + dr, cc + dc);
+      if (!e || e.side !== foe || e.id === skip) continue;
+      let lose = 0, gain = 0;
+      for (const k of kinds(e)){
+        if (k.type === "F" || k.type === "T") continue;
+        const f = fightOf(s, k, p), v = hardVal(s, p);
+        if (f === "win" || f === "flag") lose += k.w * v;
+        else if (f === "tie") lose += k.w * (v - hardVal(s, k));
+        else if (f === "defuse") lose += k.w * v;
+        else if (f === "lose") gain += k.w * hardVal(s, k);
+      }
+      const go = isKnown ? .9 : .35;
+      worst = Math.max(worst, go * lose - go * .3 * gain);
+    }
+    return worst;
+  }
+  // the danger to my own flag after a move (from → to, the mover standing on to): an enemy next to it that can move, or
+  // one that may be a slider with a clear line to it, and, less, one a step away from a free square next to it
+  const mobile = e => known(e) ? (e.type === "F" || e.type === "T" ? 0 : 1) : 1 - pOf(e, "F") - pOf(e, "T");
+  const slider = e => known(e) ? (e.type === "S" ? 1 : 0) : mem.slid.has(e.id) ? 1 : pOf(e, "S");
+  function flagThreat(fr, fc, tr, tc, mover, enemyThere){
+    if (!myFlag) return 0;
+    const occ = (rr, cc) => rr === fr && cc === fc ? null : rr === tr && cc === tc ? (enemyThere || mover) : at(s, rr, cc);
+    let t = 0;
+    for (const [dr, dc] of DIRS){
+      let rr = myFlag.r + dr, cc = myFlag.c + dc, d = 1;
+      while (inb(rr, cc)){
+        const e = occ(rr, cc);
+        if (e){ if (e.side === foe) t += d === 1 ? mobile(e) : slider(e); break; }
+        if (d === 1) for (const [er, ec] of DIRS){ const e2 = occ(rr + er, cc + ec); if (e2 && e2.side === foe && !(rr + er === myFlag.r && cc + ec === myFlag.c)) t += .3 * mobile(e2); }
+        rr += dr; cc += dc; d++;
+      }
+    }
+    return t;
+  }
+  const scored = [];
+  for (const m of moves){
+    const p = m.p, [tr, tc] = m.to, q = m.cut ? null : at(s, tr, tc);
+    let sc = r();
+    if (!m.cut && !m.copy && myFlag){ // the flag first: a move that lets an enemy reach it is a lost game
+      let pWin = 1, pTrap = 0;
+      if (q){ pWin = 0; for (const k of kinds(q)){ const f = fightOf(s, p, k); if (f === "win" || f === "defuse" || f === "flag") pWin += k.w; else if (f === "trapped") pTrap += k.w; } }
+      const turned = { ...p, side: foe, seen: true }; // trapped: it stands there for them now, and they all know what it is
+      const t = (pWin > 0 ? pWin * flagThreat(p.r, p.c, tr, tc, p, null) : 0) + (pTrap > 0 ? pTrap * flagThreat(p.r, p.c, tr, tc, p, turned) : 0)
+        + (pWin + pTrap < 1 ? (1 - pWin - pTrap) * flagThreat(p.r, p.c, tr, tc, p, q) : 0);
+      sc -= t * HARD.FLAG;
+    }
+    if (m.cut){ sc += 900; }
+    else if (m.copy){ const src = copySource(s, p); sc += s.round >= 4 ? 4 + src.str : -50; }
+    else if (q){
+      // a fight: the odds-weighted result
+      let ev = 0, pWin = 0;
+      for (const k of kinds(q)){
+        const f = fightOf(s, p, k), vq = hardVal(s, k), vp = hardVal(s, p);
+        let v = 0;
+        if (f === "flag") v = 5000;
+        else if (f === "defuse") v = HV.T + 3;
+        else if (f === "trapped") v = -1.8 * vp + HV.T;
+        else if (f === "win") v = vq;
+        else if (f === "tie") v = vq - vp;
+        else v = -vp;
+        if (f === "win" || f === "defuse" || f === "flag") pWin += k.w;
+        ev += k.w * v;
+      }
+      sc += ev * 10;
+      if (!known(q)) sc += 4 + flagOdds.reduce((a, [x, w]) => a + (x.id === q.id ? w * 30 : 0), 0); // what it learns, more when it might be the flag
+      if (pWin > 0) sc -= pWin * risk(p, tr, tc, true, q.id) * 10; // the winner stands there, seen
+      sc += risk(p, p.r, p.c, shown(p)) * 10 * .5; // and it leaves where it was in danger
+      if (myFlag){ const d = dist(tr, tc, myFlag.r, myFlag.c); if (d <= 2) sc += (d === 1 ? 60 : 25) * pWin; } // an attacker at the gate
+      if (isCTO(p) && brain && !s.cut && !known(q)) sc -= HARD.CTO_RISK; // the CTO keeps out of blind fights: it is needed at the 🏢
+      if (ten && side === "AI" && onDC(s, tr, tc)) sc += 200 * pWin; // whatever stands on the 🏢 is probably the CTO
+      if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted && onDC(s, tr, tc)) sc += 30 * pWin;
+    } else {
+      // a plain move: get out of danger, don't walk into it, and go where it counts
+      sc += (risk(p, p.r, p.c, shown(p)) - risk(p, tr, tc, shown(p))) * 10;
+      const step = (tr - p.r) * fwd;
+      const pr = p.type === "I" && !isSuper(p);
+      if (pr) sc -= 25;
+      else if (p.type === "X" || p.type === "K") sc += step * 2;
+      else if (p.type === "M" || p.type === "C") sc += step * 2.5;
+      else if (p.type === "S") sc += step * .5;
+      else if (p.type === "A") sc += step * .8;
+      // toward the likely flag: engineers and hackers above all (they defuse the traps around it)
+      if (!pr && !isCTO(p) && goals.length){
+        const g = p.type === "M" ? 6 : p.type === "X" && p.str >= 6 ? 2 : p.type === "C" ? 2 : 1;
+        for (const [x, w] of goals) sc += (dist(p.r, p.c, x.r, x.c) - dist(tr, tc, x.r, x.c)) * g * w * 2;
+      }
+      // toward known enemies it beats; away from known traps unless it removes them
+      for (const e of foes){
+        if (!known(e)) continue;
+        const d0 = dist(p.r, p.c, e.r, e.c), d1 = dist(tr, tc, e.r, e.c);
+        if (d0 > 4) continue;
+        const f = fightOf(s, p, e);
+        if (f === "win" || f === "defuse" || f === "flag") sc += (d0 - d1) * Math.min(20, hardVal(s, e)) * .6;
+      }
+      // the CTO stays home and walks to the 🏢 in time for the 🧠's 10 (its number and the growth clock are public)
+      if (isCTO(p) && brain && !s.cut){
+        const eta = (BAL.ASI - brain.str) * BAL.RSI_EVERY, w = ten || eta <= toDC(p.r, p.c) * 2 + HARD.CTO_LEAD ? 25 : 4;
+        sc += (toDC(p.r, p.c) - toDC(tr, tc)) * w + (onDC(s, tr, tc) ? 60 : 0) - (onDC(s, p.r, p.c) ? 80 : 0) - step * 2;
+      }
+      if (ten){
+        if (side === "AI" && p === ten && ctoAlive) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 12; // the 10 goes to sit on the 🏢: no cut
+      }
+      if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted){ if (onDC(s, tr, tc)) sc += 30; else sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 1.5; }
+      if (side === "AI" && s.cut && p.type === "I") sc -= 10;
+      if (s.last && s.last.side === side && s.last.to[0] === p.r && s.last.to[1] === p.c && s.last.from[0] === tr && s.last.from[1] === tc) sc -= 8;
+      if (myFlag && dist(p.r, p.c, myFlag.r, myFlag.c) === 1 && p.type !== "S") sc -= 3; // keep the guard
+    }
+    scored.push({ m, sc });
+  }
+  // then look one reply ahead for the best few: in several guessed worlds (each hidden piece dealt a kind from the unseen
+  // pool, by its odds), play the move, let the other side answer the way a plain bot would, and score what is left
+  scored.sort((a, b) => b.sc - a.sc);
+  const top = scored.slice(0, HARD.TOP);
+  if (top.length > 1 && HARD.WORLDS > 0){
+    const worlds = [];
+    for (let w = 0; w < HARD.WORLDS; w++) worlds.push(hardWorld(s, foe, odds, r));
+    const rr = rng(Math.floor(r() * 4294967296));
+    for (const t of top){
+      let tot = 0;
+      for (const ws of worlds){
+        const s1 = apply(ws, t.m);
+        if (s1.winner){ tot += hardEval(s1, side); continue; }
+        const reply = botMove(s1, foe, rr);
+        tot += hardEval(reply ? apply(s1, reply) : s1, side);
+      }
+      t.sc += tot / worlds.length * HARD.LOOK;
+    }
+    top.sort((a, b) => b.sc - a.sc);
+  }
+  return top[0].m;
+}
+// one guessed world: a copy of the board with every hidden enemy piece dealt a kind, drawn without replacement from the
+// unseen pool, by each piece's odds
+function hardWorld(s, foe, odds, r){
+  const w = clone(s), left = new Map();
+  w.pieces.sort(bySquare);
+  const hidden = w.pieces.filter(q => q.side === foe && !known(q));
+  for (const q of hidden){ const k = q.type + "," + q.str; left.set(k, (left.get(k) || 0) + 1); }
+  shuffle(hidden, r);
+  for (const q of hidden){
+    const opts = (odds.get(q.id) || []).filter(k => left.get(k.type + "," + k.str) > 0);
+    let pick = null;
+    if (opts.length){ let t = 0; for (const k of opts) t += k.w; let x = r() * t; for (const k of opts){ x -= k.w; if (x <= 0){ pick = k; break; } } pick = pick || opts[opts.length - 1]; }
+    else { const k = [...left.keys()].sort().find(k => left.get(k) > 0).split(","); pick = { type: k[0], str: +k[1] }; }
+    const key = pick.type + "," + pick.str; left.set(key, left.get(key) - 1);
+    q.type = pick.type; q.str = pick.str; delete q.base;
+  }
+  return w;
+}
+// a guessed world after a move and its reply, for side: what each side has, and who is next to whose flag
+function hardEval(s, side){
+  if (s.winner) return s.winner === side ? 1000 : s.winner === "D" ? 0 : -1000;
+  let v = 0;
+  for (const p of s.pieces){
+    const mine = p.side === side;
+    v += (mine ? 1 : -1) * hardVal(s, p);
+    if (p.type !== "F") continue;
+    for (const [dr, dc] of DIRS){
+      let rr = p.r + dr, cc = p.c + dc, d = 1;
+      while (inb(rr, cc)){
+        const e = at(s, rr, cc);
+        if (e){ if (e.side !== p.side && e.type !== "F" && e.type !== "T" && (d === 1 || e.type === "S")) v += (mine ? -1 : 1) * (mine ? HARD.GATE_MINE : HARD.GATE_THEIRS); break; }
+        rr += dr; cc += dc; d++;
+      }
+    }
+  }
+  return v;
+}
+if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, simulate, rng, BAL, ARMIES, FORMATIONS, layoutSide, name, isTurned, iconOf, BOOSTS, levelBot, botSetup, BOT_LEVELS, sideMoves, legalMoves, other, known };
 </script>
 <script>
 // v0.32 (DEV-290): the humans' 🌍 Internet, 🛸 drone and 🔧 engineer (were 🌐, 🚁 and 🧑‍🔧). The engine above keeps the
@@ -706,6 +1008,7 @@ if (params.has("sim")){
   let dcPick = false; // setup: the 🏢 is picked up, the next tap puts it down
   let state, phase = "intro", sel = null, copyMode = false, info = null, busy = false;
   let me = "H";          // the side this screen plays
+  let gameLevel = "medium", levelMove = botMove; // solo: the bot's level this game (BOT_LEVELS), and its move function
   let mode = "solo";     // solo: the bot plays the other side. live: a friend on their own phone, through our server
   const SIDE_WORD = { H: "Human", AI: "AI" };
   const theirs = () => SIDE_WORD[other(me)];
@@ -860,6 +1163,7 @@ if (params.has("sim")){
   function start(m = "solo", side = "H"){
     mode = m; me = side; document.body.classList.toggle("me-ai", me === "AI");
     state = newGame(seed + Math.floor(Math.random()*1e6)); phase = "setup"; sel = null; dcPick = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null;
+    if (mode === "solo"){ gameLevel = soloLevel; levelMove = levelBot(gameLevel); botSetup(state, other(me), gameLevel, bot); } // the bot sets up its own side for its level
     render();
   }
   // after START: solo as the AI means the bot (humans) moves first; live, the server waits for both sides
@@ -901,7 +1205,7 @@ if (params.has("sim")){
     const live = !!(brain && isSuper(brain)) && !state.cut; // a 10 on the board: the 🏢 lights up
     const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : live ? 100 : 0;
     const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? "power cut" : "superintelligent";
-    let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span>${mode === "live" && phase === "play" && !state.winner ? `<span class="pill turn ${state.turn === me ? "mine" : ""}" id="turnpill">${state.turn === me ? "YOUR MOVE" : "THEIR MOVE"}</span>` : ""}</div>`;
+    let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span>${mode === "solo" && phase !== "setup" ? `<span class="pill lvl">vs ${gameLevel.toUpperCase()}</span>` : ""}${mode === "live" && phase === "play" && !state.winner ? `<span class="pill turn ${state.turn === me ? "mine" : ""}" id="turnpill">${state.turn === me ? "YOUR MOVE" : "THEIR MOVE"}</span>` : ""}</div>`;
     let bhtml = `<div class="boardwrap"><div class="zoom" id="zoom"><div class="tilt"><div class="board" id="board">`;
     const cans = sel ? legalMoves(state, sel).filter(m => !m.cut) : [];
     const nowShown = new Set(), nowSides = new Map(), flips = [], turns = [];
@@ -946,7 +1250,7 @@ if (params.has("sim")){
     if (phase === "over"){
       const win = state.winner === me, draw = state.winner === "D";
       const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ` + (state.last.from[0] === state.last.to[0] && state.last.from[1] === state.last.to[1] ? `cut the power at ${sqName(...state.last.to)}.` : `${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`);
-      html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}</div></div>`;
+      html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}</div></div>`;
     } else html += `<div class="msg">${logHtml}</div>`;
     html += bhtml;
     const cto = phase === "play" && state.turn === me && !busy && state.pieces.find(x => x.side === me && canCut(state, x));
@@ -1031,6 +1335,10 @@ if (params.has("sim")){
   // the side a solo game is played from: the start screen's choice, remembered on this phone
   let soloSide = "H";
   try { if (localStorage.getItem("ks-side") === "AI") soloSide = "AI"; } catch (e) {}
+  // and the bot's level (v0.35), remembered the same way; &level=easy|medium|hard picks it for tests
+  let soloLevel = "medium";
+  try { soloLevel = toLevel(localStorage.getItem("ks-level")); } catch (e) {}
+  if (params.has("level")) soloLevel = toLevel(params.get("level"));
   function renderIntro(){
     app.innerHTML = `<div class="overlay"><div class="card">
       <h1 class="logo" aria-label="Kill Switch"><svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 -15.75 763.4 101.5"><svg x="0" y="-15.75" width="101.5" height="101.5" viewBox="6 6 52 52" overflow="visible"><defs><linearGradient id="w4h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFBA45"/><stop offset=".55" stop-color="#F5A524"/><stop offset="1" stop-color="#E08A0B"/></linearGradient><radialGradient id="w4g"><stop offset="0" stop-color="#FF5C5C" stop-opacity=".55"/><stop offset="1" stop-color="#FF5C5C" stop-opacity="0"/></radialGradient><linearGradient id="w4t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF5C5C" stop-opacity="0"/><stop offset="1" stop-color="#FF5C5C" stop-opacity=".5"/></linearGradient></defs><path d="M21.23 6 L42.77 6 L58 21.23 L58 42.77 L42.77 58 L21.23 58 L6 42.77 L6 21.23 Z" fill="url(#w4h)"/><path d="M22.2 8.34 L41.8 8.34 L55.66 22.2 L55.66 41.8 L41.8 55.66 L22.2 55.66 L8.34 41.8 L8.34 22.2 Z" fill="none" stroke="#FFD27A" stroke-opacity=".38" stroke-width="0.94"/><path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z" fill="#06121C"/><clipPath id="w4v"><path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z"/></clipPath><g clip-path="url(#w4v)"><g class="eye"><rect x="16.03" y="30.03" width="23.11" height="3.01" rx="1.5" fill="url(#w4t)"/><circle cx="39.14" cy="31.53" r="10.17" fill="url(#w4g)"/><circle cx="39.14" cy="31.53" r="4.42" fill="#FF5C5C"/><circle cx="37.55" cy="29.94" r="1.33" fill="#FFE1E1"/></g></g></svg><g transform="translate(130.9 0)"><g fill="#E6EDF3"><path d="M6.50 70L6.50 0L20.10 0L20.10 29.30L30.70 29.30L47.60 0L62.90 0L42.40 34.90L64.60 70L49 70L30.60 40.90L20.10 40.90L20.10 70L6.50 70Z"/><path d="M75.10 70L75.10 0L88.70 0L88.70 70L75.10 70Z"/><path d="M105.20 70L105.20 0L118.80 0L118.80 58.50L153.80 58.50L153.80 70L105.20 70Z"/><path d="M164.30 70L164.30 0L177.90 0L177.90 58.50L212.90 58.50L212.90 70L164.30 70Z"/><path d="M262.90 70L252.10 59.20L252.10 49.20L265.50 49.20L265.50 55.10L268.80 58.40L289.50 58.40L292.90 55L292.90 43.40L289.60 40.10L263.10 40.10L252.30 29.30L252.30 10.80L263.10 0L294.70 0L305.50 10.80L305.50 20.90L292.10 20.90L292.10 14.90L288.80 11.60L269 11.60L265.70 14.90L265.70 25.20L269 28.50L295.50 28.50L306.30 39.30L306.30 59L295.30 70L262.90 70Z"/><path d="M329.80 70L315.30 0L329 0L337.50 49.40L337.90 49.40L351.80 0L362 0L375.60 49.40L376 49.40L384.50 0L398.20 0L383.70 70L371 70L357.10 20.80L356.70 20.80L342.50 70L329.80 70Z"/><path d="M410.70 70L410.70 0L424.30 0L424.30 70L410.70 70Z"/><path d="M456.70 70L456.70 11.50L435.80 11.50L435.80 0L491.20 0L491.20 11.50L470.30 11.50L470.30 70L456.70 70Z"/><path d="M511.20 70L499.70 58.50L499.70 11.50L511.20 0L545.40 0L556.70 11.30L556.70 22L543.10 22L543.10 16.30L538.40 11.60L518.40 11.60L513.30 16.70L513.30 53.30L518.40 58.40L538.40 58.40L543.10 53.70L543.10 48L556.70 48L556.70 58.70L545.40 70L511.20 70Z"/><path d="M569.20 70L569.20 0L582.80 0L582.80 29.30L612.40 29.30L612.40 0L626 0L626 70L612.40 70L612.40 40.90L582.80 40.90L582.80 70L569.20 70Z"/></g></g></svg></h1><div class="eyebrow tag">Stratego, but the AI gets smarter</div>
@@ -1045,6 +1353,7 @@ if (params.has("sim")){
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
       <div class="eyebrow">Play as</div>
       <div class="seg" role="group" aria-label="Play as"><button class="h" id="asH" aria-pressed="${soloSide === "H"}">🕵️ HUMANS</button><button class="ai" id="asAI" aria-pressed="${soloSide === "AI"}">🧠 THE AI</button></div>
+      <div class="seg lv" role="group" aria-label="Bot level">${BOT_LEVELS.map(l => `<button id="lv-${l}" aria-pressed="${soloLevel === l}">${l.toUpperCase()}</button>`).join("")}</div>
       <button class="primary" id="play">PLAY AS ${soloSide === "H" ? "HUMANS" : "THE AI"}</button>
       <button class="ghost" id="friend">PLAY A FRIEND</button>
       <div class="eyebrow">Join with code</div>
@@ -1053,6 +1362,8 @@ if (params.has("sim")){
     const pick = side => () => { sfx.tap(); soloSide = side; try { localStorage.setItem("ks-side", side); } catch (e) {}
       document.getElementById("asH").setAttribute("aria-pressed", side === "H"); document.getElementById("asAI").setAttribute("aria-pressed", side === "AI");
       document.getElementById("play").textContent = "PLAY AS " + (side === "H" ? "HUMANS" : "THE AI"); };
+    for (const l of BOT_LEVELS) document.getElementById("lv-" + l).addEventListener("click", () => { sfx.tap(); soloLevel = l; try { localStorage.setItem("ks-level", l); } catch (e) {}
+      for (const k of BOT_LEVELS) document.getElementById("lv-" + k).setAttribute("aria-pressed", k === l); });
     document.getElementById("asH").addEventListener("click", pick("H"));
     document.getElementById("asAI").addEventListener("click", pick("AI"));
     document.getElementById("play").addEventListener("click", () => { sfx.win(); start("solo", soloSide); });
@@ -1456,16 +1767,18 @@ if (params.has("sim")){
   if (params.has("trace")) window.__ks = () => ({ state, me, phase, busy, sel, mode, ready: LIVE.ready, hostSide: LIVE.hostSide, host: LIVE.host, code: LIVE.code, ws: !!LIVE.ws, note: LIVE.note, moveSeq: LIVE.moveSeq, played: LIVE.played || 0 }); // tests only
   function botTurn(){
     if (mode !== "solo" || state.turn === me || state.winner) return; // live: a person plays the other side
-    const m = botMove(state, other(me), bot);
+    const m = levelMove(state, other(me), bot);
     if (!m) return afterMove(state);
     const before = state; state = apply(state, m);
     afterMove(before);
   }
-  if (params.has("over")){ start(); phase = "play"; while (!state.winner){ const m = botMove(state, state.turn, bot); if (!m) break; state = apply(state, m); } phase = "over"; render(); }
+  // test positions: this screen's side plays as MEDIUM, the bot's side at its level (&level=)
+  const either = () => state.turn === me ? botMove : levelMove;
+  if (params.has("over")){ start(); phase = "play"; while (!state.winner){ const m = either()(state, state.turn, bot); if (!m) break; state = apply(state, m); } phase = "over"; render(); }
   else if (params.has("battle") || params.has("until")){
     const want = params.get("until") || "fight";
     start("solo", params.get("side") === "AI" ? "AI" : "H"); phase = "play"; let n = 0, before = state; // &side=AI views it as the AI
-    while (!state.winner && n++ < 400){ const m = botMove(state, state.turn, bot); if (!m) break; before = state; state = apply(state, m); if (state.events.some(e => e.kind === want || e.result === want)) break; } // &until=trapped: a result works too
+    while (!state.winner && n++ < 400){ const m = either()(state, state.turn, bot); if (!m) break; before = state; state = apply(state, m); if (state.events.some(e => e.kind === want || e.result === want)) break; } // &until=trapped: a result works too
     const after = state; state = before; render(); state = after; afterMove(before);
   }
   else if (params.has("play")) start("solo", params.get("side") === "AI" ? "AI" : "H");
