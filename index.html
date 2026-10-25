@@ -695,10 +695,13 @@ function easyMove(s, side, r){
 // HARD: weighs every move by what it expects to happen. Each hidden enemy piece gets odds for what it could be, from the
 // unseen pool, then sharpened: a piece that moved is no flag or trap, one that slid is a slider, the back row that never
 // moved holds the flag, traps and 🧠. A fight is scored as the odds-weighted gain or loss; every move also counts the risk
-// to the piece it moved (and the one it leaves), any line it opens to its own flag, the hunt for the flag (and, as the
-// humans, the small 🧠), the CTO's walk to the 🏢 in time for the 🧠's 10, and the AI fighters' +1 there. The best TOP
-// moves are then played out in WORLDS guessed worlds, one reply deep (see hardWorld). About 15 ms a move at 4× CPU throttle.
-const HARD = { FLAG: 400, CTO_LEAD: 10, CTO_RISK: 30, BRAIN: 1, TOP: 25, WORLDS: 12, LOOK: 10, GATE_MINE: 40, GATE_THEIRS: 20, FORMS: { H: [0, 2], AI: [0, 3] } };
+// to the piece it moved (and the one it leaves), any line it opens to its own flag, the hunt for the flag (as the
+// humans, clear of the small 🧠), the CTO's walk to the 🏢 in time for the 🧠's 10, and the AI fighters' +1 there. The best TOP
+// moves are then played out in WORLDS guessed worlds, one reply deep (see hardWorld). About 10 ms a move at 4× CPU throttle.
+// v0.40 (DEV-298): BRAIN was +1 (the humans hunted the small 🧠); at −2 they head only for squares at least twice as likely the
+// kill switch as the 🧠, which never moves and beats the engineers that find it. GUARD: a piece next to its own flag stays
+// (humans 6, was 3 for both). Together they took Hard vs Hard from humans 41% / AI 56% to about 49 / 48.
+const HARD = { FLAG: 400, CTO_LEAD: 10, CTO_RISK: 30, BRAIN: -2, GUARD: { H: 6, AI: 3 }, TOP: 25, WORLDS: 12, LOOK: 10, GATE_MINE: 40, GATE_THEIRS: 20, FORMS: { H: [0, 2], AI: [0, 3] } };
 const HV = { F: 0, T: 4, S: 2, M: 4.5, A: 5, C: 3.5, K: 6, R: 4, P: 4 };
 const XV = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6.5, 7: 8.5, 8: 11, 9: 14, 10: 16 };
 function hardVal(s, p){
@@ -772,7 +775,8 @@ function hardMove(s, side, r, mem){
   const foes = s.pieces.filter(q => q.side === foe).sort(bySquare); // by square, so a tie never falls to the order the pieces were dealt in
   const pOf = (q, t) => known(q) ? (q.type === t ? 1 : 0) : (odds.get(q.id) || []).reduce((a, k) => a + (k.type === t ? k.w : 0), 0);
   const flagOdds = foes.map(q => [q, pOf(q, "F")]).filter(x => x[1] > .02).sort((a, b) => b[1] - a[1]).slice(0, 4);
-  // the humans also hunt the 🧠 while it is small: it never moves before 10, so it hides among the unmoved back row
+  // the humans weigh the 🧠 too while it is small (HARD.BRAIN): it never moves before 10, so it hides among the unmoved back
+  // row, and it beats the engineers and scanners that walk into it, so they steer clear of where it probably is
   const goals = side === "H" && brain && !isSuper(brain) ? foes.map(q => [q, pOf(q, "F") + HARD.BRAIN * pOf(q, "I")]).filter(x => x[1] > .02).sort((a, b) => b[1] - a[1]).slice(0, 4) : flagOdds;
   // the risk to my piece p standing on (rr,cc): the worst an enemy next to it could do on its move. An enemy that knows p
   // attacks when it wins; a blind one sometimes. A fight it loses is a gain.
@@ -888,7 +892,7 @@ function hardMove(s, side, r, mem){
       if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted){ if (onDC(s, tr, tc)) sc += 30; else sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 1.5; }
       if (side === "AI" && isFragile(p)) sc -= 10;
       if (s.last && s.last.side === side && s.last.to[0] === p.r && s.last.to[1] === p.c && s.last.from[0] === tr && s.last.from[1] === tc) sc -= 8;
-      if (myFlag && dist(p.r, p.c, myFlag.r, myFlag.c) === 1 && p.type !== "S") sc -= 3; // keep the guard
+      if (myFlag && dist(p.r, p.c, myFlag.r, myFlag.c) === 1 && p.type !== "S") sc -= HARD.GUARD[side]; // keep the guard
     }
     scored.push({ m, sc });
   }
