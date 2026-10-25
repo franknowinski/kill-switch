@@ -185,7 +185,7 @@ body.me-ai .pill.turn.mine{background:var(--amber);border-color:var(--amber)}
 .eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
 /* the Watcher lockup on the start screen (v0.34, DEV-292): outlined text, so no font load; its red eye sweeps the visor
    (clipped to the visor, so its glow and trail never smear onto the helmet) */
-.logo{line-height:0;margin:2px 0 0}.logo svg{height:40px;width:auto;max-width:100%;display:block}.eyebrow.tag{margin-top:-2px}
+.logo{line-height:0;margin:2px 0 0}.logo > svg{height:40px;width:auto;max-width:100%;display:block}.eyebrow.tag{margin-top:-2px}
 .logo .eye{animation:sweep 5s ease-in-out infinite}
 @keyframes sweep{0%,18%,100%{transform:translateX(0)}42%,60%{transform:translateX(-19px)}}
 @media (prefers-reduced-motion:reduce){.logo .eye{animation:none}}
@@ -1078,8 +1078,11 @@ if (params.has("sim")){
     return [...app.querySelectorAll(".sq")].map(q => { const b = q.getBoundingClientRect(); return { q, x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; });
   }
   function dropTarget(from, x, y){
-    let g = from.geo; if (!g || !g[0].q.isConnected) g = from.geo = measureBoard(); // a render mid-drag replaced the squares
+    // v0.41 (DEV-299): measured again when the squares were replaced, or the page scrolled or resized (geo = null); no board
+    // at all (it went mid-drag) is no target, and no throw
+    let g = from.geo; if (!g || !g.length || !g[0].q.isConnected) g = from.geo = measureBoard();
     const src = g.find(m => +m.q.dataset.r === from.r && +m.q.dataset.c === from.c); if (!src) return null;
+    from.home = src; // where a cancelled drop glides back to, as the square is now
     const lit = phase === "setup" ? (m => !m.q.disabled && SETUP_ROWS[me].includes(+m.q.dataset.r)) : (m => m.q.classList.contains("can") || m.q.classList.contains("copy"));
     const dist = m => Math.hypot((x - m.x) / m.w, (y - m.y) / m.h); // in squares of that square's size
     let edge = Infinity, best = null, bd = Infinity;
@@ -1156,6 +1159,7 @@ if (params.has("sim")){
   // back (a cancelled drop): the lifted piece glides back to its square {x, y} first, then the piece shows there again
   function endDrag(back){
     const f = floater, d = dragEl; floater = null; dragEl = null;
+    if (renderLater) queueMicrotask(() => { if (renderLater) render(); }); // a render put off while dragging (v0.41), after the drop's own
     const done = () => { if (f) f.remove(); if (d) d.classList.remove("drag"); };
     if (!back || !f || reduce || FAST) return done();
     fin(f.animate([{ transform: `translate3d(${back.x}px,${back.y}px,0) translate(-50%,-50%) scale(1)` }], { duration: 180, easing: "cubic-bezier(.3,.7,.4,1)", fill: "forwards" }), 180).then(done); // fin: settles even if the page is hidden mid-glide
@@ -1205,11 +1209,19 @@ if (params.has("sim")){
     unlight(was);
     const t = dropTarget(was, e.clientX, e.clientY);
     if (t && sel) noSlide.add(String(sel.id));
-    endDrag(t ? null : { x: was.cx, y: was.cy }); // no target: nothing is played or sent, and the piece glides home
+    const home = was.home && was.home.q.isConnected ? was.home : null; // fresh (v0.41): the board may have scrolled or re-rendered since the lift
+    endDrag(t || !home ? null : { x: home.x, y: home.y }); // no target: nothing is played or sent, and the piece glides home (no board: it just goes)
     if (was.dc){ if (t) tap(+t.dataset.r, +t.dataset.c); else { dcPick = Math.hypot(e.clientX - was.x, e.clientY - was.y) < 28; render(); } return; } // dcPick is set: the drop puts the 🏢 there; a wobbly tap leaves it picked up, like a piece
     if (t) tap(+t.dataset.r, +t.dataset.c);
   });
   window.addEventListener("pointercancel", () => { const was = ptr; ptr = null; if (was) unlight(was); endDrag(); if (was && was.dc){ dcPick = false; render(); } }); // a call or a system swipe: put a dragged 🏢 back
+  // v0.41 (DEV-299): a mouse wheel, a page scroll or a resize mid-drag moves the squares under a pointer that stays put:
+  // forget the measured squares, so the next frame (and the drop) measures them again where they are now
+  const remeasure = () => { const d = ptr; if (!d || !d.geo) return; d.geo = null; if (floater && !d.raf) d.raf = requestAnimationFrame(() => paint(d)); };
+  window.addEventListener("scroll", remeasure, { passive: true, capture: true });
+  window.addEventListener("resize", remeasure, { passive: true });
+  // v0.41 (DEV-299): the board is going (🏠, the lobby): so is a lifted piece, at once
+  function dropDrag(){ if (!floater) return; const d = ptr; ptr = null; if (d){ unlight(d); if (d.dc) dcPick = false; } endDrag(); }
   function start(m = "solo", side = "H"){
     mode = m; me = side; document.body.classList.toggle("me-ai", me === "AI");
     state = newGame(seed + Math.floor(Math.random()*1e6)); phase = "setup"; sel = null; dcPick = false; copyMode = false; busy = false; shown = new Set(); prevSides = new Map(); lastFight = null;
@@ -1248,7 +1260,15 @@ if (params.has("sim")){
   // 🔊 and 🏠, during play and at the end. Live, 🏠 leaves the room (the game stays in My games until it's over and seen)
   const soundHome = () => { const t = mode === "live" && phase !== "over" ? "Home (your game is saved in My games)" : "Home";
     return `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart" aria-label="${t}" title="${t}">🏠</button>`; };
+  // v0.41 (DEV-299): a render while a piece is being dragged (a sync from the server: the friend came or went, their
+  // setup is in) waits until it is let go. Replacing the squares under the finger would end the drag on the iPhone (its
+  // pointer events go to the removed square, so the lifted piece was left on screen), and a render that left no board
+  // threw on the next frame. endDrag runs the render it put off.
+  let renderLater = false;
   function render(opts = {}){
+    if (phase === "intro" || phase === "lobby" || phase === "joining") dropDrag();
+    else if (floater && ptr && ptr.moved){ renderLater = true; return; }
+    renderLater = false;
     if (phase === "intro") return renderIntro();
     if (phase === "lobby" || phase === "joining") return renderLobby();
     const prev = snapshotRects();
@@ -1295,7 +1315,10 @@ if (params.has("sim")){
       bhtml += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED.has(r+","+c) ? "disabled" : ""}>${inner}</button>`;
     }
     bhtml += `</div><div class="fx" id="fx"></div></div></div><div class="toasts" id="toasts"></div></div>`;
-    html += lastFight && phase !== "setup" ? `<button class="fline" id="fline">⚔️ <span>${fightLine(lastFight)}</span><small>log ›</small></button>` : `<div class="fline none">⚔️ <span>${state.winner ? "No fights this game" : phase === "setup" || state.round <= 1 ? "No fights yet" : "The last fight shows here"}</span></div>`;
+    // v0.41 (DEV-299): at game over, a last fight this phone never saw (the debug ?over run, a sync that came without it) is
+    // read back from the log, and "No fights this game" only when no piece ever fell
+    const fl = lastFight || (state.winner ? lastFightIn(state) : null);
+    html += fl && phase !== "setup" ? `<button class="fline" id="fline">⚔️ <span>${fightLine(fl)}</span><small>log ›</small></button>` : `<div class="fline none">⚔️ <span>${state.winner && !hadFight(state) ? "No fights this game" : phase === "setup" || state.round <= 1 ? "No fights yet" : "The last fight shows here"}</span></div>`;
     let logHtml;
     if (phase === "setup" && mode === "live" && LIVE.ready[me]) logHtml = `<span class="you">Your side is set.</span> Waiting for the other player to finish setting up<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
     else if (phase === "setup" && dcPick && me === "H") logHtml = `<span class="you">🏢 picked up.</span> Tap a lit square for it; a piece there swaps with it.`;
@@ -1616,6 +1639,11 @@ if (params.has("sim")){
     box.appendChild(el); setTimeout(() => el.remove(), params.has("hold") ? 1e9 : big ? 3800 : 2200);
   }
   // the line above the board: "Your 🕵️7 beat their 🐝5"
+  // v0.41 (DEV-299): was there a fight this game? Every fight takes at least one piece off the board, and a 🧬 replicator's copy is the
+  // only way one comes on, so fewer pieces than the armies plus the copies made means a fight. The log keeps the last 40
+  // entries; a fight's entry carries its two pieces and the result, which is all fightLine needs.
+  function hadFight(s){ return s.pieces.length < ARMIES.H.length + ARMIES.AI.length + 2 * BAL.COPIES - s.copies.H - s.copies.AI; }
+  function lastFightIn(s){ for (let i = s.history.length - 1; i >= 0; i--){ const h = s.history[i]; if (h.a && h.d && h.result) return h; } return null; }
   function fightLine(ev){
     const who = (x, first) => `<span class="${x.side === me ? "you" : "them"}">${x.side === me ? (first ? "Your" : "your") : (first ? "Their" : "their")} ${iconOf(x)}${LEVELS_UP(x.type) ? x.str : ""}</span>`;
     const A = who(ev.a, true), D = who(ev.d, false);
@@ -1729,7 +1757,8 @@ if (params.has("sim")){
         if (Date.now() - LIVE.heard > 25000){ LIVE.ws = null; ws.onclose = null; try { ws.close(); } catch (e) {} return lost(true); }
         try { ws.send("ping"); } catch (e) {}
         // v0.36 (DEV-294): on the end screen, ask again who is here, so "Your friend left." shows when they go home (the
-        // server's goodbye broadcast still counts the closing socket). An existing message; nothing new for the server
+        // server's goodbye broadcast counted the closing socket until v0.41; the poll stays as a fallback, e.g. for a
+        // server not yet redeployed). An existing message; nothing new for the server
         if (phase === "over") send({ t: "hello", moveSeq: LIVE.moveSeq });
       }, 10000);
     };
@@ -1832,7 +1861,8 @@ if (params.has("sim")){
       el.innerHTML = s.phase === "over" ? `<b>game over</b> · ${s.winner === s.you ? "you won" : s.winner === "D" ? "a draw" : "you lost"}` : s.phase === "lobby" ? (s.guestIn ? "in the lobby" : "waiting for your friend") : s.phase === "setup" ? (s.ready[s.you] ? "waiting for their setup" : `<b>set up</b> · ${side}`) : s.yourTurn ? `<b>your move</b> · ${side}` : `their move · ${side}`;
     });
   }
-  if (params.has("trace")) window.__ks = () => ({ state, me, phase, busy, sel, mode, ready: LIVE.ready, hostSide: LIVE.hostSide, host: LIVE.host, code: LIVE.code, ws: !!LIVE.ws, note: LIVE.note, moveSeq: LIVE.moveSeq, played: LIVE.played || 0 }); // tests only
+  if (params.has("trace")) window.__ksRender = () => render(); // tests only (v0.41): a render mid-drag, as a server sync would do
+  if (params.has("trace")) window.__ks = () => ({ state, me, phase, busy, sel, mode, ready: LIVE.ready, hostSide: LIVE.hostSide, host: LIVE.host, code: LIVE.code, ws: !!LIVE.ws, online: LIVE.online, note: LIVE.note, moveSeq: LIVE.moveSeq, played: LIVE.played || 0 }); // tests only
   function botTurn(){
     if (mode !== "solo" || state.turn === me || state.winner) return; // live: a person plays the other side
     const m = levelMove(state, other(me), bot);
