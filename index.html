@@ -451,14 +451,14 @@ function apply(s0, move){
   const q = at(s, r, c);
   const kill = x => { s.pieces = s.pieces.filter(y => y.id !== x.id); };
   // a piece that switches sides is hidden again (to its old side too), like any piece after a fight; bots remember it (seen)
-  const convert = (x, to) => { x.side = to; x.revealed = false; x.seen = true; };
+  const convert = (x, to) => { x.side = to; x.revealed = false; delete x.spot; x.seen = true; };
   const from = sqName(p.r, p.c), to = sqName(r, c);
   let line = "";
   if (move.copy){
     const src = copySource(s, p);
     s.copies[side]--;
     s.pieces.push({ id: Math.max(...s.pieces.map(x => x.id)) + 1, side, type: src.type, str: src.str, revealed: false, r, c });
-    p.revealed = true;
+    p.revealed = true; delete p.spot; // copying shows the replicator for good, not only while a scanner is next to it
     line = `${who(side)} replicator copied the piece next to it.`;
     s.events.push({ kind: "copy", r, c });
     s.history.push({ round: s.round, side, text: line });
@@ -469,7 +469,7 @@ function apply(s0, move){
   }
   else {
     const ev = { kind: "fight", r, c, a: snap(p), d: snap(q), result: "", line: "" };
-    // a fight shows both pieces once; afterwards the board hides them again on both sides (bots remember via "seen"), except what a 📡 scanner revealed
+    // a fight shows both pieces once; afterwards the board hides them again on both sides (bots remember via "seen"), except what a 📡 scanner next to it still shows
     p.seen = true; q.seen = true;
     if (q.type === "F"){ kill(q); p.r = r; p.c = c; s.winner = side; ev.result = "flag"; line = side === "H" ? "Humans hit the kill switch." : "The AI got out onto the Internet."; }
     else if (q.type === "T"){
@@ -502,7 +502,11 @@ function apply(s0, move){
     s.events.push(ev);
     s.history.push({ round: s.round, side, text: line, a: ev.a, d: ev.d, result: ev.result, at: to });
   }
-  for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `${who(sc.side)} ${roleName(sc)} spotted ${name(e)} at ${sqName(e.r, e.c)}.` }); }
+  // v0.44 (DEV-302): a 📡 scanner shows a piece only while it is next to it. A spotted piece (spot) that ends a turn with no
+  // enemy scanner next to it (it moved away, or the scanner moved or fell) is hidden again; seen stays, so, as after a fight,
+  // you have to remember it and the bots still know it. Back next to a scanner, it is spotted again.
+  for (const e of s.pieces) if (e.spot && !neighbours(s, e).some(sc => sc.type === "C" && sc.side !== e.side)){ e.revealed = false; delete e.spot; }
+  for (const sc of s.pieces) if (sc.type === "C") for (const e of neighbours(s, sc)) if (e.side !== sc.side && !e.revealed){ e.revealed = true; e.spot = true; e.seen = true; s.events.push({ kind: "reveal", r: e.r, c: e.c }); s.history.push({ round: s.round, side: sc.side, text: `${who(sc.side)} ${roleName(sc)} spotted ${name(e)} at ${sqName(e.r, e.c)}.` }); }
   // the datacenter's power: an AI fighter that is a 5 or 6 (BOOSTS) and ends its move on the 🏢 gets +1, once per piece, until the drain starts
   const mover = s.pieces.find(x => x.id === move.p.id);
   if (mover && !s.cut && BOOSTS(mover) && !mover.boosted && onDC(s, mover.r, mover.c) && mover.str < BAL.MAX_STR){
@@ -955,7 +959,17 @@ function hardEval(s, side){
   }
   return v;
 }
-if (typeof module !== "undefined") module.exports = { newGame, apply, botMove, simulate, rng, BAL, ARMIES, FORMATIONS, layoutSide, name, isTurned, iconOf, BOOSTS, levelBot, botSetup, BOT_LEVELS, sideMoves, legalMoves, other, known };
+// the game-over headline (v0.44): it says how the game ended, from your seat. Only the AI reaching the Internet is IT GOT
+// OUT and only the humans hitting the kill switch is SHUT DOWN; the side that wins because the other has
+// nothing left that can move gets NO MOVES (short: it fits one line at 320px); the round limit is a draw. A flag that is
+// taken is gone from the board (the end screen's state is never shuffled), so that tells the endings apart.
+function endTitle(s, me){
+  if (s.winner === "D") return "TIME'S UP · DRAW";
+  const loser = other(s.winner), flagTaken = !s.pieces.some(p => p.type === "F" && p.side === loser);
+  const how = !flagTaken ? "NO MOVES" : s.winner === "AI" ? "IT GOT OUT" : "SHUT DOWN";
+  return how + (s.winner === me ? " · YOU WIN" : " · YOU LOSE");
+}
+if (typeof module !== "undefined") module.exports = { newGame, endTitle, apply, botMove, simulate, rng, BAL, ARMIES, FORMATIONS, layoutSide, name, isTurned, iconOf, BOOSTS, levelBot, botSetup, BOT_LEVELS, sideMoves, legalMoves, other, known };
 </script>
 <script>
 // v0.32 (DEV-290): the humans' 🌍 Internet, 🛸 drone and 🔧 engineer (were 🌐, 🚁 and 🧑‍🔧). The engine above keeps the
@@ -972,7 +986,7 @@ const ABOUT = {
   S: p => `${charSide(p) === "H" ? "Flies" : "Scuttles"} any distance in a straight line.`,
   M: p => p.side === "H" ? "Fights as a 3, and removes a backdoor safely." : "Fights as a 3, and removes a honeypot safely.",
   A: p => `Takes out an ${BAL.SPY_MIN} or ${BAL.SPY_MAX} it attacks; loses any other attack.`,
-  C: () => "Reveals every hidden enemy next to it, every turn.",
+  C: () => "Shows the enemies next to it, only while they stay next to it.",
   T: p => p.side === "H" ? "Can't move. An AI piece that attacks it joins the humans." : "Can't move. A human piece that attacks it joins the AI.",
   F: p => p.side === "H" ? "Can't move. If the AI reaches it, it gets out onto the Internet." : "Can't move. If the humans reach it, the AI is shut down.",
   R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
@@ -1141,6 +1155,7 @@ if (params.has("sim")){
     board.addEventListener("touchstart", e => { if (e.touches.length > 1) return; const sq = sqAt(e.touches[0]); holdTouch = !!sq && sq.matches(".grab,.can,.copy,.own"); }, { passive: true }); // a second finger keeps the first one's hold
     board.addEventListener("touchmove", e => { if (holdTouch && e.cancelable) e.preventDefault(); }, { passive: false });
     board.addEventListener("pointerdown", e => {
+      if (e.button !== 0) return; // v0.44 (DEV-302): a right-click (or any other button) never picks up a piece
       const sq = sqAt(e); if (!sq || sq.disabled || busy) return;
       ptr = { r: +sq.dataset.r, c: +sq.dataset.c, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, touch: e.pointerType !== "mouse" };
     });
@@ -1172,6 +1187,7 @@ if (params.has("sim")){
   }
   window.addEventListener("pointermove", e => {
     if (!ptr || e.pointerId !== ptr.id) return;
+    if (!ptr.touch && e.buttons !== 1) return cancelPtr(); // v0.44 (DEV-302): a mouse button pressed or let go mid-drag (a right-click) cancels it; a lost mouseup too
     const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
     if (!ptr.moved){
       if (Math.hypot(dx, dy) < 8) return;
@@ -1214,7 +1230,11 @@ if (params.has("sim")){
     if (was.dc){ if (t) tap(+t.dataset.r, +t.dataset.c); else { dcPick = Math.hypot(e.clientX - was.x, e.clientY - was.y) < 28; render(); } return; } // dcPick is set: the drop puts the 🏢 there; a wobbly tap leaves it picked up, like a piece
     if (t) tap(+t.dataset.r, +t.dataset.c);
   });
-  window.addEventListener("pointercancel", () => { const was = ptr; ptr = null; if (was) unlight(was); endDrag(); if (was && was.dc){ dcPick = false; render(); } }); // a call or a system swipe: put a dragged 🏢 back
+  // a call or a system swipe (pointercancel), or a context menu (v0.44, DEV-302: a right-click mid-drag left the lifted copy
+  // floating over the board, because the menu ate the mouseup): the piece goes back, no ghost; a dragged 🏢 goes back too
+  function cancelPtr(){ const was = ptr; ptr = null; if (was) unlight(was); endDrag(); if (was && was.dc){ dcPick = false; render(); } }
+  window.addEventListener("pointercancel", cancelPtr);
+  window.addEventListener("contextmenu", () => { if (ptr && !ptr.touch) cancelPtr(); }); // mouse only: Android Chrome fires contextmenu on a long press, and a finger held still before dragging must still drag
   // v0.41 (DEV-299): a mouse wheel, a page scroll or a resize mid-drag moves the squares under a pointer that stays put:
   // forget the measured squares, so the next frame (and the drop) measures them again where they are now
   const remeasure = () => { const d = ptr; if (!d || !d.geo) return; d.geo = null; if (floater && !d.raf) d.raf = requestAnimationFrame(() => paint(d)); };
@@ -1332,7 +1352,7 @@ if (params.has("sim")){
     if (phase === "over"){
       const win = state.winner === me, draw = state.winner === "D";
       const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`;
-      html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${draw ? "TIME'S UP · DRAW" : (state.winner === "H" ? "SHUT DOWN" : "IT GOT OUT") + (win ? " · YOU WIN" : " · YOU LOSE")}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}${mode === "live" && !LIVE.online[LIVE.host ? "guest" : "host"] ? ` · <span class="lvnote" id="friendleft">Your friend left.</span>` : ""}</div></div>`;
+      html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${endTitle(state, me)}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}${mode === "live" && !LIVE.online[LIVE.host ? "guest" : "host"] ? ` · <span class="lvnote" id="friendleft">Your friend left.</span>` : ""}</div></div>`;
     } else html += `<div class="msg">${logHtml}</div>`;
     html += bhtml;
     html += `<div class="actions${phase === "over" ? " end" : ""}">`;
@@ -1376,8 +1396,8 @@ if (params.has("sim")){
   }
   // the key: what each piece is, what it does in three words, and how many are left
   const POWER = {
-    H:  { S: "flies any distance", M: "fights as 3, removes backdoors", A: "1; kills an 8 or 9 it attacks", C: "reveals pieces next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
-    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "reveals pieces next to it", I: "grows to 10 on its own", K: "copies its foe: both fall", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
+    H:  { S: "flies any distance", M: "fights as 3, removes backdoors", A: "1; kills an 8 or 9 it attacks", C: "shows pieces while next to it", T: "AI attacker joins the humans", F: "the AI wins if it gets here" },
+    AI: { S: "slides any distance", M: "fights as 3, removes honeypots", A: "kills an 8 or 9 when attacking", C: "shows pieces while next to it", I: "grows to 10 on its own", K: "copies its foe: both fall", R: "copies a neighbour, twice", T: "human attacker joins the AI", F: "the humans win if they get here" },
   };
   function listHtml(){
     // an army's own pieces still on its side: a piece that switched sides at a trap has left its row
@@ -1408,7 +1428,7 @@ if (params.has("sim")){
       ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
       ${turnedRow(joinedThem, "theirs")}
-      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and drain it: each human turn that ends with the CTO there, the 🧠 loses ${BAL.DRAIN} (10 → 9 → 8 …, and it never grows again). Below 10 it fights with its number like any piece (a 9 or 8 falls to the 📢 whistleblower; the 🎭 deepfake trades with it); at 0 it is fragile (still hidden), and any piece that finds it kills it. If the CTO leaves or falls, the drain stops where it is. Until the drain starts, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌍 Internet is the humans’ flag: if the AI gets there, it gets out. Pieces a 📡 scanner spotted stay face up; after a fight you have to remember what you saw.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and drain it: each human turn that ends with the CTO there, the 🧠 loses ${BAL.DRAIN} (10 → 9 → 8 …, and it never grows again). Below 10 it fights with its number like any piece (a 9 or 8 falls to the 📢 whistleblower; the 🎭 deepfake trades with it); at 0 it is fragile (still hidden), and any piece that finds it kills it. If the CTO leaves or falls, the drain stops where it is. Until the drain starts, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌍 Internet is the humans’ flag: if the AI gets there, it gets out. A 📡 scanner shows the enemy pieces next to it face up, only while they stay next to it; once one moves away (or the scanner moves or falls), it is hidden again. After that, as after a fight, you have to remember what you saw.</div>
     </div>`;
   }
   // the side a solo game is played from: the start screen's choice, remembered on this phone
