@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kill Switch · Privacy</title>
+<!-- the privacy policy for the Kill Switch app and web game (DEV-301). bin/publish-game copies it to the kill-switch repo
+     as privacy.html: https://franknowinski.github.io/kill-switch/privacy.html, the App Store's privacy policy URL. The contact is the Fox Road studio inbox. -->
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0B0F14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0B0F14;--panel:#121923;--line2:#2C3D52;--fg:#E6EDF3;--muted:#8A9BB0;--blue:#5CC8FF;--amber:#F5A524;
+  --display:"Chakra Petch",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono)}
+body{padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))}
+main{max-width:640px;margin:0 auto;background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:22px 18px}
+h1{font-family:var(--display);font-size:26px;letter-spacing:1px;margin:0 0 4px}
+h2{font-family:var(--display);font-size:15px;letter-spacing:1.5px;text-transform:uppercase;color:var(--amber);margin:22px 0 6px}
+p,li{font-size:14px;line-height:1.55;margin:0 0 10px}
+ul{padding-left:20px;margin:0 0 10px}
+.date{color:var(--muted);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:14px}
+a{color:var(--blue);overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<main>
+<h1>KILL SWITCH · PRIVACY</h1>
+<p class="date">Updated 25 October 2026</p>
+<p>Kill Switch (the iPhone app and the web game) collects no personal data. There are no accounts, no ads, no analytics
+and no tracking, and nothing about you is sold or shared.</p>
+
+<h2>Solo games</h2>
+<p>A game against the bot runs entirely on your device. Nothing is sent anywhere. Your settings (sound, side, bot level)
+are saved on your device only.</p>
+
+<h2>Games with a friend</h2>
+<p>To play a friend on another device, the game uses our game server. It sends and keeps only what the game needs:</p>
+<ul>
+<li>a random 4-letter game code and a random token for each player;</li>
+<li>which side each player took, the pieces' setup, and the moves.</li>
+</ul>
+<p>No name, email, contact, location or device identifier is sent. A game is kept on the server until no one has played
+it for 30 days, then it is deleted. Your device also remembers the codes of your games so you can come back to them.</p>
+<p>The server runs on Cloudflare, which handles the network connection and may keep standard technical logs (such as
+IP addresses) for security, under its own privacy policy. We don't use those logs to identify you. The web version (not the app) loads its fonts from Google Fonts, so Google also sees your IP address when the page loads, under its own privacy policy.</p>
+
+<h2>Children</h2>
+<p>Kill Switch doesn't knowingly collect anything from anyone, children included.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy: <a href="mailto:foxroad.dev@gmail.com">foxroad.dev@gmail.com</a>. If this policy changes, the new
+version will be posted here with a new date.</p>
+</main>
+</body>
+</html>
