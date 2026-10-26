@@ -1815,8 +1815,18 @@ if (params.has("sim")){
         if (me === "H" && state.dc) m.s.dc = state.dc;
         m.s.forms = { ...m.s.forms, [me]: state.forms[me] };
       }
-      state = m.s; phase = m.phase; render();
+      state = m.s; phase = m.phase; reselect(); render();
     });
+  }
+  // v0.42 (DEV-300): a sync swaps in a new state, so the picked piece is looked up again by id in it. Kept, a tap on an
+  // empty square moved the old state's piece object (the move was lost) and a tap on another of yours put two on one square.
+  // Gone, or not yours to move any more (your setup is in, it isn't your turn): nothing is picked.
+  function reselect(){
+    if (!sel) return;
+    const p = state.pieces.find(x => x.id === sel.id && x.side === me && x.r >= 0);
+    const open = phase === "setup" ? !LIVE.ready[me] : phase === "play" && state.turn === me;
+    if (p && open){ sel = p; return; }
+    sel = null; copyMode = false; if (phase === "play") info = null;
   }
   // the lobby: the code to share, who plays which side, switch sides, start
   function renderLobby(){
