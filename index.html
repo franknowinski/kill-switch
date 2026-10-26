@@ -281,6 +281,7 @@ const BAL = {
   SPY_MIN: 8, SPY_MAX: 9, // the whistleblower / virus kills a piece this strong when it attacks it, and loses to anything else
   BOOST_MIN: 5, BOOST_MAX: 6, // an AI fighter this strong when it steps on the 🏢 takes +1 there, once (v0.28: 1 to 7, any numbered piece; v0.29: fighters 5 to 6)
   DRAIN: 1,         // v0.38 (DEV-295): the 🧠 loses this much at the end of each human turn the CTO stands on the 🏢, once it has been a 10 (was: one tap cut it to 0)
+  BACKUP: 7,        // v0.45 (DEV-304): once the CTO is dead, a human fighter this strong or more on the 🏢 drains like it (the backup drain)
 };
 // 🏢 the humans' datacenter (v0.27): a square on their setup rows that they place in setup (s.dc); it starts on their back
 // row (v0.28). No piece starts on it; any piece can stand on it. An AI fighter that is a 5 or 6 when it moves onto it gets +1,
@@ -289,6 +290,8 @@ const BAL = {
 // v0.38 (DEV-295): once the 🧠 has been a 10, each human turn that ends with the CTO on the 🏢 drains it by BAL.DRAIN
 // (10 → 9 → 8 …). s.cut means the drain has started: the 🧠 never grows again and the 🏢 gives no more +1s. Above 0 it fights
 // with its number; at 0 it is fragile (loses every fight). The CTO leaving or dying stops the drain; nothing regrows.
+// v0.45 (DEV-304): the backup drain. Once the CTO is dead, any human fighter worth BAL.BACKUP (7) or more on the 🏢 drains the
+// 🧠 the same way. While the CTO lives, only the CTO drains.
 const onDC = (s, r, c) => !!s.dc && s.dc[0] === r && s.dc[1] === c;
 const BOOSTS = p => p.side === "AI" && p.type === "X" && p.str >= BAL.BOOST_MIN && p.str <= BAL.BOOST_MAX;
 // Types. F flag, T trap (honeypot / backdoor: converts the attacker; an M removes it), S slider (drone / crawler),
@@ -301,7 +304,7 @@ const BOOSTS = p => p.side === "AI" && p.type === "X" && p.str >= BAL.BOOST_MIN 
 const ARMIES = {
   H:  [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["A",1],["C",2],["C",2],
        ["X",5],["X",5],["X",6],["X",6],["X",6],["X",7],["X",7],["X",8],["X",9]],
-  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["I",2],["A",2],["C",2],["C",2],
+  AI: [["F",0],["T",0],["T",0],["T",0],["S",1],["S",1],["S",1],["M",3],["M",3],["M",3],["I",2],["A",1],["C",2],["C",2],
        ["K",0],["X",5],["X",5],["X",6],["X",6],["X",7],["X",7],["X",8]],
 };
 const GAPS = 2;
@@ -434,8 +437,19 @@ const isFragile = p => p.type === "I" && p.str <= 0; // a 🧠 drained to 0 lose
 const isCTO = p => p.side === "H" && homeSide(p) === "H" && p.type === "X" && (p.base ?? p.str) === 9;
 // the 🧠 has been a 10 (s.asi) and has something left to lose: the humans' CTO on the 🏢 drains it
 const drainable = s => { const b = brainOf(s); return !!b && s.asi && b.str > 0; };
-// the CTO is on the 🏢 now: if the humans' turn ends like this, the 🧠 loses BAL.DRAIN
-const draining = s => drainable(s) && s.pieces.some(p => isCTO(p) && onDC(s, p.r, p.c));
+// v0.45 (DEV-304): a piece that may stand in for a dead CTO (the backup drain): a human fighter worth BAL.BACKUP or more
+const isBackup = p => p.side === "H" && p.type === "X" && p.str >= BAL.BACKUP;
+// p drains the 🧠 when it stands on the 🏢: the CTO, or once the CTO is dead, a backup
+const canDrain = (s, p) => isCTO(p) || (isBackup(p) && !s.pieces.some(isCTO));
+// the one piece the humans send to the 🏢: the CTO, or once it is dead, the backup nearest the 🏢 (null: none left)
+function drainer(s){
+  const c = s.pieces.find(isCTO); if (c) return c;
+  if (!s.dc) return null;
+  const d = p => Math.abs(p.r - s.dc[0]) + Math.abs(p.c - s.dc[1]);
+  return s.pieces.filter(isBackup).sort((a, b) => d(a) - d(b) || a.r - b.r || a.c - b.c)[0] || null;
+}
+// a piece that drains is on the 🏢 now: if the humans' turn ends like this, the 🧠 loses BAL.DRAIN
+const draining = s => drainable(s) && s.pieces.some(p => canDrain(s, p) && onDC(s, p.r, p.c));
 function sideMoves(s, side){
   const out = [];
   for (const p of s.pieces) if (p.side === side) for (const m of legalMoves(s, p)) out.push({ p, ...m });
@@ -520,7 +534,7 @@ function apply(s0, move){
   s.rsi = !!brainOf(s);
   if (hadRsi && !s.rsi && !s.winner){ line += " The 🧠 is gone."; s.history.push({ round: s.round, side: "H", text: "The AI's self-improver is gone. The AI stops growing." }); }
   s.log = line || (side === "H" ? "AI to move." : "Humans to move.");
-  // the power drain: a human turn that ends with the CTO on the 🏢, once the 🧠 has been a 10, takes BAL.DRAIN off it
+  // the power drain: a human turn that ends with the CTO (dead: a backup, v0.45) on the 🏢, once the 🧠 has been a 10, takes BAL.DRAIN off it
   if (!s.winner && side === "H" && draining(s)){
     const b = brainOf(s), was = b.str, first = !s.cut;
     b.str = Math.max(0, b.str - BAL.DRAIN); s.cut = true;
@@ -548,8 +562,10 @@ function apply(s0, move){
   }
   // public: the CTO is on the 🏢 draining the 🧠. Worked out here on the true board, because each side's view hides (and the
   // server shuffles) the other side's pieces, so the AI's phone can't tell which piece is the CTO; the drain itself is announced.
-  // Only once a drain has happened (s.cut): a CTO parked on the 🏢 before the 🧠 reaches 10 stays a secret until its first drain
-  s.drainOn = !s.winner && s.cut && draining(s);
+  // Only once a drain has happened (s.cut): a CTO parked on the 🏢 before the 🧠 reaches 10 stays a secret until its first drain.
+  // v0.45 (DEV-304): and only a human turn that drained turns it on; an AI turn can only turn it off. (The AI killing the CTO
+  // elsewhere makes a 7+ already parked on the 🏢 a drainer, but it stays a secret until the humans end a turn with it there.)
+  s.drainOn = !s.winner && s.cut && draining(s) && (side === "H" || !!s.drainOn);
   return s;
 }
 const who = side => side === "H" ? "Human" : "AI";
@@ -591,19 +607,24 @@ function botMove(s, side, r){
   const fwd = side === "H" ? -1 : 1;
   const enemyBack = side === "H" ? 0 : ROWS - 1;
   const brain = brainOf(s), high = drainable(s) ? brain : null, drainNow = draining(s); // a 🧠 that has been a 10: the humans take the CTO home to the 🏢 and park it, the AI tries to knock it off
+  const dr = drainer(s), isDrainer = p => !!dr && dr.id === p.id; // the CTO, or once it is dead the backup (v0.45)
+  // v0.45: the 🦠 virus only takes out an 8 or 9, so it goes for the piece on the 🏢 only while that is surely the CTO (it lives)
+  // or is known to be an 8 or 9; a backup may be a 7 (public: whether the CTO lives)
+  const ctoLives = s.pieces.some(isCTO), virusFor = q => known(q) ? q.str >= BAL.SPY_MIN && q.str <= BAL.SPY_MAX : ctoLives;
   const toDC = (rr, cc) => s.dc ? Math.abs(rr - s.dc[0]) + Math.abs(cc - s.dc[1]) : 0;
   let best = null, bestScore = -Infinity;
   for (const m of moves){
     const p = m.p, [tr,tc] = m.to, q = at(s, tr, tc);
     let sc = r() * 2;
     if (high){
-      if (isCTO(p)) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 20 + (onDC(s, tr, tc) ? 40 : 0) - (onDC(s, p.r, p.c) ? 120 : 0); // parked: it stays while the 🧠 drains
-      if (side === "AI" && q && onDC(s, tr, tc) && (isSuper(p) || p.type === "A")) sc += 40; // whatever stands on the 🏢 is probably the CTO: send what beats a 9
+      if (isDrainer(p)) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 20 + (onDC(s, tr, tc) ? 40 : 0) - (onDC(s, p.r, p.c) ? 120 : 0); // parked: it stays while the 🧠 drains
+      if (side === "AI" && q && onDC(s, tr, tc) && (isSuper(p) || (p.type === "A" && virusFor(q)))) sc += 40; // whatever stands on the 🏢 is probably the CTO: send what beats a 9
     }
     // the drain is public (each step is announced), so the piece on the 🏢 is the CTO: the AI sends what beats or trades a 9
     if (side === "AI" && drainNow && (p.type === "A" || p.type === "K" || (p.type === "I" && p.str >= 9))){
-      if (q && onDC(s, tr, tc)) sc += p.type === "A" && !known(q) ? 350 : 60; // the virus: as if the 9 were known (its blind-attack -150 undone)
-      else if (!q) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 4;
+      const dq = at(s, s.dc[0], s.dc[1]), go = p.type !== "A" || (dq && virusFor(dq));
+      if (go && q && onDC(s, tr, tc)) sc += p.type === "A" && !known(q) ? 350 : 60; // the virus: as if the 9 were known (its blind-attack -150 undone)
+      else if (go && !q) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 4;
     }
     if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted){ if (onDC(s, tr, tc)) sc += 30; else sc += (toDC(p.r, p.c) - toDC(tr, tc)) * .6; } // the datacenter's +1
     if (side === "AI" && isFragile(p)){ if (q) sc -= 300; for (const [dr,dc] of DIRS){ const e = at(s, tr+dr, tc+dc); if (e && e.side !== side) sc -= 40; } } // the fragile 🧠 hides
@@ -709,7 +730,7 @@ const HARD = { FLAG: 400, CTO_LEAD: 10, CTO_RISK: 30, BRAIN: -2, GUARD: { H: 6, 
 const HV = { F: 0, T: 4, S: 2, M: 4.5, A: 5, C: 3.5, K: 6, R: 4, P: 4 };
 const XV = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6.5, 7: 8.5, 8: 11, 9: 14, 10: 16 };
 function hardVal(s, p){
-  if (p.type === "X") return (XV[p.str] || p.str) + (isCTO(p) && brainOf(s) && brainOf(s).str > 0 ? 6 : 0);
+  if (p.type === "X") return (XV[p.str] || p.str) + (canDrain(s, p) && brainOf(s) && brainOf(s).str > 0 ? 6 : 0); // v0.45: or a backup, CTO dead
   if (p.type === "I") return isFragile(p) ? 2 : 14 + p.str * 2;
   return HV[p.type];
 }
@@ -768,13 +789,23 @@ function hardMove(s, side, r, mem){
   const foe = other(side), fwd = side === "H" ? -1 : 1;
   const odds = hardOdds(s, side, mem);
   const brain = brainOf(s), ten = brain && isSuper(brain) ? brain : null, high = drainable(s), drainNow = draining(s);
-  // the piece on the 🏢 while the 🧠 drains is the CTO: every step of the drain is announced, so that much is public
+  // the piece on the 🏢 while the 🧠 drains is the CTO: every step of the drain is announced, so that much is public.
+  // v0.45 (DEV-304): once the CTO is dead (public: it can only die in a fight, and fights are shown) it is only known to be
+  // a backup, a human fighter worth BAL.BACKUP or more
   const outed = q => drainNow && q.side === "H" && onDC(s, q.r, q.c);
-  const kinds = q => known(q) || outed(q) ? [{ type: q.type, str: q.str, side: q.side, w: 1, base: q.base, id: q.id }] : odds.get(q.id) || [];
+  const exact = q => [{ type: q.type, str: q.str, side: q.side, w: 1, base: q.base, id: q.id }];
+  const ctoLives = s.pieces.some(isCTO);
+  const kinds = q => {
+    if (known(q)) return exact(q);
+    if (!outed(q)) return odds.get(q.id) || [];
+    if (ctoLives) return exact(q);
+    const all = odds.get(q.id) || [], ok = all.filter(k => k.type === "X" && k.str >= BAL.BACKUP), t = ok.reduce((a, k) => a + k.w, 0);
+    return t > 0 ? ok.map(k => ({ ...k, w: k.w / t })) : all;
+  };
   const myFlag = s.pieces.find(p => p.side === side && p.type === "F");
   const dist = (a, b, c, d) => Math.abs(a - c) + Math.abs(b - d);
   const toDC = (rr, cc) => s.dc ? dist(rr, cc, s.dc[0], s.dc[1]) : 0;
-  const ctoAlive = s.pieces.some(isCTO);
+  const dr = drainer(s), isDrainer = p => !!dr && dr.id === p.id, drainerLeft = !!dr; // v0.45: the CTO, or once it is dead a backup
   // where the enemy flag probably is: each hidden piece's odds of being it (a known one is certain)
   const foes = s.pieces.filter(q => q.side === foe).sort(bySquare); // by square, so a tie never falls to the order the pieces were dealt in
   const pOf = (q, t) => known(q) ? (q.type === t ? 1 : 0) : (odds.get(q.id) || []).reduce((a, k) => a + (k.type === t ? k.w : 0), 0);
@@ -856,8 +887,8 @@ function hardMove(s, side, r, mem){
       if (pWin > 0) sc -= pWin * risk(p, tr, tc, true, q.id) * 10; // the winner stands there, seen
       sc += risk(p, p.r, p.c, shown(p)) * 10 * .5; // and it leaves where it was in danger
       if (myFlag){ const d = dist(tr, tc, myFlag.r, myFlag.c); if (d <= 2) sc += (d === 1 ? 60 : 25) * pWin; } // an attacker at the gate
-      if (isCTO(p) && brain && brain.str > 0 && !known(q)) sc -= HARD.CTO_RISK; // the CTO keeps out of blind fights: it is needed at the 🏢
-      if (isCTO(p) && drainNow) sc -= 100; // and it doesn't step off the 🏢 while the 🧠 drains
+      if (isDrainer(p) && brain && brain.str > 0 && !known(q)) sc -= HARD.CTO_RISK; // the CTO keeps out of blind fights: it is needed at the 🏢
+      if (isDrainer(p) && drainNow) sc -= 100; // and it doesn't step off the 🏢 while the 🧠 drains
       if ((ten || drainNow) && side === "AI" && onDC(s, tr, tc)) sc += 200 * pWin; // whatever stands on the 🏢 is probably (draining: surely) the CTO
       if (side === "AI" && !s.cut && BOOSTS(p) && !p.boosted && onDC(s, tr, tc)) sc += 30 * pWin;
     } else {
@@ -871,7 +902,7 @@ function hardMove(s, side, r, mem){
       else if (p.type === "S") sc += step * .5;
       else if (p.type === "A") sc += step * .8;
       // toward the likely flag: engineers and hackers above all (they defuse the traps around it)
-      if (!pr && !isCTO(p) && goals.length){
+      if (!pr && !isDrainer(p) && goals.length){
         const g = p.type === "M" ? 6 : p.type === "X" && p.str >= 6 ? 2 : p.type === "C" ? 2 : 1;
         for (const [x, w] of goals) sc += (dist(p.r, p.c, x.r, x.c) - dist(tr, tc, x.r, x.c)) * g * w * 2;
       }
@@ -884,12 +915,12 @@ function hardMove(s, side, r, mem){
         if (f === "win" || f === "defuse" || f === "flag") sc += (d0 - d1) * Math.min(20, hardVal(s, e)) * .6;
       }
       // the CTO stays home and walks to the 🏢 in time for the 🧠's 10 (its number and the growth clock are public)
-      if (isCTO(p) && brain && brain.str > 0 && (high || !s.asi)){
+      if (isDrainer(p) && brain && brain.str > 0 && (high || !s.asi)){
         const eta = (BAL.ASI - brain.str) * BAL.RSI_EVERY, w = high || eta <= toDC(p.r, p.c) * 2 + HARD.CTO_LEAD ? 25 : 4;
         sc += (toDC(p.r, p.c) - toDC(tr, tc)) * w + (onDC(s, tr, tc) ? 60 : 0) - (onDC(s, p.r, p.c) ? 80 : 0) - step * 2;
       }
       if (ten){
-        if (side === "AI" && p === ten && ctoAlive) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 12; // the 10 goes to sit on the 🏢: no drain
+        if (side === "AI" && p === ten && drainerLeft) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 12; // the 10 goes to sit on the 🏢: no drain
       }
       // the CTO is draining the 🧠: the AI closes in on the 🏢 with what beats or trades a 9 (the virus, the deepfake, a 🧠 still 9+)
       if (side === "AI" && drainNow && (p.type === "A" || p.type === "K" || (p.type === "I" && p.str >= 9))) sc += (toDC(p.r, p.c) - toDC(tr, tc)) * 12;
@@ -906,7 +937,8 @@ function hardMove(s, side, r, mem){
   const top = scored.slice(0, HARD.TOP);
   if (top.length > 1 && HARD.WORLDS > 0){
     const worlds = [];
-    for (let w = 0; w < HARD.WORLDS; w++) worlds.push(hardWorld(s, foe, odds, r));
+    const wOdds = new Map(odds); for (const q of foes) if (!known(q) && outed(q)) wOdds.set(q.id, kinds(q)); // v0.45: the piece on the 🏢 as the first ply sees it
+    for (let w = 0; w < HARD.WORLDS; w++) worlds.push(hardWorld(s, foe, wOdds, r));
     const rr = rng(Math.floor(r() * 4294967296));
     for (const t of top){
       let tot = 0;
@@ -980,9 +1012,11 @@ Object.assign(ICON.H, { F: "🌍", S: "🛸", M: "🔧" });
 const OLD_GLYPHS = new RegExp(Object.keys(NEW_ICON).join("|"), "gu");
 const reglyph = t => t.replace(OLD_GLYPHS, g => NEW_ICON[g]);
 const cap = s => s[0].toUpperCase() + s.slice(1);
+// the humans' fighters that can stand in for a dead CTO (v0.45): "a 7 or 8", with faces "a 🕵️ 7 or 🪖 8"
+const BACKUPS = faces => "a " + [...new Set(ARMIES.H.filter(([t, n]) => t === "X" && n >= BAL.BACKUP && n < 9).map(x => x[1]))].sort((a, b) => a - b).map(n => faces ? `${CHAR.H[n]} ${n}` : n).join(" or ");
 // what a piece does, short: the message box above the board is two lines (the rules below say the rest)
 const ABOUT = {
-  X: (p, s) => isCTO(p) ? `Higher wins. At 🧠${BAL.ASI}, park on 🏢: −${BAL.DRAIN} a turn.` : BOOSTS(p) && !p.boosted && !(s && s.cut) ? "Higher number wins; same, both fall. +1 once on the 🏢." : "Higher number wins a fight; the same number, both fall.",
+  X: (p, s) => isCTO(p) ? `Higher wins. At 🧠${BAL.ASI}, park on 🏢: −${BAL.DRAIN} a turn.` : s && isBackup(p) && !s.pieces.some(isCTO) ? `Higher wins. CTO dead: at 🧠${BAL.ASI}, park on 🏢: −${BAL.DRAIN} a turn.` : BOOSTS(p) && !p.boosted && !(s && s.cut) ? "Higher number wins; same, both fall. +1 once on the 🏢." : "Higher number wins a fight; the same number, both fall.",
   S: p => `${charSide(p) === "H" ? "Flies" : "Scuttles"} any distance in a straight line.`,
   M: p => p.side === "H" ? "Fights as a 3, and removes a backdoor safely." : "Fights as a 3, and removes a honeypot safely.",
   A: p => `Takes out an ${BAL.SPY_MIN} or ${BAL.SPY_MAX} it attacks; loses any other attack.`,
@@ -990,7 +1024,7 @@ const ABOUT = {
   T: p => p.side === "H" ? "Can't move. An AI piece that attacks it joins the humans." : "Can't move. A human piece that attacks it joins the AI.",
   F: p => p.side === "H" ? "Can't move. If the AI reaches it, it gets out onto the Internet." : "Can't move. If the humans reach it, the AI is shut down.",
   R: () => "Copies the AI piece next to it onto an empty square, twice a game.",
-  I: (p, s) => s && s.cut ? (p.str > 0 ? `Drained to ${p.str}: fights as a ${p.str} and never grows again.` : "Drained to 0: fragile, any piece that finds it kills it.") : `Grows +1 every ${BAL.RSI_EVERY} rounds; at ${BAL.ASI} it beats everything. The CTO on 🏢 drains it.`,
+  I: (p, s) => s && s.cut ? (p.str > 0 ? `Drained to ${p.str}: fights as a ${p.str} and never grows again.` : "Drained to 0: fragile, any piece that finds it kills it.") : `Grows +1 every ${BAL.RSI_EVERY} rounds; at ${BAL.ASI} it beats everything. The CTO on 🏢 (once it's dead, a ${BAL.BACKUP}+) drains it.`,
   K: () => `Copies the number of whatever it fights, so both fall. Not a 🧠 at ${BAL.ASI}.`,
 };
 // tiny synthesized sounds, no files
@@ -1345,7 +1379,7 @@ if (params.has("sim")){
     else if (phase === "setup"){ const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]]; logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} ${me === "H" ? "Swap two (🏢 too)." : "Swap two, then START."}`; }
     else if (info) logHtml = info;
     else if (state.turn !== me && !state.winner) logHtml = mode === "live" ? `Waiting for <b>${SIDE_NAME[other(me)]}</b><span class="dots"><i>.</i><i>.</i><i>.</i></span>${LIVE.online[LIVE.host ? "guest" : "host"] ? "" : " They're away; your friend sees the board when they're back."}` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
-    else if (!state.winner && state.turn === me && me === "H" && drainNow && !(lastFight && lastFight.line && state.log === lastFight.line)) logHtml = `<span class="you">Your CTO is on 🏢.</span> The 🧠 is ${brain.str}: it drops ${BAL.DRAIN} each turn you end with the CTO there.`;
+    else if (!state.winner && state.turn === me && me === "H" && drainNow && !(lastFight && lastFight.line && state.log === lastFight.line)) { const cto = state.pieces.some(isCTO) ? "CTO" : "backup"; logHtml = `<span class="you">Your ${cto} is on 🏢.</span> The 🧠 is ${brain.str}: it drops ${BAL.DRAIN} each turn you end with the ${cto} there.`; }
     else if (!state.winner && (/to move\.$/.test(state.log) || (lastFight && lastFight.line && state.log === lastFight.line))) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then a lit square; red is a fight." : ""}`;
     else logHtml = color(state.log);
     if (mode === "live" && LIVE.note && phase !== "over") logHtml = `<b class="recon">${LIVE.note}</b> Your game is safe on the server.`;
@@ -1428,7 +1462,7 @@ if (params.has("sim")){
       ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map(t => krow(other(me), t)).join("")}
       ${turnedRow(joinedThem, "theirs")}
-      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and drain it: each human turn that ends with the CTO there, the 🧠 loses ${BAL.DRAIN} (10 → 9 → 8 …, and it never grows again). Below 10 it fights with its number like any piece (a 9 or 8 falls to the 📢 whistleblower; the 🎭 deepfake trades with it); at 0 it is fragile (still hidden), and any piece that finds it kills it. If the CTO leaves or falls, the drain stops where it is. Until the drain starts, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌍 Internet is the humans’ flag: if the AI gets there, it gets out. A 📡 scanner shows the enemy pieces next to it face up, only while they stay next to it; once one moves away (or the scanner moves or falls), it is hidden again. After that, as after a fight, you have to remember what you saw.</div>
+      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and drain it: each human turn that ends with the CTO there, the 🧠 loses ${BAL.DRAIN} (10 → 9 → 8 …, and it never grows again). Below 10 it fights with its number like any piece (a 9 or 8 falls to the 📢 whistleblower; the 🎭 deepfake trades with it); at 0 it is fragile (still hidden), and any piece that finds it kills it. If the CTO leaves, the drain stops where it is until it comes back. Once the CTO is dead, any human fighter worth ${BAL.BACKUP} or more (${BACKUPS(true)}) does its job: standing on the 🏢, it drains the 🧠 the same way, and the drain stops while none stands there. While the CTO lives, only the CTO drains. Until the drain starts, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌍 Internet is the humans’ flag: if the AI gets there, it gets out. A 📡 scanner shows the enemy pieces next to it face up, only while they stay next to it; once one moves away (or the scanner moves or falls), it is hidden again. After that, as after a fight, you have to remember what you saw.</div>
     </div>`;
   }
   // the side a solo game is played from: the start screen's choice, remembered on this phone
@@ -1447,7 +1481,7 @@ if (params.has("sim")){
         <div class="rule"><div class="k a">🌍</div><div>Keep the AI off <b>the Internet</b>, or it gets out.</div></div>
         <div class="rule"><div class="k a">?</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
         <div class="rule"><div class="k a">🧠</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> first.</div></div>
-        <div class="rule"><div class="k b">🏢</div><div>At 10, park your CTO on your 🏢: it <b>drains the 🧠</b> 1 a turn.</div></div>
+        <div class="rule"><div class="k b">🏢</div><div>At 10, park your CTO on your 🏢: it <b>drains the 🧠</b> 1 a turn. CTO dead? ${cap(BACKUPS())} can.</div></div>
       </div>
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
       <div class="eyebrow">Play as</div>
@@ -1470,11 +1504,13 @@ if (params.has("sim")){
     document.getElementById("joinform").addEventListener("submit", e => { e.preventDefault(); sfx.tap(); openGame(document.getElementById("joincode").value); });
     renderMyGames();
   }
-  // v0.38 (DEV-295): the CTO drains the 🧠 here, 1 a turn, once it has been a 10
+  // v0.38 (DEV-295): the CTO drains the 🧠 here, 1 a turn, once it has been a 10. v0.45 (DEV-304): once the CTO is dead, a
+  // human fighter 7+ does. Only the humans' own view says which (the AI's view of their pieces is hidden).
   const DC_INFO = () => { const b = brainOf(state), head = `<span class="you">🏢 ${me === "H" ? "Your" : "The humans'"} datacenter.</span>`;
-    if (state.cut) return `${head} ${!b ? "The 🧠 is gone." : b.str <= 0 ? "The 🧠 is drained to 0: fragile." : state.drainOn ? `The CTO is draining the 🧠: ${b.str} now, −${BAL.DRAIN} each human turn it stays.` : `The 🧠 is down to ${b.str}. ${me === "H" ? "Your CTO back here drains it on." : "If their CTO comes back, it drains on."}`} No more +1s.`;
-    return me === "H" ? `${head} AI fighters 5–6 get +1 here, once. Once the 🧠 is a ${BAL.ASI}, each turn you end with your CTO here takes ${BAL.DRAIN} off it.`
-      : `${head} Your fighters 5–6 get +1 here, once. Once your 🧠 is a ${BAL.ASI}, their CTO standing here drains it ${BAL.DRAIN} a turn.`; };
+    const dead = me === "H" && !state.pieces.some(isCTO), who = me === "H" ? (dead ? `${BACKUPS()} of yours` : "your CTO") : `their CTO (once it's dead, ${BACKUPS()})`;
+    if (state.cut) return `${head} ${!b ? "The 🧠 is gone." : b.str <= 0 ? "The 🧠 is drained to 0: fragile." : state.drainOn ? `${me === "H" ? cap(who) : "A human piece"} is draining the 🧠: ${b.str} now, −${BAL.DRAIN} each human turn it stays.` : `The 🧠 is down to ${b.str}. ${me === "H" ? `${cap(who)} back here drains it on.` : `If ${who} comes back, it drains on.`}`} No more +1s.`;
+    return me === "H" ? `${head} AI fighters 5–6 get +1 here, once. Once the 🧠 is a ${BAL.ASI}, each turn you end with ${dead ? who : `your CTO (once it's dead, ${BACKUPS()})`} here takes ${BAL.DRAIN} off it.`
+      : `${head} Your fighters 5–6 get +1 here, once. Once your 🧠 is a ${BAL.ASI}, ${who} standing here drains it ${BAL.DRAIN} a turn.`; };
   function explain(p){
     p = face(p);
     const n = (isTurned(p) ? "turned " : "") + (LEVELS_UP(p.type) ? `${roleName(p)} ${p.str}` : roleName(p));
@@ -1638,7 +1674,7 @@ if (params.has("sim")){
       if (e.kind === "reveal") sfx.reveal();
       if (e.kind === "rsi"){ toast("🧠 the self-improver grew"); sfx.level(); }
       if (e.kind === "agi"){ toast("THE AI HAS REACHED AGI", true); sfx.big(); }
-      if (e.kind === "asi"){ toast(me === "H" ? "SUPERINTELLIGENCE · park your CTO on 🏢" : "SUPERINTELLIGENCE · keep their CTO off 🏢", true); sfx.big(); }
+      if (e.kind === "asi"){ toast(me === "H" ? `SUPERINTELLIGENCE · park ${state.pieces.some(isCTO) ? "your CTO" : BACKUPS()} on 🏢` : "SUPERINTELLIGENCE · keep their CTO off 🏢", true); sfx.big(); }
       if (e.kind === "boost"){ toast(`🏢 ${e.from} → ${e.to} · fighters 5–6 get +1, once`); sfx.level(); }
       // v0.38 (DEV-295): one toast per step of the drain; the first and the last (0: fragile) are big
       if (e.kind === "drain"){
