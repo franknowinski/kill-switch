@@ -1,0 +1,314 @@
+:root{
+  --bg:#0B0F14;--panel:#121923;--line:#223041;--line2:#2C3D52;--fg:#E6EDF3;--muted:#8A9BB0;
+  --blue:#5CC8FF;--blue-bg:#10263A;--ink:#06121C;
+  --amber:#F5A524;--amber-bg:#2A1C08;--amber-line:#6B4A12;
+  --red:#FF5C5C;--green:#3DDC84;
+  --display:"Chakra Petch",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html{overflow-x:clip} /* fight sparks and knock-offs fly past the edge for a moment: never let the page scroll sideways */
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+body{min-height:100dvh;display:flex;flex-direction:column;overflow-x:clip;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button{font:inherit;color:inherit;cursor:pointer}
+h1{font-family:var(--display);font-size:28px;margin:0;letter-spacing:1px}
+/* the board (v0.26, back from v0.22): a tabletop tilted back with the browser's own CSS 3D. .zoom holds the perspective;
+   .tilt (inside) tilts the board and its fx layer together, so fight stand-ins use the same coordinates as the squares.
+   .boardwrap fills the space between the info on top and the buttons at the bottom. */
+.boardwrap{position:relative;flex:1;min-height:0;margin:8px 4px 16px} /* room under the near row: the blocks' front faces stand out of the board */
+.zoom{position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1);will-change:transform}
+.board{position:relative;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;aspect-ratio:1;user-select:none;-webkit-user-select:none;touch-action:pan-y;-webkit-touch-callout:none}
+/* v0.36 (DEV-294): on a phone the board is most of the screen, so a vertical swipe on it scrolls the page (to the rules).
+   pan-y lets it; a touch that starts on a square you can drag from right now is held by the board's touchmove listener
+   (bindPointer), not by touch-action on the squares: the browser's hit-test of the tilted board misses whole rows */
+.sq{position:relative;border-radius:7px;background:var(--panel);border:1px solid var(--line);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:clamp(14px,4.6vw,22px);min-width:0;min-height:0;padding:0;color:var(--fg)}
+.sq.block{background:#070A0E;border-color:#0f151d}
+.sq.ai{color:var(--amber)}.sq.h{color:var(--blue)}
+.sq.can{box-shadow:inset 0 0 0 3px rgba(92,200,255,.55)}
+.sq.can.ai{box-shadow:inset 0 0 0 3px var(--red)}
+.sq.copy{box-shadow:inset 0 0 0 3px var(--green)}
+.sq.last{box-shadow:inset 0 0 0 2px rgba(255,255,255,.3)}
+/* 🏢 the humans' datacenter: a square they place in setup. Dim; lit once the 🧠 is a 10 (the CTO drains it there); pulsing
+   while the CTO stands on it and drains the 🧠 (v0.38, DEV-295); dark once the drain has started and nobody is draining */
+.sq.dc::after{content:"🏢";position:absolute;font-size:.8em;opacity:.45;pointer-events:none}
+.sq.dc[data-id]::after{left:2px;top:0;font-size:.5em;opacity:.9;transform:translateZ(calc(var(--ph) + 2px))}
+.sq.dc.live{background:#2a2208;border-color:#8a6d12}.sq.dc.live::after{opacity:1;animation:bolt 1.2s ease-in-out infinite}
+.sq.dc.drain{background:#2a2208;border-color:#ffd84a;animation:drainpulse 1.1s ease-in-out infinite}.sq.dc.drain::after{opacity:1;animation:bolt 1.1s ease-in-out infinite}
+@keyframes drainpulse{0%,100%{box-shadow:inset 0 0 0 2px rgba(255,216,74,.3)}50%{box-shadow:inset 0 0 0 3px rgba(255,216,74,1),0 0 12px rgba(255,216,74,.55)}}
+.sq.dc.off::after{opacity:.18;filter:grayscale(1)}
+.sq.dc.pick{box-shadow:inset 0 0 0 3px var(--blue)}
+/* ↑ a piece that took power from the datacenter (+1, once) */
+.bst{position:absolute;right:4%;top:2%;font-size:.45em;font-weight:700;color:#ffd84a;text-shadow:0 1px 2px #000;font-style:normal;pointer-events:none;transform:translateZ(calc(var(--ph) + 3px))}
+@keyframes bolt{50%{filter:drop-shadow(0 0 6px #ffd84a)}}
+/* ↺ a piece that switched sides at a trap (v0.28), shown only where its face is: in its old army's colour */
+.trn{position:absolute;left:11%;bottom:14%;font-size:.42em;font-weight:700;line-height:1;padding:.12em .28em;border-radius:.5em;font-style:normal;pointer-events:none;transform:translateZ(calc(var(--ph) + 3px));color:#06121C}
+.trn.h{background:var(--blue)}.trn.ai{background:var(--amber)}
+.pc .trn,.kr .trn{position:static;transform:none;font-size:9px;margin-left:3px;padding:1px 3px}
+/* pieces: raised blocks with a top, a front and two sides, and a soft shadow (v0.17) */
+:root{--tilt:28deg;--ph:7px}
+.zoom{perspective:1100px;perspective-origin:50% -40%}
+.tilt{position:relative;transform-style:preserve-3d;transform:rotateX(var(--tilt));transform-origin:50% 100%;margin-top:-6%} /* the tilt leaves a gap above the far edge: pull it up */
+.board,.sq,.fx{transform-style:preserve-3d}
+.pz,.clone{position:absolute;transform-style:preserve-3d;pointer-events:none;font-weight:700}.pz{inset:0}
+.clone{font-size:clamp(14px,4.6vw,22px)}
+.shd{position:absolute;inset:18% 12% 6%;border-radius:8px;background:rgba(0,0,0,.6);filter:blur(3px);transform:translate3d(1px,3px,1px)}
+.blk{position:absolute;inset:8% 9% 12%;transform-style:preserve-3d;transition:transform .15s}
+.face{position:absolute;border-radius:6px}
+.ftop{inset:0;transform:translateZ(var(--ph));display:flex;align-items:center;justify-content:center;line-height:1;transition:box-shadow .15s}
+.ffr{left:2px;right:2px;bottom:0;height:var(--ph);transform-origin:bottom;transform:rotateX(-90deg);border-radius:0 0 6px 6px}
+.flf{top:2px;bottom:2px;left:0;width:var(--ph);transform-origin:left;transform:rotateY(-90deg)}
+.frt{top:2px;bottom:2px;right:0;width:var(--ph);transform-origin:right;transform:rotateY(90deg)}
+.h .ftop{background:linear-gradient(180deg,#1a4068,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue);border-top-color:#4f9fd0}
+.h .ffr{background:linear-gradient(#0d2238,#071422)}.h .flf,.h .frt{background:#0a1a2b}
+.ai .ftop{background:linear-gradient(180deg,#4a3209,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);border-top-color:#a8761e}
+.ai .ffr{background:linear-gradient(#2b1d06,#140d03)}.ai .flf,.ai .frt{background:#1f1504}
+.ftop .ic{font-size:1.02em;line-height:1}.ftop .ic.up,.floater .ic.up{font-size:.92em;transform:translate(-14%,-10%)} /* room for the number in the corner */
+.ftop .n{position:absolute;right:3%;bottom:3%;font-size:.5em;padding:.08em .26em;border-radius:.4em;background:rgba(0,0,0,.5);font-weight:700;line-height:1.1}
+.sq .q,.clone .q,.floater .q{color:var(--amber);opacity:.85}.sq.h .q,.clone.h .q{color:var(--blue)}
+.sq.asi .ftop{box-shadow:0 0 0 2px var(--red),0 0 14px rgba(255,92,92,.8)}
+.sq.sel .blk{transform:translateZ(12px) scale(1.08)}
+.sq.sel .ftop{box-shadow:0 0 0 2px var(--blue),0 0 18px rgba(92,200,255,.6)}
+body.me-ai .sq.sel .ftop{box-shadow:0 0 0 2px var(--amber),0 0 18px rgba(245,165,36,.6)}
+.sq:not(.sel) .blk.idle:not(.reveal){animation:bob 2.8s ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes bob{50%{transform:translateZ(3px)}}
+.pz.drag{visibility:hidden}
+/* while dragging, a flat copy of the piece follows the finger above the table. It sits at the top left of the screen and
+   is moved by a transform only (set each frame from the code; v0.33, DEV-291), so a drag does no layout work */
+.floater{position:fixed;left:0;top:0;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;will-change:transform;box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(92,200,255,.5)}
+.floater.h{background:linear-gradient(180deg,#1a4068,var(--blue-bg));border:1px solid #2a6a96;color:var(--blue)}
+.floater.ai{background:linear-gradient(180deg,#4a3209,var(--amber-bg));border:1px solid var(--amber-line);color:var(--amber);box-shadow:0 14px 22px rgba(0,0,0,.6),0 0 22px rgba(245,165,36,.5)}
+.floater .n{position:absolute;right:4%;bottom:4%;font-size:.5em;padding:.08em .26em;border-radius:.4em;background:rgba(0,0,0,.5)}
+.spk{position:absolute;width:6px;height:6px;margin:-3px;border-radius:2px;background:var(--amber);pointer-events:none}
+.sq.can{animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:inset 0 0 0 3px rgba(92,200,255,.35)}50%{box-shadow:inset 0 0 0 3px rgba(92,200,255,.9)}}
+.sq.can.ai{animation:pulser 1.1s ease-in-out infinite}
+@keyframes pulser{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,92,92,.4)}50%{box-shadow:inset 0 0 0 3px rgba(255,92,92,1)}}
+/* where a drag lands if you let go now (v0.33, DEV-291): steady and bright, over the lit squares' pulse */
+.sq.over,.sq.can.ai.over{animation:none;background:#2b5a85;border-color:#fff;box-shadow:inset 0 0 0 3px #fff,0 0 18px 2px rgba(92,200,255,.9)}
+.blk.reveal{animation:flip3d .5s cubic-bezier(.3,1.4,.5,1)} /* the idle bob skips a revealing block, or it would hide the flip */
+@keyframes flip3d{0%{transform:translateZ(30px) rotateY(-90deg)}100%{transform:none}}
+.sq.turned .ftop{animation:turnflash .7s ease-out}
+@keyframes turnflash{0%{filter:brightness(1)}30%{filter:brightness(2.2) saturate(2)}100%{filter:brightness(1)}}
+.fx{position:absolute;inset:0;pointer-events:none;z-index:3}
+
+
+.flash{position:fixed;inset:0;pointer-events:none;z-index:8;background:radial-gradient(circle,rgba(245,165,36,.4),transparent 70%);animation:flashout .6s ease-out forwards}
+.board.shake{animation:shake .4s}.board.shake.big{animation:shakebig .6s}
+@keyframes shakebig{0%,100%{transform:none}15%{transform:translate(-9px,4px)}30%{transform:translate(9px,-4px)}45%{transform:translate(-7px,2px)}60%{transform:translate(7px,-2px)}80%{transform:translate(-3px,0)}}
+.dots i{font-style:normal;animation:blink 1.2s infinite}.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,60%,100%{opacity:.2}30%{opacity:1}}
+body.won .board{animation:shake .5s}body.lost .board{animation:shake .5s}
+body.won::after,body.lost::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:8;animation:flashout 1.1s ease-out forwards}
+body.won::after{background:radial-gradient(circle,rgba(61,220,132,.35),transparent 70%)}
+body.lost::after{background:radial-gradient(circle,rgba(255,92,92,.4),transparent 70%)}
+@keyframes shake{0%,100%{transform:none}20%{transform:translate(-6px,2px)}40%{transform:translate(6px,-2px)}60%{transform:translate(-4px,0)}80%{transform:translate(4px,0)}}
+@keyframes flashout{from{opacity:1}to{opacity:0}}
+.ghost.sm{flex:0 0 52px}
+.msg{margin:4px 8px 0;padding:6px 10px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-size:13px;line-height:1.4;height:calc(2 * 1.4em + 14px);overflow-y:auto;flex-shrink:0} /* a fixed height: a longer message must never move the board under the finger */
+.msg b{color:var(--amber)}
+.msg .you{color:var(--blue)}.msg .them{color:var(--amber)}
+body.me-ai .msg .you,body.me-ai .you{color:var(--amber)}body.me-ai .msg .them{color:var(--blue)}body.me-ai .msg b{color:var(--blue)}
+.link{margin:6px 8px 0;padding:8px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:10.5px;color:var(--muted);word-break:break-all;max-height:64px;overflow:auto;user-select:all}
+.row2{display:flex;gap:8px}.row2 .ghost{font-size:13px}
+/* play a friend (v0.30): the game code, the join box, this phone's games, the turn pill */
+.codebig{font-family:var(--display);font-size:46px !important;letter-spacing:10px;text-align:center;line-height:1.1 !important;padding-left:10px}
+.join{display:flex;gap:8px;margin:0}.join input{flex:1;min-width:0;min-height:46px;border-radius:12px;border:1px solid var(--line2);background:#0d131b;color:var(--fg);font:700 18px var(--mono);letter-spacing:6px;text-transform:uppercase;text-align:center;padding:0 8px}
+.join input::placeholder{color:var(--muted);letter-spacing:4px}.join .ghost{flex:0 0 96px}
+.games{display:flex;flex-direction:column;gap:6px}.games[hidden]{display:none}
+.game{display:flex;align-items:center;gap:10px;min-height:46px;padding:8px 12px;border-radius:12px;border:1px solid var(--line2);background:#0d131b;font:600 13px var(--mono);text-align:left;color:var(--fg)}
+.game .gc{font-family:var(--display);font-size:17px;letter-spacing:3px}.game .gs{flex:1;color:var(--muted);text-align:right}.game .gs b{color:var(--blue)}
+.pill.turn{margin-left:auto;color:var(--muted)}.pill.turn.mine{color:var(--ink);background:var(--blue);border-color:var(--blue)}
+body.me-ai .pill.turn.mine{background:var(--amber);border-color:var(--amber)}
+.nw{white-space:nowrap}.on{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--line2);margin-left:4px;vertical-align:middle}.on.yes{background:var(--green)}
+.msg b.recon,body.me-ai .msg b.recon,.lvnote{color:#ffd84a}
+.msg.over{border-width:2px;display:flex;flex-direction:column;gap:6px;height:auto}
+.msg.over h1{font-size:24px}.msg.over.win{border-color:var(--green)}.msg.over.lose{border-color:var(--red)}
+.pc{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 5px;border-radius:6px;font-weight:600;font-size:13px;flex-shrink:0}
+.pc.h{background:var(--blue-bg);border:1px solid #1f4b6b;color:var(--blue)}
+.pc.ai{background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber)}
+.actions{display:flex;gap:8px;padding:0 8px;flex-shrink:0}.actions .ghost,.actions .primary{min-height:44px}.actions .primary{font-size:16px}
+/* game over (v0.37, DEV-296): PLAY AGAIN · RULES ↓ · 🔊 · 🏠 on one line, each label on one line, down to 320 px */
+.actions.end button{white-space:nowrap;padding:0 4px}
+@media (max-width:360px){.actions.end .primary{font-size:14px;letter-spacing:.5px}.actions.end .ghost:not(.sm){font-size:13px;letter-spacing:.5px}.actions.end .ghost.sm{flex-basis:44px}}
+.ghost{flex:1;min-height:46px;border-radius:12px;border:1px solid var(--line2);background:transparent;font-family:var(--display);font-weight:700;letter-spacing:1px;font-size:15px}
+.ghost[aria-pressed="true"]{border-color:var(--green);color:var(--green);background:#0d2418}
+.ghost:disabled{opacity:.4}
+.primary{flex:1;min-height:52px;border-radius:14px;border:0;background:var(--blue);color:var(--ink);font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:1px}
+.overlay{position:fixed;inset:0;background:rgba(5,8,12,.94);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;z-index:5}
+.card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:20px 18px;display:flex;flex-direction:column;gap:12px;margin:auto}
+.card p{margin:0;font-size:14px;line-height:1.5}
+.rules{display:grid;gap:8px;margin:2px 0}
+.rule{display:flex;gap:10px;align-items:center;font-size:15px;line-height:1.35}
+.rule .k{width:40px;height:40px;flex-shrink:0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.rule .k.b{background:var(--blue-bg);border:1px solid #1f4b6b}
+.rule .k.a{background:var(--amber-bg);border:1px solid var(--amber-line)}
+.key{padding:10px 16px 28px;display:flex;flex-direction:column;gap:4px}
+.kh{font-family:var(--display);font-size:13px;letter-spacing:1.5px;text-transform:uppercase;margin:10px 0 2px;display:flex;align-items:center;gap:8px}
+.kh.b{color:var(--blue)}.kh.a{color:var(--amber)}.kh.n{color:var(--muted);text-transform:none;letter-spacing:0;font-family:var(--mono);font-size:12.5px;line-height:1.45;margin-top:14px}
+.kr{display:grid;grid-template-columns:auto minmax(72px,auto) minmax(0,1fr) auto;align-items:center;gap:8px;padding:5px 8px;border-radius:10px;background:#0d131b;border:1px solid #182230;font-size:13px;cursor:pointer}
+.kr .pc{min-width:30px;height:28px;font-size:15px;white-space:nowrap;padding:0 6px}
+.kr .pc.tok{position:relative;width:34px;padding:0}.kr .pc.tok .ic{font-size:15px}.kr .pc.tok .n{position:absolute;right:3px;bottom:0;font-size:9px;font-weight:700}
+.kr .kn{font-weight:600;white-space:nowrap}
+.kr .kp{color:var(--muted);font-size:12px;line-height:1.3;min-width:0;overflow-wrap:anywhere}
+.kc{font-weight:600;font-size:13px;white-space:nowrap}.kc i{font-style:normal;color:var(--muted);font-weight:400;font-size:11px}
+.kr.gone{opacity:.35}.kr.gone .pc{filter:grayscale(1)}
+.ranks{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.ranks .kr{grid-template-columns:auto minmax(0,1fr) auto;padding:4px 8px}.ranks .kr .kn{min-width:0;overflow:hidden;text-overflow:ellipsis}.ranks .kr .kp{display:none}
+.kr .kb{color:var(--amber);font-size:11px;letter-spacing:0;white-space:nowrap} /* v0.29: AI fighters 5–6 take +1 at the 🏢, once */
+.seen{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px;color:var(--muted);padding:2px 8px 4px}
+.seen .pc{min-width:24px;height:22px;font-size:12px}
+.eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+/* the Watcher lockup on the start screen (v0.34, DEV-292): outlined text, so no font load; its red eye sweeps the visor
+   (clipped to the visor, so its glow and trail never smear onto the helmet) */
+.logo{line-height:0;margin:2px 0 0}.logo > svg{height:40px;width:auto;max-width:100%;display:block}.eyebrow.tag{margin-top:-2px}
+.logo .eye{animation:sweep 5s ease-in-out infinite}
+@keyframes sweep{0%,18%,100%{transform:translateX(0)}42%,60%{transform:translateX(-19px)}}
+@media (prefers-reduced-motion:reduce){.logo .eye{animation:none}}
+pre{white-space:pre-wrap;padding:16px;font-size:13px}
+/* alerts: level-ups and milestones slide in over the top of the board */
+.toasts{position:absolute;left:0;right:0;top:8px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:4}
+.toast{padding:7px 14px;border-radius:999px;background:#2A1C08;border:1px solid var(--amber);color:var(--amber);font-family:var(--display);font-size:13px;letter-spacing:1px;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:tin .25s ease-out, tout .5s ease-in forwards;animation-delay:0s,var(--hold,1.6s);max-width:calc(100vw - 32px);text-align:center;text-wrap:balance}
+.toast.big{font-size:17px;padding:12px 20px;background:#3a0f0f;border-color:var(--red);color:#fff;--hold:3.2s}
+.toast.drain{background:#2a2208;border-color:#ffd84a;color:#ffd84a}
+@keyframes tin{from{opacity:0;transform:translateY(-12px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes tout{to{opacity:0;transform:translateY(-10px)}}
+#app{display:flex;flex-direction:column;width:100%}
+/* play screen (v0.23), one column everywhere: pills, the last fight, the message, the board as large as fits, the buttons.
+   Rules and pieces are below, by scrolling. */
+.left{display:flex;flex-direction:column;height:calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom));min-height:470px;padding-bottom:14px}
+.hud{display:flex;gap:6px;align-items:center;padding:6px 8px 0;flex-shrink:0}
+.pill{font:600 12px var(--mono);letter-spacing:.06em;padding:5px 10px;border-radius:999px;background:rgba(14,20,28,.88);border:1px solid var(--line2);white-space:nowrap}
+.pill.am{color:var(--amber);border-color:var(--amber-line);background:linear-gradient(90deg,rgba(245,165,36,.22) var(--p,0%),rgba(14,20,28,.88) var(--p,0%))}
+.fline{display:flex;gap:8px;align-items:center;margin:4px 8px 0;padding:6px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:13px;color:var(--fg);text-align:left;width:auto;font-family:var(--mono);flex-shrink:0}
+.fline span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fline.none{color:var(--muted);border-style:dashed} /* holds its row before the first fight, so the board doesn't jump when it appears; v0.39 (DEV-297): says so instead of a blank band */.fline small{color:var(--muted);font-size:11px;flex-shrink:0}
+.fline .you{color:var(--blue)}.fline .them{color:var(--amber)}body.me-ai .fline .you{color:var(--amber)}body.me-ai .fline .them{color:var(--blue)}
+.more{text-align:center;font-size:12px;color:var(--muted);letter-spacing:1px;margin:14px 0 0}
+/* after a fight the winner's number rises from the square and fades; never blocks a tap */
+.float{position:fixed;z-index:4;pointer-events:none;transform:translate(-50%,-50%);font-family:var(--display);font-weight:700;font-size:44px;line-height:1;white-space:nowrap;text-shadow:0 3px 12px rgba(0,0,0,.85),0 0 2px #000}
+.float.h{color:var(--blue)}.float.ai{color:var(--amber)}.float.n{color:var(--fg)}.float .x{color:var(--muted);font-size:.6em;margin:0 .15em}.float .b{color:var(--blue)}.float .a{color:var(--amber)}
+.card.lobby .link{margin:0}.card.lobby h1{font-size:26px}.card .rules .rule b{color:var(--fg)}
+/* the start screen: pick a side, then PLAY */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px;border-radius:14px;background:#0d131b;border:1px solid var(--line2)}
+.seg button{min-height:48px;border-radius:10px;border:1px solid transparent;background:transparent;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:1px;color:var(--muted)}
+.seg button[aria-pressed="true"].h{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+.seg button[aria-pressed="true"].ai{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
+.seg.lv{grid-template-columns:1fr 1fr 1fr}.seg.lv{margin-top:-6px}.seg.lv button{min-height:36px;font-size:14px;padding:0 4px}
+.seg.lv button[aria-pressed="true"]{background:#1B2633;border-color:var(--fg);color:var(--fg)} /* v0.35: the bot's level, beside the side picker */
+.pill.lvl{color:var(--muted)}
+/* v0.39 (DEV-297): the narrowest phones (iPhone SE 1st gen, 320px) tighten the pills so all three fit on one line, "🧠 superintelligence" in full
+   (one line: a wrap would move the board when the pill text changes mid-game) */
+@media (max-width:359px){.hud{gap:4px}.pill{padding:5px 7px;letter-spacing:0}}
+/* home-screen app (DEV-297, the user: "the top r1 and grows in 6 can be a bit lower"): the pills drop 10px from the status bar /
+   Dynamic Island (the body already pads by the safe area), and the fight line gives the same 10px back, so the board doesn't move */
+.standalone .hud{padding-top:16px}.standalone .fline{margin-top:2px;padding-top:2px;padding-bottom:2px}
+.lgs{display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow:auto;font-size:13px;line-height:1.4}
+.lgs div{padding:4px 2px;border-bottom:1px solid #182230}.lgs i{font-style:normal;color:var(--muted);font-size:11px;margin-right:6px}.lgs .mile{color:var(--amber)}
+/* phones: the board stretches to fill the space (squares taller than wide) with a flatter tilt, as in v0.22 */
+@media (max-width:859px){
+  /* iPhone Safari 26 floats its tab bar over the bottom of the page, and the viewport units don't leave room for it:
+     lift the buttons above it (v0.28: START was under the bar at setup) */
+  .ios-bar .left{padding-bottom:calc(14px + max(0px, 76px - env(safe-area-inset-bottom)))}
+  .zoom,.tilt{height:100%}
+  .zoom{perspective:1300px;perspective-origin:50% -30%}
+  :root{--tilt:20deg;--ph:9px}
+  .tilt{margin-top:0}
+  .board{aspect-ratio:auto;height:100%;grid-template-rows:repeat(8,minmax(0,1fr))}
+  .sq,.clone{font-size:clamp(15px,5.4vw,28px)}
+}
+@media (min-width:860px){
+  /* desktop: the same column, as wide as the board can be while everything fits the window's height */
+  #app{align-items:center;padding:0 20px}
+  .left{width:min(100%,calc(100svh - 200px));min-height:520px;padding:10px 0 16px}
+  .hud,.actions{padding-left:0;padding-right:0}
+  .fline,.msg,.link{margin-left:0;margin-right:0}.boardwrap{margin:8px 0}
+  .boardwrap{display:flex;flex-direction:column;justify-content:center;margin:14px 0 16px}
+  .left{width:min(100%,calc(100svh - 240px))}
+  .board{gap:4px}:root{--ph:9px}.tilt{margin-top:-1%}
+  .sq,.clone{font-size:calc(min(100vw - 40px, 100svh - 240px) * .048)}.sq{border-radius:9px}
+  .msg{font-size:14px}
+  .right{width:min(100%,760px)}
+  .key{padding:14px 0 24px}
+  .msg.over h1{font-size:28px}
+  /* v0.29: the board is as wide as the column, so a taller box above it (the end screen) pushed its tilted far row up over the
+     message. Size it by the room it has instead: the board is never wider than its space is tall, less the 3D blocks' overhang */
+  .boardwrap{container-type:size}
+  .zoom{width:min(100%,calc(100cqh * var(--fit)));margin:0 auto}
+  :root{--fit:.97}
+}
+.ranks .kr .kn{white-space:normal;overflow:visible;line-height:1.15} /* "self-improver", "rogue agent" wrap rather than being cut off */
+@media (max-width:360px){.ranks .kr{gap:6px;padding:4px 6px}.ranks .kr .kn{font-size:12px}}
+@media (prefers-reduced-motion:reduce){.blk.idle,.blk.reveal,.sq.can,.sq.can.ai,.sq.dc.live::after,.sq.dc.drain,.sq.dc.drain::after,.sq.turned .ftop,.board.shake,.toast{animation:none!important}.blk{transition:none}}
+/* v0.49 (DEV-315): STATS beside PLAY A FRIEND on the start screen, and the Stats screen (web/src/stats.js) */
+.introrow{display:flex;gap:8px}.introrow #stats{flex:0 0 96px}
+.card.stats h1{font-size:26px;margin:-6px 0 0}
+.st-tabs button[aria-pressed="true"]{background:#1B2633;border-color:var(--fg);color:var(--fg)}
+.st-body{display:flex;flex-direction:column;gap:10px}
+.st-empty{color:var(--muted);text-align:center;padding:18px 6px}
+.st-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:6px}
+.st-tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:12px;background:#0d131b;border:1px solid var(--line)}
+.st-tile b{font:700 22px var(--display);line-height:1.1}.st-tile span{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:center}
+.st-tile.up b{color:var(--green)}.st-tile.down b{color:var(--red)}
+.st-table{border-radius:12px;border:1px solid var(--line);background:#0d131b;overflow:hidden}
+.st-row{display:grid;grid-template-columns:minmax(0,1fr) repeat(4,2.1em) 3em;gap:2px;align-items:center;padding:6px 10px;font:600 13px var(--mono);font-variant-numeric:tabular-nums}
+.st-row > span:not(:first-child){text-align:right}.st-row > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-row + .st-row{border-top:1px solid var(--line)}.st-row.zero{color:var(--muted)}
+.st-head{font:700 12px var(--display);letter-spacing:1px;text-transform:uppercase;color:var(--muted);background:var(--panel)}.st-head > span:first-child{color:var(--fg)}
+.st-row .h{color:var(--blue)}.st-row .ai{color:var(--amber)}.st-row.zero .h,.st-row.zero .ai{opacity:.6}
+.st-ends{display:grid;gap:4px;margin-top:-4px}
+.st-end{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:13px}.st-end b{font-family:var(--mono)}
+.st-games{display:flex;flex-direction:column;gap:4px;margin-top:-4px}
+.st-game{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:8px;align-items:center;padding:7px 10px;border-radius:10px;background:#0d131b;border:1px solid var(--line);font-size:12px;white-space:nowrap}
+.st-game .gd,.st-game .gr,.st-game .gv{color:var(--muted)}.st-game .gd{min-width:6ch}.st-game .gr{min-width:4ch;text-align:right}.st-game b{min-width:4.2em;text-align:center}
+.st-game .h,.st-game i.h{color:var(--blue)}.st-game .ai,.st-game i.ai{color:var(--amber)}.st-game i{font-style:normal}
+.st-game > span:nth-child(2){overflow:hidden;text-overflow:ellipsis}
+.st-game b{font-family:var(--display);letter-spacing:1px}.st-game.won b{color:var(--green)}.st-game.lost b{color:var(--red)}.st-game.drawn b{color:var(--fg)}
+.st-reset{font-size:13px;color:var(--muted);min-height:40px}
+.st-confirm{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px;border:1px solid var(--red);background:#1f0d0d}
+.ghost.danger{border-color:var(--red);color:var(--red)}
+@media (max-width:359px){.st-row{grid-template-columns:minmax(0,1fr) repeat(4,1.9em) 2.8em;padding:6px 8px;font-size:12px}.st-game{gap:5px;padding:7px 8px;font-size:11px}}
+/* v0.51 (DEV-317): the profile button on the start screen and the account screens (web/src/account-ui.js) */
+#acctslot:empty{display:none}
+.acctbar{display:flex;justify-content:flex-end;margin:-8px -6px -6px 0}
+.acct{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);background:#0d131b;font:700 12px var(--display);letter-spacing:1px;color:var(--fg)}
+.acct.in{font:600 13px var(--mono);letter-spacing:0;padding-left:6px}.acct .av{font-size:18px;line-height:1}.acct .hd{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.acct-card h1{font-size:26px;overflow-wrap:anywhere}
+.sso-list{display:flex;flex-direction:column;gap:8px}
+.sso{display:flex;align-items:center;justify-content:center;gap:10px;min-height:48px;border-radius:12px;font:600 16px system-ui,-apple-system,sans-serif;letter-spacing:0}
+.sso.apple{background:#fff;color:#000;border:0} /* Apple's guidelines: white on a dark background */
+.sso.google{background:#131314;color:#E3E3E3;border:1px solid #8E918F} /* Google's dark button */
+.sso:disabled{opacity:.5}
+.sso-g{min-height:44px;display:flex;justify-content:center;color-scheme:normal}
+.stub{display:flex;gap:8px;margin:0}.stub input{flex:1;min-width:0;min-height:46px;border-radius:12px;border:1px solid var(--line2);background:#0d131b;color:var(--fg);font:600 15px var(--mono);padding:0 10px}.stub .ghost{flex:0 0 auto;padding:0 12px;font-size:13px}
+.acct-err{color:var(--red)}.acct-err[hidden]{display:none}
+.acct-busy,.acct-note,.st-note{color:var(--muted);font-size:13px}
+.card p.acct-fine{color:var(--muted);font-size:12px;line-height:1.45}.acct-fine a{color:var(--blue)}
+.hd-in{display:flex;align-items:center;gap:4px;min-height:48px;padding:0 12px;border-radius:12px;border:1px solid var(--line2);background:#0d131b;font:700 20px var(--mono)}
+.hd-in span{color:var(--muted)}.hd-in input{flex:1;min-width:0;border:0;background:transparent;color:var(--fg);font:inherit;padding:0;outline:none}
+.hd-in:focus-within{border-color:var(--blue)}
+.av-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.av-grid button{aspect-ratio:1;min-height:40px;border-radius:12px;border:1px solid var(--line);background:#0d131b;font-size:22px;line-height:1;padding:0}
+.av-grid button[aria-pressed="true"]{border-color:var(--green);background:#0d2418;box-shadow:0 0 0 1px var(--green)}
+.me{display:flex;align-items:center;gap:12px;min-width:0}.me h1{min-width:0}
+.me-av{flex:0 0 auto;width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:32px;background:#0d131b;border:1px solid var(--line2)}
+.acct-del{font-size:13px;min-height:40px}
+#st-acct{text-transform:none;letter-spacing:1px} /* a handle keeps its own case */
+/* v0.52 (DEV-318): FRIENDS beside the profile button, the Friends screens (web/src/friends.js), challenges in My games */
+.acctbar{gap:6px}.acct{min-width:0}.acct.fr{flex:0 0 auto}
+.fr-add{display:flex;gap:8px;margin:0}.fr-add .hd-in{flex:1;min-width:0;font-size:17px}.fr-add .ghost{flex:0 0 76px}
+.fr-head{display:flex;justify-content:space-between;padding:0 12px;margin-bottom:-6px}
+.fr-list{display:flex;flex-direction:column;gap:6px}
+.fr-row{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:6px 12px;border-radius:12px;border:1px solid var(--line2);background:#0d131b;color:var(--fg);font:600 14px var(--mono);text-align:left}
+.fr-av{flex:0 0 auto;font-size:22px;line-height:1}
+.fr-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr-rec{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}.fr-rec .fr-w{color:var(--green)}.fr-rec .fr-l{color:var(--red)}
+.fr-go{color:var(--muted);font-size:18px;line-height:1}
+.seg.fr-sides{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:-6px}.seg.fr-sides button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:52px;padding:4px 2px;font-size:13px;letter-spacing:.5px;line-height:1.1}.seg.fr-sides i{font-style:normal;font-size:18px}
+.seg button[aria-pressed="true"].rnd{background:#1B2633;border-color:var(--fg);color:var(--fg)}
+.me-friends{display:flex;flex-direction:column;gap:10px}.me-friends:empty{display:none}
+#mg-chal:empty,#mg-more:empty{display:none}
+.game.chal{flex-direction:column;align-items:stretch;gap:8px;border-color:var(--amber-line);background:var(--amber-bg)}
+.ch-who{display:flex;align-items:center;gap:8px;font-size:14px;min-width:0}.ch-who b{color:var(--amber)}.ch-who > span:last-child{min-width:0;overflow-wrap:anywhere}
+.ch-sub{color:var(--muted);font-size:12px;font-weight:400}
+.chal .ghost{min-height:40px;font-size:14px}
+.badge{color:var(--amber);font-weight:700}
+@media (max-width:359px){.seg.fr-sides button{font-size:12px;letter-spacing:0}.fr-row{gap:8px;padding:6px 10px}}

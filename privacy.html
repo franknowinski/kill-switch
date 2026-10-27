@@ -29,13 +29,43 @@ a{color:var(--blue);overflow-wrap:anywhere}
 <body>
 <main>
 <h1>KILL SWITCH · PRIVACY</h1>
-<p class="date">Updated 25 October 2026</p>
-<p>Kill Switch (the iPhone app and the web game) collects no personal data. There are no accounts, no ads, no analytics
-and no tracking, and nothing about you is sold or shared.</p>
+<p class="date">Updated 27 October 2026</p>
+<p>Kill Switch (the iPhone and Android apps and the web game) needs no account to play. If you choose to sign in, we
+keep a small profile and your game stats, as described below. There are no ads, no analytics and no tracking, and
+nothing about you is sold or shared.</p>
 
 <h2>Solo games</h2>
-<p>A game against the bot runs entirely on your device. Nothing is sent anywhere. Your settings (sound, side, bot level)
-are saved on your device only.</p>
+<p>A game against the bot runs entirely on your device. If you aren't signed in, nothing is sent anywhere. Your
+settings (sound, side, bot level) and your stats are saved on your device only.</p>
+
+<h2>Signing in (optional)</h2>
+<p>You can sign in with Apple or Google to keep a <b>@handle</b>, an avatar and your stats on every device. When you
+do, Apple or Google confirms who you are to our server, and we keep only:</p>
+<ul>
+<li>a user ID that Apple or Google gives our app for you (a random-looking number, not your email);</li>
+<li>the @handle and the avatar (one of the game's piece emoji) you pick;</li>
+<li>your game stats: games played, won, lost and drawn by level and side, streaks, how games ended, and for games with
+a friend the date, sides, result and length;</li>
+<li>your sign-in sessions, and if you sign in with Apple, a token Apple gives our server so that it can end your Apple
+sign-in for our app when you delete your account;</li>
+<li>which friend games you made or joined while signed in (the game codes);</li>
+<li>your friends list (players you added by @handle, or played while you were both signed in), challenges you sent
+or received until they are answered or 7 days pass, and for each finished game against another signed-in player the
+two of you, the date, sides, result, how it ended and its length. A friend sees your @handle, avatar and your record
+against them; nothing else.</li>
+</ul>
+<p>We never ask for or keep your email address, your name or a photo, even when Apple or Google offers them, and an
+Apple "Hide My Email" address is never seen or kept either. Your @handle is shown in the game; it isn't published
+anywhere else.</p>
+<p>When a device's own stats are added to an account, the server keeps a random ID for that device and the stats it
+added, so the same games are never added twice. That record names no account, so it stays when an account is
+deleted: a new account made on that device later gets only the games played since.</p>
+<p id="delete"><b>Deleting your account.</b> In the game, open your profile (top of the start screen) and tap
+<b>DELETE ACCOUNT</b>. That removes your user ID, handle, avatar, stats and sessions, your friends list, your
+challenges and every game result with you in it (from your friends' records too) from our server at once, and
+unlinks your ID from any friend games. If you signed in with Apple, it first asks Apple to end your Apple sign-in for
+our app, and deletes Apple's token. Stats kept on your device stay on your device. You can also email us (below) to
+have your account deleted. Signing out only ends the sign-in on that device.</p>
 
 <h2>Games with a friend</h2>
 <p>To play a friend on another device, the game uses our game server. It sends and keeps only what the game needs:</p>
@@ -43,13 +73,17 @@ are saved on your device only.</p>
 <li>a random 4-letter game code and a random token for each player;</li>
 <li>which side each player took, the pieces' setup, and the moves.</li>
 </ul>
-<p>No name, email, contact, location or device identifier is sent. A game is kept on the server until no one has played
-it for 30 days, then it is deleted. Your device also remembers the codes of your games so you can come back to them.</p>
-<p>The server runs on Cloudflare, which handles the network connection and may keep standard technical logs (such as
-IP addresses) for security, under its own privacy policy. We don't use those logs to identify you. The web version (not the app) loads its fonts from Google Fonts, so Google also sees your IP address when the page loads, under its own privacy policy.</p>
+<p>No name, email, contact, location or device identifier is sent. If you are signed in, the game is also linked to
+your user ID (never shown to the other player). A game is kept on the server until no one has played it for 30 days,
+then it is deleted. Your device also remembers the codes of your games so you can come back to them.</p>
+<p>The server runs on Cloudflare (accounts and stats in its D1 database), which handles the network connection and may
+keep standard technical logs (such as IP addresses) for security, under its own privacy policy. We don't use those logs
+to identify you. Signing in goes through Apple or Google under their own privacy policies. The web version (not the
+apps) loads its fonts from Google Fonts, so Google also sees your IP address when the page loads, under its own privacy
+policy.</p>
 
 <h2>Children</h2>
-<p>Kill Switch doesn't knowingly collect anything from anyone, children included.</p>
+<p>Kill Switch doesn't knowingly collect personal information from children, and signing in is never needed to play.</p>
 
 <h2>Contact</h2>
 <p>Questions about this policy: <a href="mailto:foxroad.dev@gmail.com">foxroad.dev@gmail.com</a>. If this policy changes, the new
