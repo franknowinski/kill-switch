@@ -1563,9 +1563,33 @@ function rememberGame(code, fields) {
 		code,
 		at: Date.now()
 	}, ...list.filter((x) => x.code !== code)]);
+	unhideGame(code);
 }
 function forgetGame(code) {
 	saveGames(myGames().filter((x) => x.code !== code));
+}
+function hiddenGames() {
+	try {
+		const h = JSON.parse(localStorage.getItem("ks-hidden") || "[]");
+		return new Set(Array.isArray(h) ? h.filter((c) => CODE_OK.test(c)) : []);
+	} catch (e) {
+		return /* @__PURE__ */ new Set();
+	}
+}
+function saveHidden(set) {
+	try {
+		localStorage.setItem("ks-hidden", JSON.stringify([...set].slice(-50)));
+	} catch (e) {}
+}
+function hideGame(code) {
+	const h = hiddenGames();
+	h.delete(code);
+	h.add(code);
+	saveHidden(h);
+}
+function unhideGame(code) {
+	const h = hiddenGames();
+	if (h.delete(code)) saveHidden(h);
 }
 // web/src/stats.js
 var KEY$1 = "ks-stats";
@@ -5152,7 +5176,7 @@ if (params.has("sim")) {
 		const side = s.you === "H" ? "Humans" : "AI";
 		return s.phase === "over" ? `<b>game over</b> · ${s.winner === s.you ? "you won" : s.winner === "D" ? "a draw" : "you lost"}` : s.phase === "lobby" ? s.guestIn ? "in the lobby" : s.challenge ? `waiting for @${esc(s.challenge.handle)}` : "waiting for your friend" : s.phase === "setup" ? s.ready[s.you] ? "waiting for their setup" : `<b>set up</b> · ${side}` : s.yourTurn ? `<b>your move</b> · ${side}` : `their move · ${side}`;
 	};
-	const gameRow = (code) => `<button class="game" data-code="${code}"><span class="gc">${code}</span><span class="gs" id="gs-${code}">…</span></button>`;
+	const gameRow = (code) => `<div class="grow" id="gr-${code}"><button class="game" data-code="${code}"><span class="gc">${code}</span><span class="gs" id="gs-${code}">…</span></button><button class="gx" id="gx-${code}" aria-label="Remove game ${code}">✕</button></div>`;
 	function renderMyGames() {
 		const box = document.getElementById("mygames");
 		if (!box) return;
@@ -5167,12 +5191,36 @@ if (params.has("sim")) {
 		box.innerHTML = `<div class="eyebrow" id="mg-title">My games</div><div class="games" id="mg-chal"></div>` + list.map((g) => gameRow(g.code)).join("") + `<div class="games" id="mg-more"></div>`;
 		tidy();
 		wireRows(box);
+		const over = /* @__PURE__ */ new Set(), linked = /* @__PURE__ */ new Set(), drop = (code) => {
+			forgetGame(code);
+			hideGame(code);
+			const r = document.getElementById("gr-" + code);
+			if (r) r.remove();
+			tidy();
+		};
+		const wireX = (code) => document.getElementById("gx-" + code).addEventListener("click", () => {
+			sfx.tap();
+			if (over.has(code)) return drop(code);
+			const row = document.getElementById("gr-" + code), was = row.innerHTML;
+			row.innerHTML = `<div class="game gq"><span>Remove <b>${code}</b>? ${linked.has(code) ? `It stays on your account: join it again with code ${code}.` : "This phone can't get back into it."}</span><span class="row2"><button class="ghost" id="gy-${code}">REMOVE</button><button class="ghost" id="gn-${code}">KEEP</button></span></div>`;
+			document.getElementById("gy-" + code).addEventListener("click", () => {
+				sfx.tap();
+				drop(code);
+			});
+			document.getElementById("gn-" + code).addEventListener("click", () => {
+				sfx.tap();
+				row.innerHTML = was;
+				wireRows(row);
+				wireX(code);
+			});
+		});
+		for (const g of list) wireX(g.code);
 		for (const g of list) api(`/games/${g.code}?token=${g.token}`).then((r) => {
 			const el = document.getElementById("gs-" + g.code);
 			if (!el) return;
 			if (r && (r.status === 404 || r.status === 403 || r.status === 200 && r.body.phase === "over" && g.seenOver)) {
 				forgetGame(g.code);
-				const b = el.closest(".game");
+				const b = el.closest(".grow");
 				if (b) b.remove();
 				tidy();
 				return;
@@ -5181,6 +5229,7 @@ if (params.has("sim")) {
 				el.textContent = "offline";
 				return;
 			}
+			if (r.body.phase === "over") over.add(g.code);
 			el.innerHTML = statusText(r.body);
 		});
 		const a = current();
@@ -5216,8 +5265,10 @@ if (params.has("sim")) {
 					tidy();
 				});
 			}
-			const here = new Set(myGames().map((g) => g.code)), extra = d.rooms.filter((s) => !here.has(s.code));
+			for (const s of d.rooms) linked.add(s.code);
+			const here = new Set(myGames().map((g) => g.code)), gone = hiddenGames(), extra = d.rooms.filter((s) => !here.has(s.code) && !gone.has(s.code));
 			more.innerHTML = extra.map((s) => gameRow(s.code)).join("");
+			for (const s of extra) wireX(s.code);
 			for (const s of extra) document.getElementById("gs-" + s.code).innerHTML = statusText(s);
 			wireRows(more);
 			badge();
