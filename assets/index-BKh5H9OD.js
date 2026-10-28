@@ -961,11 +961,6 @@ var BOT_NAME = {
 	medium: "Medium",
 	hard: "Hard"
 };
-var LEVEL_TAG = {
-	easy: "EASY",
-	medium: "MED",
-	hard: "HARD"
-};
 var toLevel = (v) => BOT_LEVELS.includes(v) ? v : "medium";
 function levelBot(level) {
 	const mem = {};
@@ -3041,7 +3036,12 @@ if (params.has("sim")) {
 		app.querySelectorAll(".sq.sel,.sq.can,.sq.copy").forEach((q) => q.classList.remove("sel", "can", "copy"));
 		const src = app.querySelector(`.sq[data-r="${sel.r}"][data-c="${sel.c}"]`);
 		if (src) src.classList.add("sel");
-		(phase === "setup" ? [...app.querySelectorAll(".sq")].filter((q) => !q.disabled && !q.dataset.id && SETUP_ROWS[me].includes(+q.dataset.r)) : legalMoves(state, sel).map((m) => app.querySelector(`.sq[data-r="${m.to[0]}"][data-c="${m.to[1]}"]`))).forEach((q) => q && q.classList.add("can"));
+		app.querySelectorAll(".sq.fight").forEach((q) => q.classList.remove("fight"));
+		(phase === "setup" ? [...app.querySelectorAll(".sq")].filter((q) => !q.disabled && !q.dataset.id && SETUP_ROWS[me].includes(+q.dataset.r)) : legalMoves(state, sel).map((m) => app.querySelector(`.sq[data-r="${m.to[0]}"][data-c="${m.to[1]}"]`))).forEach((q) => {
+			if (!q) return;
+			q.classList.add("can");
+			if (phase !== "setup" && q.dataset.id) q.classList.add("fight");
+		});
 		const msg = app.querySelector(".msg");
 		if (msg && info$1) msg.innerHTML = info$1;
 	}
@@ -3100,8 +3100,11 @@ if (params.has("sim")) {
 		place(floater, floatAt(d, d.fx, d.fy));
 		const t = dropTarget(d, d.fx, d.fy);
 		if (t !== d.over) {
-			if (d.over) d.over.classList.remove("over");
-			if (t) t.classList.add("over");
+			if (d.over) d.over.classList.remove("over", "swap");
+			if (t) {
+				t.classList.add("over");
+				if (phase === "setup" && t.dataset.id && t !== d.home.q) t.classList.add("swap");
+			}
 			d.over = t;
 		}
 	}
@@ -3125,15 +3128,15 @@ if (params.has("sim")) {
 	}
 	function liftPiece(src, html, cl) {
 		floater = document.createElement("div");
-		floater.className = "floater " + cl;
-		floater.innerHTML = html;
+		floater.className = "floater";
+		floater.innerHTML = `<div class="blk ${cl}">${html}</div>`;
 		const m = ptr.geo.find((g) => g.q === src) || mid(src);
 		ptr.cx = m.x;
 		ptr.cy = m.y;
 		ptr.h = m.h;
 		Object.assign(floater.style, {
-			width: m.w * .82 + "px",
-			height: m.w * .76 + "px",
+			width: m.w - 6 + "px",
+			height: m.h - 6 + "px",
 			fontSize: getComputedStyle(src).fontSize
 		});
 		place(floater, floatAt(ptr, ptr.fx, ptr.fy));
@@ -3176,14 +3179,14 @@ if (params.has("sim")) {
 				if (!sel || sel.id !== p.id) {
 					sel = p;
 					copyMode = false;
-					info$1 = phase === "play" ? explain(p) : null;
+					info$1 = null;
 					lightMoves();
 				}
 				const src = app.querySelector(`.sq[data-id="${p.id}"]`);
 				dragEl = src.querySelector(".pz");
 				if (dragEl) dragEl.classList.add("drag");
 				ptr.geo = measureBoard();
-				liftPiece(src, faceHtml(face(p)), cls(p.side));
+				liftPiece(src, faceHtml(face(p)), shape(p.side));
 			}
 		}
 		if (floater) {
@@ -3199,7 +3202,7 @@ if (params.has("sim")) {
 	const unlight = (d) => {
 		if (d.raf) cancelAnimationFrame(d.raf);
 		d.raf = 0;
-		if (d.over) d.over.classList.remove("over");
+		if (d.over) d.over.classList.remove("over", "swap");
 		d.over = null;
 	};
 	window.addEventListener("pointerup", (e) => {
@@ -3274,6 +3277,8 @@ if (params.has("sim")) {
 		shown = /* @__PURE__ */ new Set();
 		prevSides = /* @__PURE__ */ new Map();
 		lastFight = null;
+		engage = null;
+		brainSeen = null;
 		if (mode === "solo") {
 			gameLevel = soloLevel;
 			levelMove = levelBot(gameLevel);
@@ -3307,20 +3312,140 @@ if (params.has("sim")) {
 		if (state.turn !== me) setTimeout(botTurn, 500);
 	}
 	const cls = (s) => s === "H" ? "h" : "ai";
+	const shape = (s) => s === "H" ? "h" : "a";
 	function chip(x) {
-		return `<span class="pc ${cls(x.side)}">${iconOf(x)}${LEVELS_UP(x.type) ? " " + x.str : ""}${x.id != null ? turnedHtml(x) : ""}</span>`;
+		return `<span class="pc ${cls(x.side)}">${iconOf(x)}${LEVELS_UP(x.type) ? x.str : ""}${x.id != null ? turnedHtml(x) : ""}</span>`;
 	}
 	function faceHtml(p) {
 		const n = LEVELS_UP(p.type) ? p.str : p.mirror;
-		return n != null ? `<span class="ic up">${iconOf(p)}</span><span class="n">${n}</span>` : `<span class="ic">${iconOf(p)}</span>`;
+		return n != null ? `<span class="ic up">${iconOf(p)}</span><b class="n">${n}</b>` : `<span class="ic">${iconOf(p)}</span>`;
 	}
-	const blockHtml = (inner, idle, d) => `<i class="shd"></i><div class="blk${idle ? " idle" : ""}"${d ? ` style="--d:${d}"` : ""}><i class="face ffr"></i><i class="face flf"></i><i class="face frt"></i><div class="face ftop">${inner}</div></div>`;
+	const blockHtml = (inner, side, hid) => `<div class="blk ${shape(side)}${hid ? " hid" : ""}">${inner}</div>`;
 	const face = (p) => p;
 	const turnedHtml = (p) => isTurned(p) ? `<i class="trn ${cls(homeSide(p))}" title="turned">↺</i>` : "";
 	function pieceHtml(p, show) {
-		return `<div class="pz">${blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`, p.side === me && p.id % 3 === 0, `-${p.id * 7 % 28 / 10}s`)}${p.boosted ? `<i class="bst">↑</i>` : ""}${show ? turnedHtml(p) : ""}</div>`;
+		return `<div class="pz">${blockHtml((show ? faceHtml(p) : `<span class="q">?</span>`) + (p.boosted ? `<i class="bst">↑</i>` : "") + (show ? turnedHtml(p) : ""), p.side, !show)}</div>`;
 	}
+	const tokenHtml = (side, p) => `<div class="pz">${blockHtml(p ? faceHtml(p) : `<span class="q">?</span>`, side, !p)}</div>`;
 	const color = (t) => reglyph(t).replace(new RegExp("\\b" + SIDE_WORD[me] + "\\b", "g"), (w, at, str) => str.slice(Math.max(0, at - 4), at) === "The " ? w : `<span class="you">${at === 0 ? "Your" : "your"}</span>`).replace(new RegExp("\\b" + theirs() + "\\b", "g"), "<b>" + theirs() + "</b>");
+	const lostOf = (ev) => {
+		const r = ev.result;
+		return {
+			a: r === "lose" || r === "tie",
+			d: r === "win" || r === "flag" || r === "defuse" || r === "tie" || r === "trapped"
+		};
+	};
+	const W_NAME = (p) => `${cap$1(roleName(p))}${LEVELS_UP(p.type) ? " " + p.str : ""}`;
+	function cmpOf(a, d, ev) {
+		const num = (p) => p.type === "K" && ev.mirror != null ? ev.mirror : LEVELS_UP(p.type) ? p.str : iconOf(p);
+		const r = ev.result, aWon = [
+			"win",
+			"flag",
+			"defuse",
+			"convert",
+			"trapped"
+		].includes(r);
+		return ev.mirror != null || r === "tie" ? `${num(a)} = ${num(d)}` : r === "trapped" ? "↺" : r === "flag" ? iconOf(d) : `${num(a)} ${aWon ? "›" : "‹"} ${num(d)}`;
+	}
+	function fightRow(ev) {
+		const x = lostOf(ev);
+		const verb = ev.mirror != null ? "copied" : {
+			tie: "tied",
+			lose: "fell to",
+			trapped: "fell into",
+			defuse: "removed",
+			convert: "turned",
+			flag: "took"
+		}[ev.result] || "beat";
+		const tile = (p, lost, k) => `<span class="ftl ${k}${lost ? " x" : ""}">${tokenHtml(p.side, p)}</span>`;
+		const nm = (p) => `<span class="${p.side === me ? "you" : "them"}">${W_NAME(p)}</span>`;
+		return `<button class="fline" id="fline" aria-label="Last fight: open the log"><small class="lf">LAST FIGHT</small><span class="go">LOG ›</span>${tile(ev.a, x.a, "fa")}<span class="cmp">${cmpOf(ev.a, ev.d, ev)}</span>${tile(ev.d, x.d, "fd")}<span class="fs"><b>${ev.round ? "R" + ev.round : "—"}</b> · ${nm(ev.a)} ${verb} ${nm(ev.d)}</span></button>`;
+	}
+	let engage = null;
+	const NAME_OF = (p) => cap$1(roleName(p));
+	function engageHtml(a, d, ev, stage) {
+		const masked = (p) => stage === "meet" && p.side !== me && !p.revealed;
+		const num = (p) => p.type === "K" && ev.mirror != null ? ev.mirror : LEVELS_UP(p.type) ? p.str : iconOf(p);
+		const show = (p) => p.type === "K" && ev.mirror != null && stage !== "meet" ? {
+			...p,
+			mirror: ev.mirror
+		} : p;
+		const lost = stage === "done" ? lostOf(ev) : {
+			a: false,
+			d: false
+		};
+		const r = ev.result, aWon = [
+			"win",
+			"flag",
+			"defuse",
+			"convert",
+			"trapped"
+		].includes(r);
+		const tile = (p, l, k) => `<div class="tile ${k}${l ? " lost" : ""}">${tokenHtml(p.side, masked(p) ? null : show(p))}</div>`;
+		const side = (p, dir) => `${p.side === "H" ? "HUMANS" : "AI"} ${dir}`;
+		const early = (p) => masked(p) ? "?" : p.type === "K" ? iconOf(p) : num(p);
+		const mid = stage === "meet" ? `${early(a)} › ${early(d)}` : cmpOf(a, d, ev);
+		const tag = stage === "meet" ? "FIGHT" : r === "trapped" ? "TRAPPED" : r === "defuse" ? "REMOVED" : r === "flag" ? d.side === "AI" ? "SHUT DOWN" : "IT GOT OUT" : "FIGHT";
+		let v;
+		if (stage !== "done") v = [
+			"wait",
+			"REVEALING…",
+			"Higher number wins"
+		];
+		else {
+			const winSide = r === "tie" ? null : r === "trapped" ? d.side : aWon ? a.side : d.side, cl = winSide == null ? "t" : winSide === "H" ? "" : "l";
+			const W = (p) => `${roleName(p).toUpperCase()}${LEVELS_UP(p.type) ? " " + p.str : ""}`;
+			if (ev.mirror != null) v = [
+				"t",
+				"🎭 BOTH FALL",
+				"It copies the number"
+			];
+			else if (r === "tie") v = [
+				"t",
+				"= BOTH FALL",
+				"Same number, both fall"
+			];
+			else if (r === "trapped") v = [
+				cl,
+				"↺ SWITCHED SIDES",
+				`Now ${d.side === me ? "yours" : "theirs"}`
+			];
+			else if (r === "defuse") v = [
+				cl,
+				`✓ ${roleName(d).toUpperCase()} REMOVED`,
+				"Removed safely"
+			];
+			else if (r === "convert") v = [
+				cl,
+				`↺ ${roleName(d).toUpperCase()} TURNED`,
+				"It joins the other side"
+			];
+			else if (r === "flag") v = [
+				cl,
+				d.side === "AI" ? "✓ KILL SWITCH HIT" : "✕ IT GOT OUT",
+				d.side === "AI" ? "The AI is shut down" : "The AI reached the Internet"
+			];
+			else {
+				const w = aWon ? a : d, l = aWon ? d : a;
+				v = [
+					cl,
+					l.type === "I" ? "✓ THE 🧠 IS GONE" : `${w.side === me ? "✓" : "✕"} ${W(w)} WINS`,
+					l.type === "I" ? "The AI stops growing" : w.type === "A" ? "Takes out an 8 or 9" : "Higher number wins"
+				];
+			}
+		}
+		return `<div class="eng-h"><span>ENGAGEMENT · ${sqName(a.r, a.c).toUpperCase()} → ${sqName(ev.r, ev.c).toUpperCase()}</span><span class="ft">${tag}</span></div>
+      <div class="eng-row">${tile(a, lost.a, "ta")}<div class="ia"><div class="side">${side(a, "▸ ATK")}</div><div class="who">${masked(a) ? "Hidden" : NAME_OF(a)}</div></div>
+      <div class="vs">VS<small>${mid}</small></div>
+      <div class="id r-side"><div class="side">${side(d, "◂ DEF")}</div><div class="who">${masked(d) ? "Hidden" : NAME_OF(d)}</div></div>${tile(d, lost.d, "td")}</div>
+      <div class="verdict ${v[0]}"><b>${v[1]}</b><span>${v[2]}</span></div>`;
+	}
+	function setConsole(html) {
+		const c = app.querySelector(".console");
+		if (!c) return;
+		c.className = "console eng";
+		c.innerHTML = html;
+	}
 	function snapshotRects() {
 		const m = /* @__PURE__ */ new Map();
 		app.querySelectorAll(".sq[data-id]").forEach((el) => m.set(el.dataset.id, {
@@ -3348,38 +3473,40 @@ if (params.has("sim")) {
 		if (phase === "friends") return friendScr.render();
 		if (phase === "lobby" || phase === "joining") return renderLobby();
 		const prev = snapshotRects();
-		const brainIn = BAL.RSI_EVERY - (state.round - 1) % BAL.RSI_EVERY;
+		const over = phase === "over", setupOpen = phase === "setup" && !(mode === "live" && LIVE.ready[me]), myTurn = phase === "play" && state.turn === me && !state.winner;
 		const brain = brainOf(state);
-		const grows = state.rsi && brain && brain.str < BAL.MAX_STR && !state.cut;
 		const live = !!(brain && isSuper(brain)) && !state.cut;
 		const drainNow = phase === "play" && !state.winner && !!state.drainOn;
-		const pct = grows ? 100 * (1 - brainIn / BAL.RSI_EVERY) : state.cut && brain ? 100 * brain.str / BAL.MAX_STR : live ? 100 : 0;
-		const barText = grows ? "in " + brainIn : !state.rsi ? "stopped" : state.cut ? brain.str <= 0 ? "0 · fragile" : `${brain.str} · ${drainNow ? "draining" : "held"}` : "superintelligence";
-		let html = `<div class="left"><div class="hud"><span class="pill">R${state.round}</span><span class="pill am" style="--p:${pct}%">🧠 ${grows ? "grows " + barText : barText}</span>${mode === "solo" && phase !== "setup" ? `<span class="pill lvl">vs ${LEVEL_TAG[gameLevel] || gameLevel.toUpperCase()}</span>` : ""}${mode === "live" && phase === "play" && !state.winner ? `<span class="pill turn ${state.turn === me ? "mine" : ""}" id="turnpill">${state.turn === me ? "YOUR MOVE" : "THEIR MOVE"}</span>` : ""}</div>`;
-		let bhtml = `<div class="boardwrap"><div class="zoom" id="zoom"><div class="tilt"><div class="board" id="board">`;
+		const turnPill = phase === "setup" ? `<span class="pill on turn${me === "AI" ? " ai" : ""}" id="turnpill">SET UP</span>` : phase === "play" && !state.winner ? state.turn === me ? `<span class="pill on turn mine${me === "AI" ? " ai" : ""}" id="turnpill">YOUR MOVE</span>` : `<span class="pill wait turn" id="turnpill">THEIR MOVE</span>` : "";
+		let html = `<div class="left"><div class="hud"><span class="pill">R${Math.min(state.round, BAL.MAX_ROUNDS)}</span>${turnPill}${mode === "solo" ? `<span class="pill r lvl">VS ${BOT_NAME[gameLevel].toUpperCase()} BOT</span>` : ""}</div>`;
+		html += meterHtml(brain, drainNow);
+		let bhtml = `<div class="boardwrap"><div class="board" id="board">`;
 		const cans = sel ? legalMoves(state, sel) : [];
 		const nowShown = /* @__PURE__ */ new Set(), nowSides = /* @__PURE__ */ new Map(), flips = [], turns = [];
-		const setupOpen = phase === "setup" && !(mode === "live" && LIVE.ready[me]), myTurn = phase === "play" && state.turn === me && !state.winner;
 		const grab = (p, r, c) => p ? p.side === me && (setupOpen || myTurn) : setupOpen && me === "H" && onDC(state, r, c);
 		const rowOrder = me === "H" ? [...Array(8).keys()] : [...Array(8).keys()].reverse();
+		const L = phase === "setup" ? null : state.last, theirLast = L && L.side !== me, lmc = L ? L.side === "H" ? "h" : "a" : "";
+		const fin = over && L ? L.to : null;
 		for (const r of rowOrder) for (let c = 0; c < 8; c++) {
 			const p = at$1(state, r, c);
 			const k = ["sq"];
 			if (BLOCKED$1.has(r + "," + c)) k.push("block");
+			let inner = c === 0 ? `<span class="rk">${sqName(r, 0).slice(1)}</span>` : "", idAttr = "";
 			if (onDC(state, r, c)) {
 				k.push("dc");
 				if (drainNow) k.push("drain");
 				else if (live) k.push("live");
 				else if (state.cut) k.push("off");
 				if (dcPick && phase === "setup") k.push("pick");
+				inner += p ? `<span class="dcm">🏢</span>` : `<span class="dci">🏢<b>DC</b></span>`;
 			}
-			let inner = "", idAttr = "";
 			if (p) {
 				k.push(cls(p.side));
-				const show = p.side === me || p.revealed || phase === "over";
+				const show = p.side === me || p.revealed || over;
 				if (!show) k.push("hid");
+				else if (p.side !== me && p.revealed && !over) k.push("spot");
 				if (p.side === "AI" && (p.revealed || p.side === me) && p.str >= BAL.ASI) k.push("asi");
-				inner = pieceHtml(face(p), show);
+				inner += pieceHtml(face(p), show);
 				idAttr = ` data-id="${p.id}"`;
 				if (show) {
 					nowShown.add(String(p.id));
@@ -3389,18 +3516,29 @@ if (params.has("sim")) {
 				if (prevSides.has(String(p.id)) && prevSides.get(String(p.id)) !== p.side) turns.push(String(p.id));
 			}
 			if (grab(p, r, c)) k.push("grab");
-			if (p && p.side === me && phase !== "over") k.push("own");
+			if (p && p.side === me && !over) k.push("own");
 			if (sel && sel.r === r && sel.c === c) k.push("sel");
 			if (phase === "setup" && sel && !p && SETUP_ROWS[me].includes(r) && !BLOCKED$1.has(r + "," + c)) k.push("can");
 			if (phase === "setup" && dcPick && me === "H" && SETUP_ROWS.H.includes(r) && !BLOCKED$1.has(r + "," + c) && !onDC(state, r, c)) k.push("can");
 			const mv = cans.filter((m) => m.to[0] === r && m.to[1] === c);
-			if (mv.length) k.push(mv.some((m) => m.copy) && copyMode ? "copy" : "can");
-			if (state.last && state.last.to[0] === r && state.last.to[1] === c) k.push("last");
+			if (mv.length) {
+				k.push(mv.some((m) => m.copy) && copyMode ? "copy" : "can");
+				if (p && p.side !== me && !copyMode) k.push("fight");
+			}
+			if (L && L.to[0] === r && L.to[1] === c) {
+				if (theirLast) {
+					k.push("opt", "op" + lmc);
+					inner += `<i class="lm ${lmc}"></i>`;
+				} else if (!over) k.push("last");
+			}
+			if (L && theirLast && L.from[0] === r && L.from[1] === c) inner += `<i class="lmf ${lmc}"></i>`;
+			if (fin && fin[0] === r && fin[1] === c) k.push("final", L.side === "AI" ? "fai" : "fh");
 			bhtml += `<button class="${k.join(" ")}" data-r="${r}" data-c="${c}"${idAttr} ${BLOCKED$1.has(r + "," + c) ? "disabled" : ""}>${inner}</button>`;
 		}
-		bhtml += `</div><div class="fx" id="fx"></div></div></div><div class="toasts" id="toasts"></div></div>`;
+		bhtml += `</div><div class="fx" id="fx"></div><div class="toasts" id="toasts"></div></div><div class="files">${[...Array(8).keys()].map((c) => `<span>${sqName(0, c)[0]}</span>`).join("")}</div>`;
+		html += bhtml;
 		const fl = lastFight || (state.winner ? lastFightIn(state) : null);
-		html += fl && phase !== "setup" ? `<button class="fline" id="fline">⚔️ <span>${fightLine(fl)}</span><small>log ›</small></button>` : `<div class="fline none">⚔️ <span>${state.winner && !hadFight(state) ? "No fights this game" : phase === "setup" || state.round <= 1 ? "No fights yet" : "The last fight shows here"}</span></div>`;
+		const fline = fl && phase !== "setup" ? fightRow(fl) : `<div class="fline none"><span class="nf">${state.winner && !hadFight(state) ? "No fights this game" : phase === "setup" || state.round <= 1 ? "No fights yet" : "The last fight shows here"}</span></div>`;
 		let logHtml;
 		if (phase === "setup" && mode === "live" && LIVE.ready[me]) logHtml = `<span class="you">Your side is set.</span> Waiting for the other player to finish setting up<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
 		else if (phase === "setup" && dcPick && me === "H") logHtml = `<span class="you">🏢 picked up.</span> Tap a lit square for it; a piece there swaps with it.`;
@@ -3412,24 +3550,23 @@ if (params.has("sim")) {
 		else if (!state.winner && state.turn === me && me === "H" && drainNow && !(lastFight && lastFight.line && state.log === lastFight.line)) {
 			const cto = state.pieces.some(isCTO) ? "CTO" : "backup";
 			logHtml = `<span class="you">Your ${cto} is on 🏢.</span> The 🧠 is ${brain.str}: it drops ${BAL.DRAIN} each turn you end with the ${cto} there.`;
-		} else if (!state.winner && (/to move\.$/.test(state.log) || lastFight && lastFight.line && state.log === lastFight.line)) logHtml = `<span class="you">Your move.</span>${state.round <= 2 && !sel ? " Tap a piece, then a lit square; red is a fight." : ""}`;
+		} else if (!state.winner && (/to move\.$/.test(state.log) || lastFight && lastFight.line && state.log === lastFight.line)) logHtml = `<span class="you">Your move.</span>${theirMove()}`;
 		else logHtml = color(state.log);
-		if (mode === "live" && LIVE.note && phase !== "over") logHtml = `<b class="recon">${LIVE.note}</b> Your game is safe on the server.`;
-		if (phase === "over") {
+		const note = mode === "live" && LIVE.note && !over;
+		if (note) logHtml = `<b class="recon">${LIVE.note}</b> Your game is safe on the server.`;
+		if (over) {
 			const win = state.winner === me, draw = state.winner === "D";
 			const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`;
-			html += `<div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${endTitle(state, me)}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}${mode === "live" && !LIVE.online[LIVE.host ? "guest" : "host"] ? ` · <span class="lvnote" id="friendleft">Your friend left.</span>` : ""}</div></div>`;
-		} else html += `<div class="msg">${logHtml}</div>`;
-		html += bhtml;
-		html += `<div class="actions${phase === "over" ? " end" : ""}">`;
-		if (phase === "setup" && !(mode === "live" && LIVE.ready[me])) html += `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`;
-		else if (phase === "setup") html += `<button class="ghost" id="restart">LEAVE</button>`;
+			html += `<div class="console end"><div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${endTitle(state, me)}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}${mode === "live" && !LIVE.online[LIVE.host ? "guest" : "host"] ? ` · <span class="lvnote" id="friendleft">Your friend left.</span>` : ""}</div></div>${fline}</div>`;
+		} else if (engage && phase === "play" && !note) html += `<div class="console eng">${engage}</div>`;
+		else html += `<div class="console"><div class="msg">${logHtml}</div>${fline}</div>`;
+		const bar = (cls, inner) => `<div class="actions${cls}">${inner}</div>`;
+		if (phase === "setup" && !(mode === "live" && LIVE.ready[me])) html += bar(" two", `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`);
+		else if (phase === "setup") html += bar(" one", `<button class="ghost" id="restart">LEAVE</button>`);
 		else if (phase === "play") {
-			html += `<button class="ghost" id="rules">RULES ↓</button>`;
-			if (sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel)) html += `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>`;
-			html += soundHome();
-		} else if (phase === "over") html += `<button class="primary" id="again">PLAY AGAIN</button><button class="ghost" id="rules">RULES ↓</button>` + soundHome();
-		html += `</div>`;
+			const copy = sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel);
+			html += bar("", `<button class="ghost" id="rules">RULES ↓</button>${copy ? `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>` : `<button class="ghost" id="log">LOG</button>`}${soundHome()}`);
+		} else if (over) html += bar(" end", `<button class="primary" id="again">PLAY AGAIN</button><button class="ghost" id="rules">RULES ↓</button>${soundHome()}`);
 		html += `</div><div class="right" id="rulesbox"><p class="more">↓ Rules and pieces</p>` + listHtml() + `</div>`;
 		app.innerHTML = html;
 		if (!FAST && prev.size) {
@@ -3498,6 +3635,10 @@ if (params.has("sim")) {
 			sfx.tap();
 			showLog();
 		});
+		on("log", () => {
+			sfx.tap();
+			showLog();
+		});
 		on("copybtn", () => {
 			sfx.tap();
 			copyMode = !copyMode;
@@ -3506,6 +3647,7 @@ if (params.has("sim")) {
 		app.querySelectorAll(".kr").forEach((el) => el.addEventListener("click", () => {
 			const t = el.dataset.type, side = el.dataset.side;
 			sfx.tap();
+			engage = null;
 			info$1 = explain({
 				side,
 				type: t,
@@ -3525,6 +3667,45 @@ if (params.has("sim")) {
 			render();
 		});
 	}
+	let brainSeen = null;
+	function meterHtml(brain, drainNow) {
+		if (brain) brainSeen = brain.str;
+		const v = brain ? brain.str : brainSeen, rounds = BAL.RSI_EVERY - (state.round - 1) % BAL.RSI_EVERY;
+		let st, nx;
+		if (!brain || !state.rsi) {
+			st = "stopped";
+			nx = "STOPPED";
+		} else if (state.cut) {
+			st = v <= 0 ? "frag" : drainNow ? "drain" : "held";
+			nx = v <= 0 ? "0 · FRAGILE" : drainNow ? `⚡ DRAINING −${BAL.DRAIN} A TURN` : "HELD · NO MORE +1s";
+		} else if (v >= BAL.ASI) {
+			st = "asi";
+			nx = "SUPERINTELLIGENCE";
+		} else {
+			st = v >= BAL.AGI ? "agi" : "grow";
+			const next = v + 1 === BAL.AGI ? " → AGI" : v + 1 === BAL.ASI ? " → ASI" : "";
+			nx = `${v >= BAL.AGI ? "AGI · " : ""}+1 IN ${rounds} RND${rounds === 1 ? "" : "S"}${next}`;
+		}
+		if (phase === "over") nx = "GAME OVER";
+		const vals = [];
+		for (let x = 2; x <= BAL.MAX_STR; x++) vals.push(x);
+		const tier = (x) => x >= BAL.ASI ? "asi" : x >= BAL.AGI ? "agi" : "";
+		const bars = vals.map((x) => {
+			const k = [tier(x)];
+			if (st === "stopped") k.push("off");
+			else if (v != null && x <= v) k.push("f");
+			else if (st === "drain" || st === "held" || st === "frag") k.push("dr");
+			return `<i class="${k.join(" ")}"></i>`;
+		}).join("");
+		const lbl = vals.map((x) => `<span class="${tier(x)}">${x === BAL.AGI ? "AGI" : x === BAL.ASI ? "ASI" : x}</span>`).join("");
+		return `<div class="meter ${st === "grow" ? "" : st === "held" ? "drain" : st}" id="meter"><div class="mt"><span>🧠<span class="lb"> SELF-IMPROVER</span><span class="v">${v == null ? "–" : v}</span></span><span class="nx">${nx}</span></div><div class="bars">${bars}</div><div class="lbls">${lbl}</div></div>`;
+	}
+	function theirMove() {
+		const h = state.history[state.history.length - 1];
+		if (!h || !h.mv || h.side === me || !state.last || state.last.side === me) return "";
+		return " " + color(logText(h)) + ".";
+	}
+	const logText = (h) => h.mv && h.side !== me && !h.mv.open ? `${SIDE_WORD[h.side]} piece ${h.mv.from} → ${h.mv.to}` : h.text;
 	const POWER = {
 		H: {
 			S: "flies any distance",
@@ -3552,23 +3733,23 @@ if (params.has("sim")) {
 		const krow = (side, t, str) => {
 			const n = alive(side, t, str), m = total(side, t, str);
 			const lvl = t === "X" ? str : ARMIES[side].find(([tt]) => tt === t)[1];
-			const ch = `<span class="pc tok ${cls(side)}"><span class="ic">${iconOf({
+			const ch = `<div class="k">${tokenHtml(side, {
 				side,
 				home: side,
 				type: t,
 				str: lvl
-			})}</span>${LEVELS_UP(t) ? `<span class="n">${lvl}</span>` : ""}</span>`;
+			})}</div>`;
 			const nm = roleName({
 				side,
 				home: side,
 				type: t,
 				str: lvl
 			});
-			return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<span class="kn">${nm}${t === "X" && !state.cut && BOOSTS({
+			return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<div class="kn">${nm}${t === "X" && !state.cut && BOOSTS({
 				side,
 				type: t,
 				str
-			}) ? ` <span class="kb" title="+1 at the 🏢, once">↑🏢</span>` : ""}</span><span class="kp">${t === "X" ? side === "H" && str === 9 ? "drains the 🧠 on 🏢" : "higher number wins" : POWER[side][t]}</span><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
+			}) ? `<span class="kb" title="+1 at the 🏢, once">↑🏢</span>` : ""}<small>${t === "X" ? side === "H" && str === 9 ? "drains the 🧠 on 🏢" : "higher number wins" : POWER[side][t]}</small></div><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
 		};
 		const ranks = (side) => [...new Set(ARMIES[side].filter(([t]) => t === "X").map(([, n]) => n))].sort((a, b) => b - a);
 		const specials = (side) => [
@@ -3588,11 +3769,11 @@ if (params.has("sim")) {
 		const turnedRow = (list, who) => list.length ? `<div class="seen">↺ Turned, now ${who}: ${list.map(chip).join("")}</div>` : "";
 		return `<div class="key">
       <div class="kh ${cls(me) === "h" ? "b" : "a"}">Your pieces <span class="kc">${state.pieces.filter((p) => p.side === me && homeSide(p) === me).length}<i> of ${ARMIES[me].length} left</i></span></div>
-      <div class="ranks">${ranks(me).map((n) => krow(me, "X", n)).join("")}</div>
+      ${ranks(me).map((n) => krow(me, "X", n)).join("")}
       ${specials(me).map((t) => krow(me, t)).join("")}
       ${turnedRow(joinedMe, "yours")}
       <div class="kh ${cls(me) === "h" ? "a" : "b"}">${theirs()} pieces <span class="kc">${state.pieces.filter((p) => p.side !== me && homeSide(p) !== me).length}<i> of ${ARMIES[other(me)].length} left</i></span></div>
-      <div class="ranks">${ranks(other(me)).map((n) => krow(other(me), "X", n)).join("")}</div>
+      ${ranks(other(me)).map((n) => krow(other(me), "X", n)).join("")}
       ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
       ${specials(other(me)).map((t) => krow(other(me), t)).join("")}
       ${turnedRow(joinedThem, "theirs")}
@@ -3608,20 +3789,20 @@ if (params.has("sim")) {
 		soloLevel = toLevel(localStorage.getItem("ks-level"));
 	} catch (e) {}
 	if (params.has("level")) soloLevel = toLevel(params.get("level"));
+	const icon = (side, emoji) => `<div class="pz">${blockHtml(`<span class="ic">${emoji}</span>`, side)}</div>`;
 	function renderIntro() {
 		app.innerHTML = `<div class="overlay"><div class="card">
       <div id="acctslot"></div>
       <h1 class="logo" aria-label="Kill Switch"><svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 -15.75 763.4 101.5"><svg x="0" y="-15.75" width="101.5" height="101.5" viewBox="6 6 52 52" overflow="visible"><defs><linearGradient id="w4h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFBA45"/><stop offset=".55" stop-color="#F5A524"/><stop offset="1" stop-color="#E08A0B"/></linearGradient><radialGradient id="w4g"><stop offset="0" stop-color="#FF5C5C" stop-opacity=".55"/><stop offset="1" stop-color="#FF5C5C" stop-opacity="0"/></radialGradient><linearGradient id="w4t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF5C5C" stop-opacity="0"/><stop offset="1" stop-color="#FF5C5C" stop-opacity=".5"/></linearGradient></defs><path d="M21.23 6 L42.77 6 L58 21.23 L58 42.77 L42.77 58 L21.23 58 L6 42.77 L6 21.23 Z" fill="url(#w4h)"/><path d="M22.2 8.34 L41.8 8.34 L55.66 22.2 L55.66 41.8 L41.8 55.66 L22.2 55.66 L8.34 41.8 L8.34 22.2 Z" fill="none" stroke="#FFD27A" stroke-opacity=".38" stroke-width="0.94"/><path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z" fill="#06121C"/><clipPath id="w4v"><path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z"/></clipPath><g clip-path="url(#w4v)"><g class="eye"><rect x="16.03" y="30.03" width="23.11" height="3.01" rx="1.5" fill="url(#w4t)"/><circle cx="39.14" cy="31.53" r="10.17" fill="url(#w4g)"/><circle cx="39.14" cy="31.53" r="4.42" fill="#FF5C5C"/><circle cx="37.55" cy="29.94" r="1.33" fill="#FFE1E1"/></g></g></svg><g transform="translate(130.9 0)"><g fill="#E6EDF3"><path d="M6.50 70L6.50 0L20.10 0L20.10 29.30L30.70 29.30L47.60 0L62.90 0L42.40 34.90L64.60 70L49 70L30.60 40.90L20.10 40.90L20.10 70L6.50 70Z"/><path d="M75.10 70L75.10 0L88.70 0L88.70 70L75.10 70Z"/><path d="M105.20 70L105.20 0L118.80 0L118.80 58.50L153.80 58.50L153.80 70L105.20 70Z"/><path d="M164.30 70L164.30 0L177.90 0L177.90 58.50L212.90 58.50L212.90 70L164.30 70Z"/><path d="M262.90 70L252.10 59.20L252.10 49.20L265.50 49.20L265.50 55.10L268.80 58.40L289.50 58.40L292.90 55L292.90 43.40L289.60 40.10L263.10 40.10L252.30 29.30L252.30 10.80L263.10 0L294.70 0L305.50 10.80L305.50 20.90L292.10 20.90L292.10 14.90L288.80 11.60L269 11.60L265.70 14.90L265.70 25.20L269 28.50L295.50 28.50L306.30 39.30L306.30 59L295.30 70L262.90 70Z"/><path d="M329.80 70L315.30 0L329 0L337.50 49.40L337.90 49.40L351.80 0L362 0L375.60 49.40L376 49.40L384.50 0L398.20 0L383.70 70L371 70L357.10 20.80L356.70 20.80L342.50 70L329.80 70Z"/><path d="M410.70 70L410.70 0L424.30 0L424.30 70L410.70 70Z"/><path d="M456.70 70L456.70 11.50L435.80 11.50L435.80 0L491.20 0L491.20 11.50L470.30 11.50L470.30 70L456.70 70Z"/><path d="M511.20 70L499.70 58.50L499.70 11.50L511.20 0L545.40 0L556.70 11.30L556.70 22L543.10 22L543.10 16.30L538.40 11.60L518.40 11.60L513.30 16.70L513.30 53.30L518.40 58.40L538.40 58.40L543.10 53.70L543.10 48L556.70 48L556.70 58.70L545.40 70L511.20 70Z"/><path d="M569.20 70L569.20 0L582.80 0L582.80 29.30L612.40 29.30L612.40 0L626 0L626 70L612.40 70L612.40 40.90L582.80 40.90L582.80 70L569.20 70Z"/></g></g></svg></h1><div class="eyebrow tag">Stratego, but the AI gets smarter</div>
       <div class="games" id="mygames" hidden></div>
       <div class="rules">
-        <div class="rule"><div class="k b">🛑</div><div>Reach the AI's <b>kill switch</b> to win.</div></div>
-        <div class="rule"><div class="k a">🌍</div><div>Keep the AI off <b>the Internet</b>, or it gets out.</div></div>
-        <div class="rule"><div class="k a">?</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
-        <div class="rule"><div class="k a">🧠</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> first.</div></div>
-        <div class="rule"><div class="k b">🏢</div><div>At 10, park your CTO on your 🏢: it <b>drains the 🧠</b> 1 a turn. CTO dead? ${cap$1(BACKUPS())} can.</div></div>
+        <div class="rule"><div class="k">${icon("AI", "🛑")}</div><div>Reach the AI's <b>kill switch</b> to win.</div></div>
+        <div class="rule"><div class="k">${icon("H", "🌍")}</div><div>Keep the AI off <b>the Internet</b>, or it gets out.</div></div>
+        <div class="rule"><div class="k">${tokenHtml("AI", null)}</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
+        <div class="rule"><div class="k">${icon("AI", "🧠")}</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> first.</div></div>
+        <div class="rule"><div class="k">${icon("H", "🏢")}</div><div>At 10, park your CTO on your 🏢: it <b>drains the 🧠</b> 1 a turn. CTO dead? ${cap$1(BACKUPS())} can.</div></div>
       </div>
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
-      <div class="eyebrow">Play as</div>
       <div class="seg" role="group" aria-label="Play as"><button class="h" id="asH" aria-pressed="${soloSide === "H"}">🕵️ HUMANS</button><button class="ai" id="asAI" aria-pressed="${soloSide === "AI"}">🧠 THE AI</button></div>
       <div class="seg lv" role="group" aria-label="Bot level">${BOT_LEVELS.map((l) => `<button id="lv-${l}" aria-pressed="${soloLevel === l}">${l.toUpperCase()}</button>`).join("")}</div>
       <button class="primary" id="play">PLAY AS ${soloSide === "H" ? "HUMANS" : "THE AI"}</button>
@@ -3783,6 +3964,7 @@ if (params.has("sim")) {
 	}
 	function tap(r, c) {
 		if (busy) return;
+		engage = null;
 		const p = at$1(state, r, c);
 		if (phase === "setup") {
 			if (mode === "live" && LIVE.ready[me]) return;
@@ -3834,7 +4016,7 @@ if (params.has("sim")) {
 			sfx.tap();
 			sel = sel && sel.id === p.id ? null : p;
 			copyMode = false;
-			info$1 = sel ? explain(sel) : null;
+			info$1 = null;
 			return render();
 		}
 		if (!p && !sel && onDC(state, r, c)) {
@@ -3909,19 +4091,19 @@ if (params.has("sim")) {
 		fill: "forwards",
 		...extra
 	}), reduce ? 1 : ms);
-	const blk = (el) => el.querySelector(".blk"), topOf = (el) => el.querySelector(".ftop");
+	const blk = (el) => el.querySelector(".blk");
 	function cloneAt(p, rect, show) {
 		const fx = document.getElementById("fx");
 		if (!fx) return null;
 		const el = document.createElement("div");
-		el.className = `clone ${cls(p.side)}`;
+		el.className = "clone";
 		Object.assign(el.style, {
 			left: rect.left + "px",
 			top: rect.top + "px",
 			width: rect.width + "px",
 			height: rect.height + "px"
 		});
-		el.innerHTML = blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`);
+		el.innerHTML = blockHtml(show ? faceHtml(p) : `<span class="q">?</span>`, p.side, !show);
 		fx.appendChild(el);
 		return el;
 	}
@@ -3943,10 +4125,10 @@ if (params.has("sim")) {
 			else if (i % 3 === 0) s.style.background = "#fff";
 			const a = Math.random() * Math.PI * 2, d = 30 + Math.random() * 50;
 			s.animate([{
-				transform: "translate3d(0,0,20px)",
+				transform: "translate(0,0) scale(1.4)",
 				opacity: 1
 			}, {
-				transform: `translate3d(${Math.cos(a) * d}px,${Math.sin(a) * d}px,${40 + Math.random() * 60}px)`,
+				transform: `translate(${Math.cos(a) * d}px,${Math.sin(a) * d}px) scale(.6)`,
 				opacity: 0
 			}], {
 				duration: 600 + Math.random() * 300,
@@ -3954,46 +4136,74 @@ if (params.has("sim")) {
 			}).finished.then(() => s.remove(), () => s.remove());
 		}
 	}
-	const LIFT = "translateZ(14px) scale(.9)";
-	const lift = (el, ms = 220) => A(blk(el), [{ transform: LIFT }], ms, "ease-out");
-	const land = (el) => A(blk(el), [{ transform: "none" }], 220, "cubic-bezier(.3,1.6,.5,1)");
+	const T = (ry = 0, rz = 0, k = 1.1, y = -3) => `perspective(300px) translateY(${y}px) scale(${k}) rotateY(${ry}deg) rotate(${rz}deg)`;
+	const LIFT = T();
+	const lift = (el, ms = 220) => A(blk(el), [{ transform: T(0, 0, 1, 0) }, { transform: LIFT }], ms, "ease-out");
+	const land = (el) => A(blk(el), [{ transform: T(0, 0, 1, 0) }], 220, "cubic-bezier(.3,1.6,.5,1)");
 	const slide = (el, c, f, ms, easing = "ease-out") => A(el, [{
 		left: c.ra.left + c.dx * f + "px",
 		top: c.ra.top + c.dy * f + "px"
 	}], ms, easing);
 	function knockOff(el, c, f, sign) {
 		const s = c.size, ux = c.dx / c.len, uy = c.dy / c.len;
-		A(el.querySelector(".shd"), [{ opacity: 0 }], 150);
 		A(el, [{
 			left: c.ra.left + c.dx * f + (ux * .9 - uy * .4) * s * sign + "px",
 			top: c.ra.top + c.dy * f + (uy * .9 + ux * .4) * s * sign + "px"
 		}], 380, "ease-out");
 		return A(blk(el), [
-			{ transform: "translateZ(14px) rotateX(0) rotateZ(0) scale(1)" },
 			{
-				transform: `translateZ(110px) rotateX(-220deg) rotateZ(${35 * sign}deg) scale(.75)`,
+				transform: LIFT,
+				opacity: 1
+			},
+			{
+				transform: T(0, 300 * sign, .8, 0),
+				opacity: 1,
 				offset: .55
 			},
-			{ transform: `translateZ(50px) rotateX(-380deg) rotateZ(${60 * sign}deg) scale(0)` }
+			{
+				transform: T(0, 540 * sign, 0, 0),
+				opacity: 0
+			}
 		], 380, "ease-out");
 	}
-	const sink = (el) => A(blk(el), [{ transform: "translateZ(-6px) scale(0)" }], 260, "ease-in");
-	async function flip3d(el, html) {
-		await A(blk(el), [{ transform: "translateZ(24px) rotateY(90deg)" }], 90, "ease-in");
-		topOf(el).innerHTML = html;
-		await A(blk(el), [{ transform: "translateZ(24px) rotateY(-90deg)" }, { transform: LIFT }], 150, "cubic-bezier(.3,1.5,.5,1)");
+	const sink = (el) => A(blk(el), [{
+		transform: LIFT,
+		opacity: 1
+	}, {
+		transform: T(0, 0, 0, 4),
+		opacity: 0
+	}], 260, "ease-in");
+	async function flip(el, html) {
+		const b = blk(el);
+		await A(b, [{ transform: LIFT }, { transform: T(90) }], 90, "ease-in");
+		b.innerHTML = html;
+		b.classList.remove("hid");
+		await A(b, [{ transform: T(-90) }, { transform: LIFT }], 150, "cubic-bezier(.3,1.5,.5,1)");
 	}
 	function fightTier(a, d) {
 		const m = Math.max(a.type === "X" || LEVELS_UP(a.type) ? a.str : 0, d.type === "X" || LEVELS_UP(d.type) ? d.str : 0);
 		return m >= 7 ? 2 : m >= 4 ? 1 : 0;
 	}
-	function shakeBoard(big) {
-		const b = document.getElementById("board");
-		if (!b || reduce) return;
-		b.classList.remove("shake", "big");
-		b.offsetWidth;
-		b.classList.add("shake");
-		if (big) b.classList.add("big");
+	function bump(el, k) {
+		if (!el || reduce) return;
+		el.classList.remove(k);
+		el.offsetWidth;
+		el.classList.add(k);
+	}
+	function squareFlash(rect) {
+		if (reduce) return;
+		const fx = document.getElementById("fx");
+		if (!fx) return;
+		const e = document.createElement("div");
+		e.className = "sqflash";
+		Object.assign(e.style, {
+			left: rect.left + "px",
+			top: rect.top + "px",
+			width: rect.width + "px",
+			height: rect.height + "px"
+		});
+		fx.prepend(e);
+		setTimeout(() => e.remove(), 800);
 	}
 	let lastFight = null;
 	async function animateFight(before, ev) {
@@ -4014,9 +4224,11 @@ if (params.has("sim")) {
 			const pz = sq && sq.querySelector(".pz");
 			if (pz) pz.style.visibility = "hidden";
 		}
-		app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach((q) => q.classList.remove("can", "sel", "copy"));
+		app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach((q) => q.classList.remove("can", "sel", "copy", "fight"));
+		for (const sq of [sqA, sqD]) if (sq) sq.classList.add("clash");
 		const font = getComputedStyle(sqA).fontSize;
 		ca.style.fontSize = cd.style.fontSize = font;
+		setConsole(engageHtml(a, d, ev, "meet"));
 		const dx = rd.left - ra.left, dy = rd.top - ra.top, len = Math.hypot(dx, dy) || 1, L = len / (Math.abs(dx) / len * ra.width + Math.abs(dy) / len * ra.height);
 		const c = {
 			ra,
@@ -4041,22 +4253,19 @@ if (params.has("sim")) {
 		sfx.hit();
 		if (tier === 2) sfx.big();
 		sparks(c, hit);
-		if (tier >= 1) shakeBoard(tier === 2);
-		if (tier === 2 && !reduce) {
-			const fl = document.createElement("div");
-			fl.className = "flash";
-			document.body.appendChild(fl);
-			setTimeout(() => fl.remove(), 700);
-		}
+		if (tier === 2) squareFlash(rd);
 		const flips = [];
-		if (masked(a) || shown(a) !== a) flips.push(flip3d(ca, faceHtml(shown(a))));
-		if (masked(d) || shown(d) !== d) flips.push(flip3d(cd, faceHtml(shown(d))));
+		if (masked(a) || shown(a) !== a) flips.push(flip(ca, faceHtml(shown(a))));
+		if (masked(d) || shown(d) !== d) flips.push(flip(cd, faceHtml(shown(d))));
+		setConsole(engageHtml(a, d, ev, "open"));
 		await Promise.all([...flips, wait(reduce ? 0 : [
 			700,
 			740,
 			800
 		][tier])]);
 		trace("resolve");
+		engage = engageHtml(a, d, ev, "done");
+		setConsole(engage);
 		const r = ev.result;
 		const aWins = r === "win" || r === "flag" || r === "defuse";
 		const take = (el, f) => Promise.all([slide(el, c, f, 200, "ease-in-out"), land(el)]);
@@ -4077,13 +4286,14 @@ if (params.has("sim")) {
 			ca = turned;
 			sparks(c, 1, d.side === "H" ? "#5CC8FF" : "#F5A524");
 			await A(blk(ca), [
-				{ transform: LIFT + " rotateY(0)" },
-				{ transform: "translateZ(8px) scale(.95) rotateY(360deg)" },
-				{ transform: "none" }
+				{ transform: LIFT },
+				{ transform: T(0, 360, .95, 0) },
+				{ transform: T(0, 360, 1, 0) }
 			], 300);
 		} else if (r === "convert") {
-			cd.classList.toggle("h");
-			cd.classList.toggle("ai");
+			const b = blk(cd);
+			b.classList.toggle("h");
+			b.classList.toggle("a");
 			await Promise.all([take(ca, 0), take(cd, 1)]);
 		} else await Promise.all([take(ca, 1), sink(cd)]);
 		trace("fight end");
@@ -4097,6 +4307,7 @@ if (params.has("sim")) {
 	}
 	async function afterMove(before) {
 		info$1 = null;
+		engage = null;
 		const events = state.events;
 		if (state.winner) {
 			phase = "over";
@@ -4104,7 +4315,10 @@ if (params.has("sim")) {
 		}
 		const fight = events.find((e) => e.kind === "fight");
 		let skip = null;
-		if (fight) lastFight = fight;
+		if (fight) lastFight = {
+			...fight,
+			round: before.round
+		};
 		if (fight && !FAST) {
 			busy = true;
 			skip = await animateFight(before, fight);
@@ -4123,7 +4337,7 @@ if (params.has("sim")) {
 				sfx.level();
 			}
 			if (e.kind === "agi") {
-				toast("THE AI HAS REACHED AGI", true);
+				toast("THE AI HAS REACHED AGI", true, "agi");
 				sfx.big();
 			}
 			if (e.kind === "asi") {
@@ -4139,12 +4353,12 @@ if (params.has("sim")) {
 					toast(`⚡ Power draining: the 🧠 drops to ${e.to}`, e.first, "drain");
 					if (e.first) {
 						sfx.big();
-						shakeBoard(true);
+						bump(document.getElementById("meter"), "jolt");
 					} else sfx.level();
 				} else {
 					toast("⚡ POWER OUT · the 🧠 is at 0, fragile", true, "drain");
 					sfx.big();
-					shakeBoard(true);
+					bump(document.getElementById("meter"), "jolt");
 				}
 			}
 		}
@@ -4152,8 +4366,7 @@ if (params.has("sim")) {
 			const win = state.winner === me;
 			if (state.winner === "D") sfx.level();
 			else {
-				document.body.classList.add(win ? "won" : "lost");
-				setTimeout(() => document.body.classList.remove("won", "lost"), 1200);
+				bump(app.querySelector(".console.end"), win ? "won" : "lost");
 				win ? sfx.gameWin() : sfx.gameLose();
 			}
 		}
@@ -4177,15 +4390,6 @@ if (params.has("sim")) {
 			if (h.a && h.d && h.result) return h;
 		}
 		return null;
-	}
-	function fightLine(ev) {
-		const who = (x, first) => `<span class="${x.side === me ? "you" : "them"}">${x.side === me ? first ? "Your" : "your" : first ? "Their" : "their"} ${iconOf(x)}${LEVELS_UP(x.type) ? x.str : ""}</span>`;
-		const A = who(ev.a, true), D = who(ev.d, false);
-		if (ev.mirror != null) {
-			const fakeA = ev.a.type === "K";
-			return `${who(fakeA ? ev.a : ev.d, true)} deepfake copied ${who(fakeA ? ev.d : ev.a, false)}; both fell`;
-		}
-		return ev.result === "tie" ? `${A} and ${D} both fell` : ev.result === "lose" ? `${A} lost to ${D}` : ev.result === "trapped" ? `${A} fell into ${D} and switched sides` : ev.result === "defuse" ? `${A} removed ${D}` : ev.result === "convert" ? `${A} turned ${D}` : ev.result === "flag" ? `${A} took ${D}` : `${A} beat ${D}`;
 	}
 	function floatWinner(ev) {
 		const sq = app.querySelector(`.sq[data-r="${ev.r}"][data-c="${ev.c}"]`);
@@ -4240,10 +4444,9 @@ if (params.has("sim")) {
 	}
 	function showLog() {
 		const ov = document.createElement("div");
-		ov.className = "overlay";
+		ov.className = "overlay logov";
 		ov.id = "logov";
-		const text = (h) => h.mv && h.side !== me && !h.mv.open ? `${SIDE_WORD[h.side]} piece ${h.mv.from} → ${h.mv.to}` : h.text;
-		ov.innerHTML = `<div class="card"><div class="eyebrow">Log · the last 40 · newest first</div><div class="lgs">${state.history.slice().reverse().map((h) => `<div class="${h.mile ? "mile" : ""}"><i>R${h.round}</i>${color(text(h))}</div>`).join("") || "<div>Nothing yet.</div>"}</div><button class="primary" id="logclose">CLOSE</button></div>`;
+		ov.innerHTML = `<div class="card"><div class="eyebrow">Log · the last 40 · newest first</div><div class="lgs">${state.history.slice().reverse().map((h) => `<div class="${h.mile ? "mile" : ""}"><i>R${h.round}</i><span>${color(logText(h))}</span></div>`).join("") || "<div><i></i><span>Nothing yet.</span></div>"}</div><button class="primary" id="logclose">CLOSE</button></div>`;
 		document.body.appendChild(ov);
 		const close = () => ov.remove();
 		ov.addEventListener("click", (e) => {
@@ -4431,6 +4634,8 @@ if (params.has("sim")) {
 		phase = "joining";
 		state = null;
 		lastFight = null;
+		engage = null;
+		brainSeen = null;
 		sel = null;
 		info$1 = null;
 		render();
@@ -4607,7 +4812,11 @@ if (params.has("sim")) {
 			});
 			if (m.phase === "over" && m.s && m.s.winner) countFriend(m);
 			busy = false;
-			lastFight = m.lastFight || null;
+			lastFight = m.lastFight ? {
+				...m.lastFight,
+				round: m.lastFight.round || (m.s && lastFightIn(m.s) || {}).round
+			} : null;
+			if (m.t === "sync") engage = null;
 			if (m.phase === "lobby" || !m.s) {
 				phase = "lobby";
 				state = null;
@@ -4664,21 +4873,21 @@ if (params.has("sim")) {
 		if (phase === "play") info$1 = null;
 	}
 	function renderLobby() {
-		const you = liveYou(), dot = (on) => `<i class="on ${on ? "yes" : ""}" title="${on ? "here" : "away"}"></i>`;
-		const sideRow = (side, who, here) => `<div class="rule"><div class="k ${side === "H" ? "b" : "a"}">${side === "H" ? "🕵️" : "🧠"}</div><div><b>${who}</b> ${who === "You" ? "play" : "plays"} ${here == null ? SIDE_NAME[side] : `<span class="nw">${SIDE_NAME[side]} ${dot(here)}</span>`}</div></div>`;
+		const you = liveYou(), dot = (on) => `<i class="dot ${on ? "yes" : ""}" title="${on ? "here" : "away"}"></i>`;
+		const sideRow = (side, who, here) => `<div class="rule"><div class="k">${icon(side, side === "H" ? "🕵️" : "🧠")}</div><div><b>${who}</b> ${who === "You" ? "play" : "plays"} ${here == null ? SIDE_NAME[side] : `<span class="nw">${SIDE_NAME[side]} ${dot(here)}</span>`}</div></div>`;
 		const friend = LIVE.host ? "guest" : "host";
 		let body;
 		if (LIVE.fail) body = `<div class="eyebrow">Play a friend</div><h1>${LIVE.full ? "GAME FULL" : "NO GAME"}</h1><p>${LIVE.fail}</p>${LIVE.full || !LIVE.code ? "" : `<button class="primary" id="lvretry">TRY AGAIN</button>`}<button class="ghost" id="lvleave">BACK</button>`;
 		else if (phase === "joining") body = `<div class="eyebrow">Play a friend${LIVE.code ? " · " + LIVE.code : ""}</div><h1>${LIVE.opened ? "RECONNECTING" : "CONNECTING"}<span class="dots"><i>.</i><i>.</i><i>.</i></span></h1><p>${LIVE.note || "Reaching the game server."}</p><button class="ghost" id="lvleave">BACK</button>`;
 		else if (!LIVE.guestIn && LIVE.challenge) body = `<div class="eyebrow">Challenge · ${LIVE.code}</div><h1 id="chsent">CHALLENGE SENT</h1>
       <p>Waiting for <b>@${esc(LIVE.challenge.handle)}</b> to accept. It's in their My games now; unanswered, it goes in ${daysLeft(LIVE.challenge.expires)}.</p>
-      <div class="rules">${sideRow(you, "You")}</div>${LIVE.note ? `<p class="lvnote">${LIVE.note}</p>` : ""}<div class="row2"><button class="ghost" id="lvswap">SWITCH SIDES</button><button class="ghost" id="lvleave">BACK</button></div>`;
-		else if (!LIVE.guestIn) body = `<div class="eyebrow">Play a friend · invite</div><p class="codebig" id="code">${LIVE.code}</p>
+      <div class="panel">${sideRow(you, "You")}</div>${LIVE.note ? `<p class="lvnote">${LIVE.note}</p>` : ""}<div class="row2"><button class="ghost" id="lvswap">SWITCH SIDES</button><button class="ghost" id="lvleave">BACK</button></div>`;
+		else if (!LIVE.guestIn) body = `<div class="eyebrow">Play a friend · invite</div><p class="codebig" id="code">${[...LIVE.code].map((ch) => `<span>${ch}</span>`).join("")}</p>
       <p>Send your friend the link, or they type <b>${LIVE.code}</b> under Join with code.</p>
       <div class="row2"><button class="primary" id="lvshare">SHARE</button><button class="ghost" id="lvcopy">COPY</button></div>
-      <div class="rules">${sideRow(you, "You")}</div>${LIVE.note ? `<p class="lvnote">${LIVE.note}</p>` : ""}<div class="row2"><button class="ghost" id="lvswap">SWITCH SIDES</button><button class="ghost" id="lvleave">BACK</button></div>`;
+      <div class="panel">${sideRow(you, "You")}</div>${LIVE.note ? `<p class="lvnote">${LIVE.note}</p>` : ""}<div class="row2"><button class="ghost" id="lvswap">SWITCH SIDES</button><button class="ghost" id="lvleave">BACK</button></div>`;
 		else body = `<div class="eyebrow">Play a friend · ${LIVE.code}</div><h1>${LIVE.host ? "YOUR FRIEND IS IN" : "YOU'RE IN"}</h1>
-      <div class="rules">${sideRow(you, "You")}${sideRow(other(you), LIVE.host ? "Your friend" : "The host", !!LIVE.online[friend])}</div>
+      <div class="panel">${sideRow(you, "You")}${sideRow(other(you), LIVE.host ? "Your friend" : "The host", !!LIVE.online[friend])}</div>
       <button class="ghost" id="lvswap">SWITCH SIDES</button>
       ${LIVE.host ? `<button class="primary" id="lvstart">START</button>` : `<p class="eyebrow" id="lvwait">Waiting for the host to start<span class="dots"><i>.</i><i>.</i><i>.</i></span></p>`}
       ${LIVE.note ? `<p class="lvnote">${LIVE.note}</p>` : ""}<button class="ghost" id="lvleave">BACK</button>`;
