@@ -3279,6 +3279,7 @@ if (params.has("sim")) {
 		lastFight = null;
 		engage = null;
 		brainSeen = null;
+		keyPick = null;
 		if (mode === "solo") {
 			gameLevel = soloLevel;
 			levelMove = levelBot(gameLevel);
@@ -3455,9 +3456,10 @@ if (params.has("sim")) {
 		}));
 		return m;
 	}
-	const soundHome = () => {
+	const soundBtn = () => `<button class="pill snd" id="sound" aria-label="${SFX.on ? "Sound on" : "Sound off"}" aria-pressed="${SFX.on}">${SFX.on ? "🔊" : "🔇"}</button>`;
+	const homeBtn = () => {
 		const t = mode === "live" && phase !== "over" ? "Home (your game is saved in My games)" : "Home";
-		return `<button class="ghost sm" id="sound">${SFX.on ? "🔊" : "🔇"}</button><button class="ghost sm" id="restart" aria-label="${t}" title="${t}">🏠</button>`;
+		return `<button class="ghost sm" id="restart" aria-label="${t}" title="${t}">🏠</button>`;
 	};
 	let renderLater = false;
 	function render(opts = {}) {
@@ -3478,7 +3480,7 @@ if (params.has("sim")) {
 		const live = !!(brain && isSuper(brain)) && !state.cut;
 		const drainNow = phase === "play" && !state.winner && !!state.drainOn;
 		const turnPill = phase === "setup" ? `<span class="pill on turn${me === "AI" ? " ai" : ""}" id="turnpill">SET UP</span>` : phase === "play" && !state.winner ? state.turn === me ? `<span class="pill on turn mine${me === "AI" ? " ai" : ""}" id="turnpill">YOUR MOVE</span>` : `<span class="pill wait turn" id="turnpill">THEIR MOVE</span>` : "";
-		let html = `<div class="left"><div class="hud"><span class="pill">R${Math.min(state.round, BAL.MAX_ROUNDS)}</span>${turnPill}${mode === "solo" ? `<span class="pill r lvl">VS ${BOT_NAME[gameLevel].toUpperCase()} BOT</span>` : ""}</div>`;
+		let html = `<div class="left${setupOpen ? " setup" : ""}"><div class="hud"><span class="pill">R${Math.min(state.round, BAL.MAX_ROUNDS)}</span>${turnPill}${mode === "solo" ? `<span class="pill r lvl">VS ${BOT_NAME[gameLevel].toUpperCase()} BOT</span>` : ""}${soundBtn()}</div>`;
 		html += meterHtml(brain, drainNow);
 		let bhtml = `<div class="boardwrap"><div class="board" id="board">`;
 		const cans = sel ? legalMoves(state, sel) : [];
@@ -3544,7 +3546,7 @@ if (params.has("sim")) {
 		else if (phase === "setup" && dcPick && me === "H") logHtml = `<span class="you">🏢 picked up.</span> Tap a lit square for it; a piece there swaps with it.`;
 		else if (phase === "setup") {
 			const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]];
-			logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} ${me === "H" ? "Swap two (🏢 too)." : "Swap two, then START."}`;
+			logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Tap two pieces to swap them${me === "H" ? " (🏢 too)" : ""}.`;
 		} else if (info$1) logHtml = info$1;
 		else if (state.turn !== me && !state.winner) logHtml = mode === "live" ? `Waiting for <b>${SIDE_NAME[other(me)]}</b><span class="dots"><i>.</i><i>.</i><i>.</i></span>${LIVE.online[LIVE.host ? "guest" : "host"] ? "" : " They're away; your friend sees the board when they're back."}` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
 		else if (!state.winner && state.turn === me && me === "H" && drainNow && !(lastFight && lastFight.line && state.log === lastFight.line)) {
@@ -3558,17 +3560,27 @@ if (params.has("sim")) {
 			const win = state.winner === me, draw = state.winner === "D";
 			const lm = !state.last ? "" : `Last move: ${state.last.side === me ? "you" : theirs()}, ${sqName(...state.last.from)} → ${sqName(...state.last.to)}.`;
 			html += `<div class="console end"><div class="msg over ${draw ? "" : win ? "win" : "lose"}"><h1>${endTitle(state, me)}</h1><div>${color(state.log)}</div><div class="eyebrow">${lm} Round ${Math.min(state.round, BAL.MAX_ROUNDS)}${mode === "solo" ? ` · vs ${BOT_NAME[gameLevel]} bot` : ""}${mode === "live" && !LIVE.online[LIVE.host ? "guest" : "host"] ? ` · <span class="lvnote" id="friendleft">Your friend left.</span>` : ""}</div></div>${fline}</div>`;
-		} else if (engage && phase === "play" && !note) html += `<div class="console eng">${engage}</div>`;
+		} else if (setupOpen) html += `<div class="setupbox"><div class="msg">${logHtml}</div>${lineupsHtml()}</div>`;
+		else if (engage && phase === "play" && !note) html += `<div class="console eng">${engage}</div>`;
 		else html += `<div class="console"><div class="msg">${logHtml}</div>${fline}</div>`;
 		const bar = (cls, inner) => `<div class="actions${cls}">${inner}</div>`;
-		if (phase === "setup" && !(mode === "live" && LIVE.ready[me])) html += bar(" two", `<button class="ghost" id="lineup">NEXT LINEUP</button><button class="primary" id="go">START</button>`);
-		else if (phase === "setup") html += bar(" one", `<button class="ghost" id="restart">LEAVE</button>`);
+		if (setupOpen) html += bar(" home", `${homeBtn()}<button class="primary" id="go">START</button>`);
+		else if (phase === "setup") html += bar(" home", `${homeBtn()}<button class="ghost" disabled>WAITING…</button>`);
 		else if (phase === "play") {
 			const copy = sel && sel.type === "R" && state.copies[me] > 0 && copySource(state, sel);
-			html += bar("", `<button class="ghost" id="rules">RULES ↓</button>${copy ? `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>` : `<button class="ghost" id="log">LOG</button>`}${soundHome()}`);
-		} else if (over) html += bar(" end", `<button class="primary" id="again">PLAY AGAIN</button><button class="ghost" id="rules">RULES ↓</button>${soundHome()}`);
-		html += `</div><div class="right" id="rulesbox"><p class="more">↓ Rules and pieces</p>` + listHtml() + `</div>`;
+			html += bar("", `${homeBtn()}<button class="ghost" id="rules">PIECES ↓</button>${copy ? `<button class="ghost" id="copybtn" aria-pressed="${copyMode}">COPY (${state.copies[me]})</button>` : `<button class="ghost" id="log">LOG</button>`}`);
+		} else if (over) html += bar(" end", `${homeBtn()}<button class="primary" id="again">PLAY AGAIN</button><button class="ghost" id="rules">PIECES ↓</button>`);
+		html += `</div><div class="right" id="rulesbox">` + listHtml() + `</div>`;
+		const lus = app.querySelector("#lineups"), lusX = lus ? lus.scrollLeft : null;
 		app.innerHTML = html;
+		const lus2 = app.querySelector("#lineups");
+		if (lus2) {
+			if (lusX != null) lus2.scrollLeft = lusX;
+			else {
+				const pk = lus2.querySelector(".lu.on");
+				if (pk && pk.offsetLeft + pk.offsetWidth > lus2.clientWidth) lus2.scrollLeft = pk.offsetLeft - 10;
+			}
+		}
 		if (!FAST && prev.size) {
 			app.querySelectorAll(".sq[data-id]").forEach((el) => {
 				const id = el.dataset.id, was = prev.get(id);
@@ -3603,14 +3615,14 @@ if (params.has("sim")) {
 			const el = document.getElementById(id);
 			if (el) el.addEventListener("click", fn);
 		};
-		on("lineup", () => {
+		app.querySelectorAll(".lu").forEach((el) => el.addEventListener("click", () => {
+			if (phase !== "setup" || mode === "live" && LIVE.ready[me]) return;
 			sfx.tap();
 			dcPick = false;
-			const cur = state.forms[me], n = FORMATIONS[me].length;
-			layoutSide(state, me, cur == null ? 0 : cur + 1 >= n ? null : cur + 1, Math.random);
+			layoutSide(state, me, el.dataset.form === "" ? null : +el.dataset.form, Math.random);
 			sel = null;
 			render();
-		});
+		}));
 		on("go", begin);
 		on("again", () => {
 			if (mode === "live") {
@@ -3622,8 +3634,10 @@ if (params.has("sim")) {
 			render();
 		});
 		on("restart", () => {
+			dropDrag();
 			if (mode === "live") leaveLive();
 			counts = false;
+			dcPick = false;
 			phase = "intro";
 			render();
 		});
@@ -3645,15 +3659,9 @@ if (params.has("sim")) {
 			render();
 		});
 		app.querySelectorAll(".kr").forEach((el) => el.addEventListener("click", () => {
-			const t = el.dataset.type, side = el.dataset.side;
+			const k = `${el.dataset.side}:${el.dataset.type}:${el.dataset.str}`;
 			sfx.tap();
-			engage = null;
-			info$1 = explain({
-				side,
-				type: t,
-				str: el.dataset.str ? +el.dataset.str : (ARMIES[side].find(([tt]) => tt === t) || [0, 0])[1],
-				seen: true
-			});
+			keyPick = keyPick === k ? null : k;
 			render();
 		}));
 		on("sound", () => {
@@ -3666,6 +3674,21 @@ if (params.has("sim")) {
 			sfx.tap();
 			render();
 		});
+	}
+	const RANDOM_MINI = "dmbtdmbmddmdbtmdmdbdmdbm";
+	function lineupsHtml() {
+		const pick = state.forms[me], tone = (ch) => ch === "." ? "e" : ch === "F" ? "f" : ch === "T" ? "t" : ch === "8" || ch === "9" ? "b" : /[567]/.test(ch) ? "m" : "d";
+		const cell = (t, n = "") => `<i class="${t}">${n}</i>`;
+		const card = (form, name, hint, cells) => `<button class="lu${pick === form ? " on" : ""}" data-form="${form == null ? "" : form}" aria-pressed="${pick === form}"><span class="lun">${name}<b>${pick === form ? "✓" : ""}</b></span><span class="lum">${cells}</span><span class="luh">${hint}</span></button>`;
+		const rnd = card(null, "Random", "A new random spread each tap.", [...RANDOM_MINI].map((t) => cell(t)).join(""));
+		const forms = FORMATIONS[me].map((f, k) => card(k, f.name, f.hint, [
+			f.rows[2],
+			f.rows[1],
+			f.rows[0]
+		].flatMap((r) => [...r]).map((ch) => cell(tone(ch), ch === "8" || ch === "9" ? ch : "")).join("")));
+		const sw = (t, l) => `<span><i class="${t}"></i>${l}</span>`;
+		return `<div class="luhd"><b>LINEUP</b><span>swipe for more →</span></div><div class="lus" id="lineups">${rnd}${forms.join("")}</div>
+      <div class="lul">${sw("b", "8–9")}${sw("m", "5–7")}${sw("d", "1–3")}${sw("t", me === "H" ? "honeypot" : "backdoor")}${sw("f", me === "H" ? "Internet" : "kill switch")}</div>`;
 	}
 	let brainSeen = null;
 	function meterHtml(brain, drainNow) {
@@ -3706,50 +3729,56 @@ if (params.has("sim")) {
 		return " " + color(logText(h)) + ".";
 	}
 	const logText = (h) => h.mv && h.side !== me && !h.mv.open ? `${SIDE_WORD[h.side]} piece ${h.mv.from} → ${h.mv.to}` : h.text;
-	const POWER = {
-		H: {
-			S: "flies any distance",
-			M: "fights as 3, removes backdoors",
-			A: "1; kills an 8 or 9 it attacks",
-			C: "shows pieces while next to it",
-			T: "AI attacker joins the humans",
-			F: "the AI wins if it gets here"
-		},
-		AI: {
-			S: "slides any distance",
-			M: "fights as 3, removes honeypots",
-			A: "kills an 8 or 9 when attacking",
-			C: "shows pieces while next to it",
-			I: "grows to 10 on its own",
-			K: "copies its foe: both fall",
-			R: "copies a neighbour, twice",
-			T: "human attacker joins the AI",
-			F: "the humans win if they get here"
+	let keyPick = null;
+	const NOTE = (side, t, str) => {
+		if (t === "C") return "Once an enemy moves away, or the scanner moves or falls, it is hidden again.";
+		if (side === "H" && t === "X" && str === 9) return "The drain pauses while it is off the 🏢. While the CTO lives, only the CTO drains.";
+		if (side === "H" && t === "X" && str >= BAL.BACKUP) return state.pieces.some(isCTO) ? `Once the CTO is dead, any human ${BAL.BACKUP}+ on the 🏢 drains the 🧠 the same way; the drain pauses while none stands there.` : "The drain pauses while none stands there.";
+		if (side === "AI" && t === "X" && !BOOSTS({
+			side,
+			type: t,
+			str
+		})) return "Never gets the +1 on the 🏢.";
+		if (side === "AI" && t === "I") {
+			const b = brainOf(state);
+			if (state.cut && b && b.str <= 0) return "";
+			return `${state.cut ? "" : `Below ${BAL.ASI} it fights with its number like any piece: `}as an 8 or 9 it falls to the 📢, and the 🎭 trades with it. At 0 it is fragile (still hidden): any piece that finds it kills it.`.replace(/^as/, "As");
 		}
+		return "";
 	};
 	function listHtml() {
 		const alive = (side, t, str) => state.pieces.filter((p) => p.side === side && homeSide(p) === side && p.type === t && (str == null || (p.base ?? p.str) === str)).length;
 		const total = (side, t, str) => ARMIES[side].filter(([tt, ss]) => tt === t && (str == null || ss === str)).length;
-		const krow = (side, t, str) => {
-			const n = alive(side, t, str), m = total(side, t, str);
-			const lvl = t === "X" ? str : ARMIES[side].find(([tt]) => tt === t)[1];
-			const ch = `<div class="k">${tokenHtml(side, {
-				side,
-				home: side,
-				type: t,
-				str: lvl
-			})}</div>`;
-			const nm = roleName({
-				side,
-				home: side,
-				type: t,
-				str: lvl
-			});
-			return `<div class="kr ${n ? "" : "gone"}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}">${ch}<div class="kn">${nm}${t === "X" && !state.cut && BOOSTS({
+		const lvlOf = (side, t, str) => t === "X" ? str : t === "I" ? (brainOf(state) || {}).str ?? brainSeen ?? ARMIES[side].find(([tt]) => tt === t)[1] : ARMIES[side].find(([tt]) => tt === t)[1];
+		const tile = (side, t, str) => {
+			const n = alive(side, t, str), m = total(side, t, str), lvl = lvlOf(side, t, str), key = `${side}:${t}:${str == null ? "" : str}`;
+			const boost = t === "X" && !state.cut && BOOSTS({
 				side,
 				type: t,
 				str
-			}) ? `<span class="kb" title="+1 at the 🏢, once">↑🏢</span>` : ""}<small>${t === "X" ? side === "H" && str === 9 ? "drains the 🧠 on 🏢" : "higher number wins" : POWER[side][t]}</small></div><span class="kc">×${n}${n === m ? "" : `<i> of ${m}</i>`}</span></div>`;
+			});
+			return `<button class="kr ${cls(side)}${n ? "" : " gone"}${keyPick === key ? " on" : ""}" data-side="${side}" data-type="${t}" data-str="${str == null ? "" : str}" aria-pressed="${keyPick === key}"><span class="k">${tokenHtml(side, {
+				side,
+				home: side,
+				type: t,
+				str: lvl
+			})}${n ? "" : `<i class="ks"></i>`}${boost ? `<i class="kb" title="+1 at the 🏢, once">↑🏢</i>` : ""}</span><span class="kn">${cap$1(roleName({
+				side,
+				home: side,
+				type: t,
+				str: lvl
+			}))}</span><span class="kc">×${n}<i> /${m}</i></span></button>`;
+		};
+		const detail = (side) => {
+			if (!keyPick || !keyPick.startsWith(side + ":")) return side === me ? "" : `<p class="ktip">Tap a piece for what it does.</p>`;
+			const [, t, s] = keyPick.split(":"), str = s ? +s : null, note = NOTE(side, t, str);
+			return `<div class="kd">${explain({
+				side,
+				home: side,
+				type: t,
+				str: lvlOf(side, t, str),
+				seen: true
+			})}${note ? ` ${note}` : ""}</div>`;
 		};
 		const ranks = (side) => [...new Set(ARMIES[side].filter(([t]) => t === "X").map(([, n]) => n))].sort((a, b) => b - a);
 		const specials = (side) => [
@@ -3763,22 +3792,132 @@ if (params.has("sim")) {
 			"T",
 			"F"
 		].filter((t) => ARMIES[side].some(([tt]) => tt === t));
+		const grid = (side) => `<div class="kg">${ranks(side).map((n) => tile(side, "X", n)).join("")}${specials(side).map((t) => tile(side, t)).join("")}</div>${detail(side)}`;
+		const head = (side, label, left, more) => `<div class="kh ${cls(side) === "h" ? "b" : "a"}${more ? " more" : ""}"><h2>${label}</h2><span class="kc"><b>${left}</b> of ${ARMIES[side].length} left</span></div>`;
 		const aiSeen = state.pieces.filter((p) => p.side !== me && p.type === "X").filter((p) => p.revealed && homeSide(p) !== me).sort((a, b) => b.str - a.str);
 		const byStr = (a, b) => b.str - a.str;
 		const joinedMe = state.pieces.filter((p) => p.side === me && isTurned(p)).sort(byStr), joinedThem = state.pieces.filter((p) => p.side !== me && homeSide(p) === me).sort(byStr);
-		const turnedRow = (list, who) => list.length ? `<div class="seen">↺ Turned, now ${who}: ${list.map(chip).join("")}</div>` : "";
+		const chips = (list) => list.length ? list.map(chip).join("") : `<span class="none">none</span>`;
+		const turned = joinedMe.length || joinedThem.length ? `<div class="seen trnd"><b>↺ TURNED</b><span>now theirs: ${chips(joinedThem)}</span><span>now yours: ${chips(joinedMe)}</span></div>` : "";
 		return `<div class="key">
-      <div class="kh ${cls(me) === "h" ? "b" : "a"}">Your pieces <span class="kc">${state.pieces.filter((p) => p.side === me && homeSide(p) === me).length}<i> of ${ARMIES[me].length} left</i></span></div>
-      ${ranks(me).map((n) => krow(me, "X", n)).join("")}
-      ${specials(me).map((t) => krow(me, t)).join("")}
-      ${turnedRow(joinedMe, "yours")}
-      <div class="kh ${cls(me) === "h" ? "a" : "b"}">${theirs()} pieces <span class="kc">${state.pieces.filter((p) => p.side !== me && homeSide(p) !== me).length}<i> of ${ARMIES[other(me)].length} left</i></span></div>
-      ${ranks(other(me)).map((n) => krow(other(me), "X", n)).join("")}
-      ${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}
-      ${specials(other(me)).map((t) => krow(other(me), t)).join("")}
-      ${turnedRow(joinedThem, "theirs")}
-      <div class="kh n">A fight: higher number wins, same number both fall. A piece that attacks a trap moves onto it and switches sides: it is turned (↺) and plays as the same kind of piece and number on its new side. Pieces don't level up, except an AI fighter that is a 5 or 6 when it reaches the 🏢 takes +1 there, once (below); the AI's 🧠 grows on its own instead, +1 every ${BAL.RSI_EVERY} rounds. At ${BAL.AGI} it is AGI; at ${BAL.ASI} it is superintelligence: it beats everything (still hidden: find it with a 📡 scanner or a fight), sees through honeypots and the 📢 whistleblower can't touch it. Then the humans' CTO can stand on their 🏢 datacenter and drain it: each human turn that ends with the CTO there, the 🧠 loses ${BAL.DRAIN} (10 → 9 → 8 …, and it never grows again). Below 10 it fights with its number like any piece (a 9 or 8 falls to the 📢 whistleblower; the 🎭 deepfake trades with it); at 0 it is fragile (still hidden), and any piece that finds it kills it. If the CTO leaves, the drain stops where it is until it comes back. Once the CTO is dead, any human fighter worth ${BAL.BACKUP} or more (${BACKUPS(true)}) does its job: standing on the 🏢, it drains the 🧠 the same way, and the drain stops while none stands there. While the CTO lives, only the CTO drains. Until the drain starts, AI fighters 5–6 that reach the 🏢 get +1, once (a 🐝 5 becomes 6, a 🤖 6 becomes 7); the 🦾 7, the 👾 8, the 🧠, the 🎭 and the pieces with an ability never do. What stops an 8 or 9: a stronger piece, the same number (both fall), ${ARMIES.AI.some(([t]) => t === "K") ? "the 🎭 deepfake (it copies the number: both fall), " : ""}the 📢 whistleblower or 🦠 virus attacking it, or a trap. The 🌍 Internet is the humans’ flag: if the AI gets there, it gets out. A 📡 scanner shows the enemy pieces next to it face up, only while they stay next to it; once one moves away (or the scanner moves or falls), it is hidden again. After that, as after a fight, you have to remember what you saw.</div>
+      <section class="ksec">${head(other(me), "Their pieces", state.pieces.filter((p) => p.side !== me && homeSide(p) !== me).length, true)}${grid(other(me))}${aiSeen.length ? `<div class="seen">Spotted: ${aiSeen.map(chip).join("")}</div>` : ""}</section>
+      <section class="ksec">${head(me, "Your pieces", state.pieces.filter((p) => p.side === me && homeSide(p) === me).length)}${grid(me)}</section>
+      ${turned}
+      ${rulesHtml()}
     </div>`;
+	}
+	function rulesHtml() {
+		const H = me === "H", deepfake = ARMIES.AI.some(([t]) => t === "K");
+		const spy = `${BAL.SPY_MIN} or ${BAL.SPY_MAX}`, boost = `${BAL.BOOST_MIN} or ${BAL.BOOST_MAX}`;
+		const grows = `+1 every ${BAL.RSI_EVERY} rounds. AGI at ${BAL.AGI}. At ${BAL.ASI} it beats everything and ignores honeypots and the 📢.`;
+		const drain = `each turn it stays, the 🧠 loses ${BAL.DRAIN}, and it never grows again. It fights at what’s left; at 0 anything kills it. CTO dead? ${cap$1(BACKUPS())} can.`;
+		const you = H ? [
+			[
+				"🛑",
+				"Win",
+				"Reach the AI’s 🛑 kill switch."
+			],
+			[
+				"🏢",
+				"Drain the 🧠",
+				`Once the 🧠 hits ${BAL.ASI}, park your CTO on your 🏢: ${drain}`
+			],
+			[
+				"📢",
+				"Whistleblower",
+				`Attacks an ${spy} and wins. Loses to anything else.`
+			],
+			[
+				"🍯",
+				"Honeypots",
+				"An AI piece that attacks one joins your side."
+			]
+		] : [
+			[
+				"🌍",
+				"Win",
+				"Reach the humans’ 🌍 Internet."
+			],
+			[
+				"🧠",
+				"Your 🧠 grows",
+				grows
+			],
+			[
+				"🐝",
+				"Boost",
+				`Your ${boost} that reaches their 🏢 gets +1, once, until the drain starts.`
+			],
+			[
+				"🦠",
+				"Virus",
+				`Attacks an ${spy} and wins. Loses to anything else.`
+			],
+			deepfake && [
+				"🎭",
+				"Deepfake",
+				"Copies the number of whatever it fights: both fall."
+			],
+			[
+				"🚪",
+				"Backdoors",
+				"A human piece that attacks one joins your side."
+			]
+		];
+		const them = H ? [
+			[
+				"🧠",
+				"The 🧠 grows",
+				grows
+			],
+			[
+				"🐝",
+				"Boost",
+				`An AI ${boost} that reaches your 🏢 gets +1, once, until the drain starts.`
+			],
+			[
+				"🦠",
+				"Virus",
+				`Kills your ${spy} if it attacks them.`
+			],
+			deepfake && [
+				"🎭",
+				"Deepfake",
+				"Copies your number in a fight: both fall."
+			],
+			[
+				"🚪",
+				"Backdoors",
+				"Attack one and your piece joins the AI."
+			]
+		] : [
+			[
+				"🏢",
+				"The drain",
+				`Once your 🧠 hits ${BAL.ASI}, each turn their CTO stays on their 🏢 your 🧠 loses ${BAL.DRAIN}, and it never grows again. It fights at what’s left; at 0 anything kills it. CTO dead? ${cap$1(BACKUPS())} can.`
+			],
+			[
+				"📢",
+				"Whistleblower",
+				`Kills your ${spy} if it attacks them.`
+			],
+			[
+				"🍯",
+				"Honeypots",
+				`Attack one and your piece joins the humans (not at ${BAL.ASI}).`
+			]
+		];
+		const basics = [[
+			"⚔️",
+			"Fight",
+			"Move onto an enemy. Higher number wins; the same number, both fall."
+		], [
+			"📡",
+			"Scanner",
+			"Shows the enemies next to it while they stay there."
+		]];
+		const group = (k, head, sub, cards) => `<section class="rg ${k}"><div class="rgh"><h2>${head}</h2><span>${sub}</span></div>${cards.filter(Boolean).map(([ic, h, t]) => `<div class="rc"><span class="ri">${ic}</span><div><h3>${h}</h3><p>${t}</p></div></div>`).join("")}</section>`;
+		return `<div class="rcs">${group(H ? "h" : "a", "You", H ? "Humans" : "The AI", you)}${group("w", "Watch out", H ? "what the AI can do" : "what the humans can do", them)}${group("n", "Basics", "both sides", basics)}</div>`;
 	}
 	let soloSide = "H";
 	try {
@@ -3790,18 +3929,60 @@ if (params.has("sim")) {
 	} catch (e) {}
 	if (params.has("level")) soloLevel = toLevel(params.get("level"));
 	const icon = (side, emoji) => `<div class="pz">${blockHtml(`<span class="ic">${emoji}</span>`, side)}</div>`;
+	function introRules(side) {
+		return (side === "H" ? [
+			[
+				"AI",
+				"🛑",
+				"Reach the AI’s kill switch.",
+				"You win.",
+				"win"
+			],
+			[
+				"H",
+				"🌍",
+				"Guard your Internet.",
+				"If the AI gets there, you lose.",
+				"lose"
+			],
+			[
+				"AI",
+				"🧠",
+				`The AI’s brain grows every ${BAL.RSI_EVERY} rounds.`,
+				"Kill it, or drain it from your 🏢.",
+				""
+			]
+		] : [
+			[
+				"H",
+				"🌍",
+				"Reach the humans’ Internet.",
+				"You win.",
+				"win"
+			],
+			[
+				"AI",
+				"🛑",
+				"Guard your kill switch.",
+				"If they get there, you lose.",
+				"lose"
+			],
+			[
+				"AI",
+				"🧠",
+				`Your brain grows every ${BAL.RSI_EVERY} rounds.`,
+				`At ${BAL.ASI} it beats everything.`,
+				"agi"
+			]
+		]).map(([s, e, a, b, c]) => `<div class="rule"><div class="k">${icon(s, e)}</div><div>${a} <b${c ? ` class="${c}"` : ""}>${b}</b></div></div>`).join("");
+	}
 	function renderIntro() {
 		app.innerHTML = `<div class="overlay"><div class="card">
       <div id="acctslot"></div>
       <h1 class="logo" aria-label="Kill Switch"><svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 -15.75 763.4 101.5"><svg x="0" y="-15.75" width="101.5" height="101.5" viewBox="6 6 52 52" overflow="visible"><defs><linearGradient id="w4h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFBA45"/><stop offset=".55" stop-color="#F5A524"/><stop offset="1" stop-color="#E08A0B"/></linearGradient><radialGradient id="w4g"><stop offset="0" stop-color="#FF5C5C" stop-opacity=".55"/><stop offset="1" stop-color="#FF5C5C" stop-opacity="0"/></radialGradient><linearGradient id="w4t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF5C5C" stop-opacity="0"/><stop offset="1" stop-color="#FF5C5C" stop-opacity=".5"/></linearGradient></defs><path d="M21.23 6 L42.77 6 L58 21.23 L58 42.77 L42.77 58 L21.23 58 L6 42.77 L6 21.23 Z" fill="url(#w4h)"/><path d="M22.2 8.34 L41.8 8.34 L55.66 22.2 L55.66 41.8 L41.8 55.66 L22.2 55.66 L8.34 41.8 L8.34 22.2 Z" fill="none" stroke="#FFD27A" stroke-opacity=".38" stroke-width="0.94"/><path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z" fill="#06121C"/><clipPath id="w4v"><path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z"/></clipPath><g clip-path="url(#w4v)"><g class="eye"><rect x="16.03" y="30.03" width="23.11" height="3.01" rx="1.5" fill="url(#w4t)"/><circle cx="39.14" cy="31.53" r="10.17" fill="url(#w4g)"/><circle cx="39.14" cy="31.53" r="4.42" fill="#FF5C5C"/><circle cx="37.55" cy="29.94" r="1.33" fill="#FFE1E1"/></g></g></svg><g transform="translate(130.9 0)"><g fill="#E6EDF3"><path d="M6.50 70L6.50 0L20.10 0L20.10 29.30L30.70 29.30L47.60 0L62.90 0L42.40 34.90L64.60 70L49 70L30.60 40.90L20.10 40.90L20.10 70L6.50 70Z"/><path d="M75.10 70L75.10 0L88.70 0L88.70 70L75.10 70Z"/><path d="M105.20 70L105.20 0L118.80 0L118.80 58.50L153.80 58.50L153.80 70L105.20 70Z"/><path d="M164.30 70L164.30 0L177.90 0L177.90 58.50L212.90 58.50L212.90 70L164.30 70Z"/><path d="M262.90 70L252.10 59.20L252.10 49.20L265.50 49.20L265.50 55.10L268.80 58.40L289.50 58.40L292.90 55L292.90 43.40L289.60 40.10L263.10 40.10L252.30 29.30L252.30 10.80L263.10 0L294.70 0L305.50 10.80L305.50 20.90L292.10 20.90L292.10 14.90L288.80 11.60L269 11.60L265.70 14.90L265.70 25.20L269 28.50L295.50 28.50L306.30 39.30L306.30 59L295.30 70L262.90 70Z"/><path d="M329.80 70L315.30 0L329 0L337.50 49.40L337.90 49.40L351.80 0L362 0L375.60 49.40L376 49.40L384.50 0L398.20 0L383.70 70L371 70L357.10 20.80L356.70 20.80L342.50 70L329.80 70Z"/><path d="M410.70 70L410.70 0L424.30 0L424.30 70L410.70 70Z"/><path d="M456.70 70L456.70 11.50L435.80 11.50L435.80 0L491.20 0L491.20 11.50L470.30 11.50L470.30 70L456.70 70Z"/><path d="M511.20 70L499.70 58.50L499.70 11.50L511.20 0L545.40 0L556.70 11.30L556.70 22L543.10 22L543.10 16.30L538.40 11.60L518.40 11.60L513.30 16.70L513.30 53.30L518.40 58.40L538.40 58.40L543.10 53.70L543.10 48L556.70 48L556.70 58.70L545.40 70L511.20 70Z"/><path d="M569.20 70L569.20 0L582.80 0L582.80 29.30L612.40 29.30L612.40 0L626 0L626 70L612.40 70L612.40 40.90L582.80 40.90L582.80 70L569.20 70Z"/></g></g></svg></h1><div class="eyebrow tag">Stratego, but the AI gets smarter</div>
       <div class="games" id="mygames" hidden></div>
-      <div class="rules">
-        <div class="rule"><div class="k">${icon("AI", "🛑")}</div><div>Reach the AI's <b>kill switch</b> to win.</div></div>
-        <div class="rule"><div class="k">${icon("H", "🌍")}</div><div>Keep the AI off <b>the Internet</b>, or it gets out.</div></div>
-        <div class="rule"><div class="k">${tokenHtml("AI", null)}</div><div>AI pieces are hidden. <b>Higher number wins</b> a fight.</div></div>
-        <div class="rule"><div class="k">${icon("AI", "🧠")}</div><div>The AI's 🧠 grows toward superintelligence. <b>Kill it</b> first.</div></div>
-        <div class="rule"><div class="k">${icon("H", "🏢")}</div><div>At 10, park your CTO on your 🏢: it <b>drains the 🧠</b> 1 a turn. CTO dead? ${cap$1(BACKUPS())} can.</div></div>
-      </div>
+      <div class="rules" id="introrules">${introRules(soloSide)}</div>
+      <p class="rnote">Pieces are hidden until they fight. Higher number wins.</p>
       <p class="eyebrow">Tap or drag a piece to where it goes.</p>
       <div class="seg" role="group" aria-label="Play as"><button class="h" id="asH" aria-pressed="${soloSide === "H"}">🕵️ HUMANS</button><button class="ai" id="asAI" aria-pressed="${soloSide === "AI"}">🧠 THE AI</button></div>
       <div class="seg lv" role="group" aria-label="Bot level">${BOT_LEVELS.map((l) => `<button id="lv-${l}" aria-pressed="${soloLevel === l}">${l.toUpperCase()}</button>`).join("")}</div>
@@ -3818,6 +3999,7 @@ if (params.has("sim")) {
 			document.getElementById("asH").setAttribute("aria-pressed", side === "H");
 			document.getElementById("asAI").setAttribute("aria-pressed", side === "AI");
 			document.getElementById("play").textContent = "PLAY AS " + (side === "H" ? "HUMANS" : "THE AI");
+			document.getElementById("introrules").innerHTML = introRules(side);
 		};
 		for (const l of BOT_LEVELS) document.getElementById("lv-" + l).addEventListener("click", () => {
 			sfx.tap();
@@ -4636,6 +4818,7 @@ if (params.has("sim")) {
 		lastFight = null;
 		engage = null;
 		brainSeen = null;
+		keyPick = null;
 		sel = null;
 		info$1 = null;
 		render();
@@ -4828,6 +5011,7 @@ if (params.has("sim")) {
 				sel = null;
 				dcPick = false;
 				info$1 = null;
+				if (m.phase === "setup") keyPick = null;
 			}
 			if (moved) {
 				sel = null;

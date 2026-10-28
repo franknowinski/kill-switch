@@ -22,8 +22,10 @@ button{font:inherit;color:inherit;cursor:pointer}
 h1{font:700 28px/1.08 var(--display);margin:0;letter-spacing:1px}
 #app{display:flex;flex-direction:column;width:100%}
 
-/* ---------- the play screen, top to bottom: pills, the 🧠 meter, the board, the console, the buttons. Rules below. ---------- */
-.left{display:flex;flex-direction:column;height:calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom));min-height:470px;padding-bottom:6px;width:var(--colw);max-width:100%;margin:0 auto}
+/* ---------- the play screen, top to bottom: pills, the 🧠 meter, the board, the console, the buttons. Pieces below.
+   The column runs through the home-bar strip (its padding keeps the buttons clear), so the pieces list starts at the
+   screen's bottom edge instead of peeking into that strip (v0.63). ---------- */
+.left{display:flex;flex-direction:column;height:calc(100svh - env(safe-area-inset-top));min-height:470px;padding-bottom:calc(6px + env(safe-area-inset-bottom));width:var(--colw);max-width:100%;margin:0 auto}
 .hud{display:flex;align-items:center;gap:6px;padding:4px 10px 0;height:34px;flex:none}
 .pill{height:28px;display:inline-flex;align-items:center;padding:0 10px;border:1px solid var(--line2);border-radius:7px;background:rgba(10,18,28,.85);font:600 12px var(--mono);letter-spacing:2px;color:var(--dim);white-space:nowrap}
 .pill.on{background:var(--hu);border-color:var(--hu);color:var(--ink);box-shadow:0 0 18px rgba(92,200,255,.45)}
@@ -31,6 +33,9 @@ h1{font:700 28px/1.08 var(--display);margin:0;letter-spacing:1px}
 .pill.wait{color:var(--ai);border-color:rgba(245,165,36,.45)}
 body.me-ai .pill.wait{color:var(--hu);border-color:rgba(92,200,255,.45)}
 .pill.r{margin-left:auto}
+/* v0.64 (DEV-338): 🔊 at the right end of the pills (after VS … BOT; live, where there is none, it still sits right) */
+.pill.snd{margin-left:auto;width:36px;padding:0;justify-content:center;font:14px/1 var(--ui);letter-spacing:0;color:var(--fg);cursor:pointer;flex:none}
+.pill.r ~ .snd{margin-left:0}
 .dots i{font-style:normal;animation:blink 1.2s infinite}.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
 @keyframes blink{0%,60%,100%{opacity:.2}30%{opacity:1}}
 
@@ -276,9 +281,10 @@ body.me-ai .msg.over.lose h1{color:var(--hu);text-shadow:0 0 20px rgba(92,200,25
 .msg.over .eyebrow{font:500 11px/1.4 var(--mono);letter-spacing:.3px}
 
 /* ---------- the buttons ---------- */
-.actions{display:grid;grid-template-columns:1fr 1fr 50px 50px;gap:8px;padding:8px 10px 0;flex:none}
-.actions.two{grid-template-columns:1fr 1fr}.actions.one{grid-template-columns:1fr}
-.actions.end{grid-template-columns:1.4fr 1fr 50px 50px} /* v0.37 (DEV-296): PLAY AGAIN · RULES ↓ · 🔊 · 🏠 on one line, each label on one line, down to 320 px */
+/* v0.64 (DEV-338): 🏠 first on every screen: 🏠 PIECES ↓ LOG in play, 🏠 START in setup, 🏠 PLAY AGAIN PIECES ↓ at the end */
+.actions{display:grid;grid-template-columns:52px 1fr 1fr;gap:8px;padding:8px 10px 0;flex:none}
+.actions.home{grid-template-columns:56px 1fr}
+.actions.end{grid-template-columns:52px 1.4fr 1fr}
 .actions button{white-space:nowrap;padding:0 6px;min-width:0}
 .ghost,.primary{min-height:46px;border:1px solid var(--line2);border-radius:11px;background:rgba(10,18,28,.85);font:700 14px var(--display);letter-spacing:2px;color:var(--fg);display:flex;align-items:center;justify-content:center;gap:8px;padding:0 10px}
 .ghost.sm{font-size:19px;letter-spacing:0;padding:0}
@@ -287,29 +293,90 @@ body.me-ai .left .primary{background:var(--ai);border-color:var(--ai);box-shadow
 .ghost[aria-pressed="true"]{border-color:var(--green);color:var(--green);background:#0d2418}
 .ghost:disabled,.primary:disabled{opacity:.45}
 .ghost.danger{color:var(--asi);border-color:rgba(255,77,94,.45)}
-@media (max-width:360px){.actions .ghost,.actions .primary{font-size:13px;letter-spacing:.5px}.actions .ghost.sm{font-size:17px}.actions{grid-template-columns:1fr 1fr 44px 44px;gap:6px}.actions.end{grid-template-columns:1.4fr 1fr 44px 44px}.actions.two{grid-template-columns:1fr 1fr}}
+@media (max-width:360px){.actions .ghost,.actions .primary{font-size:13px;letter-spacing:.5px}.actions .ghost.sm{font-size:17px}.actions{grid-template-columns:46px 1fr 1fr;gap:6px}.actions.end{grid-template-columns:46px 1.4fr 1fr}.actions.home{grid-template-columns:50px 1fr}}
 
-/* ---------- below the board: rules and pieces (RULES ↓ scrolls here; DEV-294) ---------- */
+/* ---------- setup: the lineup picker in the console's place (v0.64, DEV-338): the picked lineup's line, then a row of
+   cards that scrolls sideways, each with a mini map of its three rows (front row on top), and a legend ---------- */
+.setupbox{margin:8px 0 0;flex:1 0 auto;display:flex;flex-direction:column;gap:7px;min-height:0}
+.setupbox .msg{margin:0 10px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#0A1019;font:14px/1.35 var(--ui);color:#C9D4E0;height:auto}
+.luhd{display:flex;justify-content:space-between;align-items:baseline;padding:0 12px}
+.luhd b{font:700 13px var(--display);letter-spacing:3px;color:var(--fg)}
+.luhd span{font:12px var(--ui);color:#8C9BAD}
+.lus{display:flex;gap:8px;overflow-x:auto;padding:0 10px 2px;scroll-padding:0 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.lus::-webkit-scrollbar{display:none}
+.lu{flex:none;width:128px;display:flex;flex-direction:column;gap:6px;padding:8px;margin:0;text-align:left;border-radius:12px;border:1px solid var(--grid);background:#0A1019;color:var(--fg);font:inherit;cursor:pointer}
+.lu.on{border:1.5px solid var(--hu);background:var(--hu-tile);padding:7.5px}
+body.me-ai .lu.on{border-color:var(--ai);background:var(--ai-tile)}
+.lun{display:flex;justify-content:space-between;align-items:center;font:700 14px var(--display);letter-spacing:1px}
+.lun b{font-size:13px;color:var(--hu)}body.me-ai .lun b{color:var(--ai)}
+.lum{display:grid;grid-template-columns:repeat(8,12px);gap:2px}
+.lum i,.lul i{display:block;width:12px;height:12px;border-radius:2px;font:700 8px/12px var(--mono);font-style:normal;text-align:center;color:var(--ink)}
+.lum i.e{background:transparent}
+.lum i.b,.lul i.b{background:var(--hu)}.lum i.m,.lul i.m{background:#2E6F96}.lum i.d,.lul i.d{background:#1E3A55}
+.lum i.t,.lul i.t{background:#B07A1E}.lum i.f,.lul i.f{background:var(--green)}
+body.me-ai .lum i.b,body.me-ai .lul i.b{background:var(--ai)}body.me-ai .lum i.m,body.me-ai .lul i.m{background:#99620F}body.me-ai .lum i.d,body.me-ai .lul i.d{background:#4A3212}
+body.me-ai .lum i.t,body.me-ai .lul i.t{background:var(--agi)}
+.luh{font:11px/1.3 var(--ui);color:#B7C4D3;min-height:29px}
+.lul{display:flex;flex-wrap:wrap;gap:4px 10px;padding:0 12px;font:11px var(--ui);color:#9FB0C3}
+.lul span{display:inline-flex;align-items:center;gap:4px}
+.lul i{width:9px;height:9px}
+/* setup never shows the 🧠 meter: it is 2 and says nothing until the game starts, and the lineup picker needs the room
+   (v0.65; v0.64 dropped it on short screens only) */
+.left.setup .meter{display:none}
+/* a short screen (an iPhone SE, Safari's bars): the board keeps its height. Setup also drops the LINEUP heading and each
+   card's hint (the line above names the picked lineup and gives its hint) */
+@media (max-height:740px){
+  .left.setup .luhd,.luh{display:none}
+  .setupbox{gap:6px;margin-top:6px}.setupbox .msg{padding:7px 10px;font-size:13px}
+  .lu{gap:5px;padding:7px}.lu.on{padding:6.5px}
+}
+@media (max-height:600px){.lul{display:none}}
+
+/* ---------- below the board: the pieces left and the rules (PIECES ↓ scrolls here; DEV-294, DEV-334) ---------- */
 .right{width:min(100%,560px);margin:0 auto}
-.more{margin:22px 16px 0;font:600 11px var(--mono);letter-spacing:2.5px;color:var(--muted);text-transform:uppercase}
-.key{padding:4px 16px 28px;display:flex;flex-direction:column;gap:5px}
-.kh{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-bottom:6px;border-bottom:1px solid var(--line);font:700 15px var(--display);letter-spacing:1.5px;text-transform:uppercase}
-.kh.b{color:var(--hu)}.kh.a{color:var(--ai)}
-.kh .kc{font:500 12px var(--mono);letter-spacing:0;color:var(--muted);text-transform:none}
-.kr{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:44px;cursor:pointer}
-.kr .k{position:relative;width:40px;height:42px;font-size:42px}
+.key{padding:18px 16px 32px;display:flex;flex-direction:column;gap:18px}
+.ksec{display:flex;flex-direction:column;gap:12px}
+.kh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--grid)}
+.kh h2{margin:0;font:700 18px var(--display);letter-spacing:3px;text-transform:uppercase;white-space:nowrap}
+.kh.b h2{color:var(--hu)}.kh.a h2{color:var(--ai)}
+.kh .kc{font:500 13px var(--mono);color:#9FB0C3;white-space:nowrap}
+.kh .kc b{font-size:16px;font-weight:700;color:var(--fg)}
+/* a tile per kind: the piece in its owner's shape, the name, ×left /total; none left: dimmed and struck through in red */
+.kg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.kr{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;padding:8px 2px;margin:0;border-radius:10px;background:#0A1019;border:1px solid var(--grid);color:var(--fg);font:inherit;cursor:pointer}
+.kr.on{border-color:#C9D6E3;background:#111B28}
+.kr .k{position:relative;width:52px;height:56px;font-size:52px;flex:none}
 .kr .k .pz{inset:0}
-.kn{font:600 14px var(--ui);color:var(--fg)}
-.kn small{display:block;font:400 12.5px var(--ui);color:var(--muted);margin-top:1px}
-.kc{font:600 13px var(--mono);color:var(--dim);text-align:right;white-space:nowrap}
-.kc i{font-style:normal;color:var(--faint);font-weight:500}
-.kr.gone{opacity:.38}.kr.gone .k{filter:grayscale(1)}
-.kb{font:600 10px var(--mono);color:var(--volt);margin-left:4px;white-space:nowrap} /* v0.29: AI fighters 5–6 take +1 at the 🏢, once */
-.seen{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font:13px var(--ui);color:var(--muted);padding:4px 0}
+.kr.gone{opacity:.4}
+.ks{position:absolute;left:-2px;right:-2px;top:calc(50% - 1px);height:2.5px;border-radius:2px;background:var(--asi);transform:rotate(-40deg);z-index:4;pointer-events:none}
+.kb{position:absolute;right:-9px;top:-7px;z-index:5;padding:1px 3px;border-radius:5px;background:var(--void);border:1px solid rgba(255,216,74,.5);font:700 9px/1.2 var(--mono);color:var(--volt);font-style:normal;white-space:nowrap;pointer-events:none} /* v0.29: AI fighters 5–6 take +1 at the 🏢, once */
+.kn{max-width:100%;font:11px/1.2 var(--ui);color:var(--dim);text-align:center;min-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr .kc{font:700 15px var(--mono);color:var(--fg);white-space:nowrap}
+.kr .kc i{font:500 11px var(--mono);font-style:normal;color:#8C9BAD}
+.kr.gone .kc{color:#8C9BAD}
+.ktip{margin:-4px 0 0;font:12px var(--ui);color:var(--muted)}
+.kd{margin-top:-2px;padding:10px 12px;border:1px solid var(--line2);border-radius:10px;background:#0A1019;font:14px/1.45 var(--ui);color:var(--dim)}
+.seen{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font:13px var(--ui);color:var(--muted)}
+.seen.trnd{gap:6px 10px;color:var(--dim)}
+.seen.trnd b{font:700 13px var(--display);letter-spacing:2px;color:var(--fg)}
+.seen.trnd span{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.seen .none{color:var(--muted)}
 .pc{position:relative;display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 6px;font:700 12px var(--mono);border:1.5px solid var(--hu);border-radius:6px;color:var(--hu);background:var(--hu-tile)}
 .pc.ai{border-color:var(--ai);color:var(--ai);background:var(--ai-tile);border-radius:2px}
 .pc .trn{position:static;width:13px;height:13px;font-size:9px;line-height:13px}
-.kh.n{display:block;font:14px/1.55 var(--ui);color:var(--dim);margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:12px;background:rgba(8,13,20,.7);text-transform:none;letter-spacing:0}
+/* the rules, worded for your side (v0.64, DEV-338): YOU in your side's colour, WATCH OUT in red, BASICS */
+.rcs{display:flex;flex-direction:column;gap:22px;margin-top:4px}
+.rg{display:flex;flex-direction:column;gap:8px;--rgc:var(--fg)}
+.rg.h{--rgc:var(--hu)}.rg.a{--rgc:var(--ai)}.rg.w{--rgc:var(--asi)}
+.rgh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--grid)}
+.rgh h2{margin:0;font:700 18px var(--display);letter-spacing:3px;text-transform:uppercase;color:var(--rgc);white-space:nowrap}
+.rgh span{font:12px var(--ui);color:#8C9BAD;text-align:right}
+.rc{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;align-items:start;padding:10px 12px;border-radius:12px;background:#0A1019;border:1px solid var(--grid)}
+.ri{width:36px;height:36px;border-radius:9px;background:#111B28;display:flex;align-items:center;justify-content:center;font-size:19px}
+.rc h3{margin:0 0 2px;font:700 13px var(--display);letter-spacing:2px;text-transform:uppercase;color:var(--rgc)}
+.rc p{margin:0;font:15px/1.35 var(--ui);color:#C9D4E0}
+@media (max-width:380px){.kn{font-size:10.5px;letter-spacing:-.2px}}
+@media (max-width:360px){.kg{gap:6px}.kr .k{width:46px;height:50px;font-size:46px}.kh h2{font-size:16px;letter-spacing:2px}}
 
 /* ---------- full screens: the start screen, Play a friend, Stats, the account screens, Friends ---------- */
 .overlay{position:fixed;inset:0;overflow:auto;z-index:5;padding:16px}
@@ -324,9 +391,11 @@ body.me-ai .left .primary{background:var(--ai);border-color:var(--ai);box-shadow
 .logo{line-height:0;margin:4px 0 0;filter:drop-shadow(0 0 22px rgba(245,165,36,.18))}.logo > svg{width:100%;height:auto;display:block}
 .logo .eye{animation:sweep 5s ease-in-out infinite}
 @keyframes sweep{0%,18%,100%{transform:translateX(0)}42%,60%{transform:translateX(-19px)}}
-.rules{display:flex;flex-direction:column;gap:7px}
-.rule{display:grid;grid-template-columns:40px 1fr;gap:12px;align-items:center;font:15px/1.35 var(--ui);color:var(--dim)}
-.rule b{color:var(--fg)}
+/* v0.64 (DEV-338): three lines for the side picked (win, lose, the 🧠), then one line for both */
+.rules{display:flex;flex-direction:column;gap:9px;padding-top:4px}
+.rule{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;align-items:center;font:16px/1.3 var(--ui);color:#C9D4E0}
+.rule b{color:var(--fg)}.rule b.win{color:var(--green)}.rule b.lose{color:var(--asi)}.rule b.agi{color:var(--agi)}
+.card p.rnote{font:14px/1.4 var(--ui);color:#9FB0C3;border-top:1px solid var(--grid);padding-top:9px}
 .k{position:relative;width:40px;height:40px;font-size:40px}
 .k .pz{inset:0}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;padding:4px;border:1px solid var(--line);border-radius:13px;background:rgba(8,13,20,.8)}
@@ -458,7 +527,7 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
 @media (max-width:859px){
   /* iPhone Safari 26 floats its tab bar over the bottom of the page, and the viewport units don't leave room for it:
      lift the buttons above it (v0.28: START was under the bar at setup) */
-  .ios-bar .left{padding-bottom:calc(6px + max(0px, 76px - env(safe-area-inset-bottom)))}
+  .ios-bar .left{padding-bottom:calc(6px + max(env(safe-area-inset-bottom), 76px))}
 }
 @media (min-width:860px){
   /* desktop: the same column, as wide as fits the window's height */
