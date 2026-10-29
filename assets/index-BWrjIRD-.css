@@ -386,86 +386,57 @@ body.me-ai .lum i.t,body.me-ai .lul i.t{background:var(--agi)}
 .eyebrow{font:600 11px/1.45 var(--mono);letter-spacing:2.5px;color:var(--muted);text-transform:uppercase}
 .card p.eyebrow{font:600 11px/1.45 var(--mono);color:var(--muted)}
 .card > .primary{min-height:54px;font-size:17px}
-/* v0.68 (DEV-349), v0.69 (DEV-351): the start screen's hero, with the look of Grok's "Command Center" patch (the canvas
-   board "Grok's patch: as Humans, iPhone (390×844)"): the v2 Watcher over a cyan grid in perspective with a scan line,
-   an amber glow and faint floating pieces, KILL SWITCH, the rules strip for your side, then the buttons. At 390 × 844
-   with the iPhone's insets it fills the screen down to the STATS row; fitHero() in main.js sets --hs (the hero's scale)
-   and --room (the space kept under STATS when the hero grows on a tall phone). */
-.overlay.home{display:flex;flex-direction:column;overflow-x:hidden;background:radial-gradient(120% 60% at 50% 28%,#0D1A2A 0%,#060A10 70%)}
+/* v0.68 (DEV-349): the start screen's hero, as the canvas boards "Home: hero" (390 × 844): the Watcher over a faded
+   grid floor, KILL SWITCH, the rules for your side, then the buttons. It fits one iPhone screen with no My games. */
+.overlay.home{overflow-x:hidden;background:radial-gradient(120% 60% at 50% 18%,#0E1826 0%,#060A10 70%)}
 .overlay.home,html .overlay.home{padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))} /* over the apps' app.css */
-.home .card{position:relative;z-index:0;flex:none;gap:0;margin:auto;padding-bottom:var(--room)} /* centred when there is room to spare */
-.overlay.home{--hs:1;--room:0px}
-/* SIGN IN / the profile and FRIENDS sit over the hero's top right, so they take no row */
-.home #acctslot{position:absolute;top:0;left:0;right:0;z-index:3;pointer-events:none}.home #acctslot button{pointer-events:auto} /* bounded: a long handle ellipsizes, FRIENDS stays whole */
-.home .acctbar{min-height:36px;align-items:center;margin:0}
-/* the hero: a 390 × 338 stage scaled by --hs as one, the background full-bleed and clipped to the screen */
-.hero{position:relative;height:calc(338px * var(--hs))}
-.withacct .hero{margin-top:max(0px,calc(42px - 50px * var(--hs)))} /* the Watcher's top (50 px × --hs) clears the 36 px buttons */
-.herobg{--w:min(100vw,790px);position:absolute;z-index:-1;top:0;left:50%;width:var(--w);height:100%;margin-left:calc(var(--w) / -2);overflow:hidden;pointer-events:none}
-.herobg .stage{position:absolute;top:0;left:50%;width:390px;height:338px;margin-left:-195px;transform:scale(var(--hs));transform-origin:50% 0}
+.overlay.home{display:flex;flex-direction:column}
+.home .card{position:relative;z-index:0;flex:none;gap:0;margin-top:auto;margin-bottom:auto;padding-bottom:0} /* centred on a tall phone, so the buttons sit lower */
+.overlay.home{--hs:1} /* the hero's scale: fitHero() in main.js shrinks it on a short screen */
+.home.noacct #acctslot:empty{display:none}
+.home #acctslot,.home #acctslot:empty{display:block;min-height:36px}
+.home .acctbar{min-height:36px;align-items:center}
+.hero{position:relative;display:flex;flex-direction:column;align-items:center;margin-top:calc(18px * var(--hs))}
+/* the background: decorative only, behind everything, never takes a tap. Mockup coordinates: x -200…590 (the screen's
+   centre at 195), y 0 at 116 px above the Watcher's top. The pieces are faint (15–22 %) and a little blurred. */
+.herobg{--w:min(100vw,790px);position:absolute;z-index:-1;top:-116px;left:50%;width:var(--w);height:460px;margin-left:calc(var(--w) / -2);overflow:hidden;pointer-events:none}
+.herobg > div{position:absolute;top:0;left:50%;width:790px;height:460px;margin-left:-395px;transform:scale(var(--hs));transform-origin:395px 116px}
+.herobg svg{position:absolute;inset:0;display:block}
+.herobg i{position:absolute;display:block;background:var(--ai);filter:blur(.6px);font:700 13px var(--display);font-style:normal}
+.herobg i.h{background:var(--hu);border-radius:8px}
+.herobg i b{position:absolute;inset:2px;display:flex;align-items:center;justify-content:center;background:#0A1019;color:var(--ai)}
+.herobg i.h b{border-radius:6px;color:var(--hu)}
+.herobg i.a,.herobg i.a b{clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
 @media (min-width:600px){.herobg{-webkit-mask-image:linear-gradient(90deg,transparent,#000 25%,#000 75%,transparent);mask-image:linear-gradient(90deg,transparent,#000 25%,#000 75%,transparent)}}
-.herobg .plane{position:absolute;left:-200px;right:-200px;top:150px;height:520px;transform:perspective(420px) rotateX(62deg);transform-origin:50% 0;
-  background:linear-gradient(rgba(92,200,255,.28) 1px,transparent 1px) 0 0/46px 46px,linear-gradient(90deg,rgba(92,200,255,.28) 1px,transparent 1px) 0 0/46px 46px;
-  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 30%,#000 60%,transparent);mask-image:linear-gradient(180deg,transparent 0,#000 30%,#000 60%,transparent)}
-.herobg .scan{position:absolute;left:-200px;right:-200px;top:214px;height:2px;background:linear-gradient(90deg,transparent,rgba(92,200,255,.9) 30%,rgba(92,200,255,.9) 70%,transparent);box-shadow:0 0 16px var(--hu)}
-.herobg .glow{position:absolute;left:50%;top:30px;width:240px;height:240px;margin-left:-120px;border-radius:50%;background:radial-gradient(circle,rgba(245,165,36,.28),transparent 65%)}
-.herobg .hm{position:absolute;left:50%;top:50px;margin-left:-62px;line-height:0;filter:drop-shadow(0 0 28px rgba(245,165,36,.55))}
-.herobg .fl{position:absolute}
-/* the floating pieces: the humans' rounded cyan squares, the AI's amber octagons (shape, not just colour) */
-.herobg .hp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
-.herobg .hp.hum{border-radius:9px;background:linear-gradient(180deg,#123552,#0B2438);box-shadow:inset 0 0 0 1.5px var(--hu),0 0 10px rgba(92,200,255,.25)}
-.herobg .hp.oct{clip-path:polygon(29% 0,71% 0,100% 29%,100% 71%,71% 100%,29% 100%,0 71%,0 29%);background:var(--ai)}
-.herobg .hp.oct>.in{position:absolute;inset:1.6px;clip-path:polygon(29% 0,71% 0,100% 29%,100% 71%,71% 100%,29% 100%,0 71%,0 29%);background:linear-gradient(180deg,#3A250B,#26180A);display:flex;align-items:center;justify-content:center}
-.herobg .hp .em{font-size:16px;line-height:1;margin-top:-11px}.herobg .hp .em.solo{font-size:19px;margin-top:0}
-.herobg .hp .rk{position:absolute;left:0;right:0;bottom:3px;text-align:center;font:800 11px var(--mono);line-height:1}
-.herobg .hp.hum .rk{color:var(--hu)}.herobg .hp.oct .rk{color:var(--ai)}
-.herobg .hp .q{font:700 20px var(--display);color:var(--ai);text-shadow:0 0 8px rgba(245,165,36,.6)}
-/* the Watcher (the v2 icon): its red eye sweeps the visor, clipped to it */
-.watcher{display:block}
-.watcher .eye{animation:hmsweep 5s ease-in-out infinite}
-/* KILL SWITCH: outlined letters (no font load), 300 px wide at full size and never under 24 px tall */
-.logo{position:absolute;left:0;right:0;top:calc(232px * var(--hs));margin:0;display:flex;justify-content:center;line-height:0;filter:drop-shadow(0 0 24px rgba(92,200,255,.25))}
-.logo > svg{display:block;height:max(24px,calc(35px * var(--hs)));width:auto;max-width:100%}
-/* the rules: a strip of three boxes for the side picked, › between them, in an amber-edged card (one group for the
-   screen reader, read as its label) */
-.home .rules{display:grid;grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr) 10px minmax(0,1fr);align-items:start;gap:0;padding:max(8px,calc(11px * var(--hs))) 6px;border:1px solid rgba(245,165,36,.4);border-radius:16px;background:linear-gradient(180deg,rgba(38,24,10,.6),rgba(12,14,18,.65))}
-.rb{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;min-width:0}
-.rb .k{width:38px;height:38px;font-size:38px}
-.rb > b{font:700 12px/1.2 var(--mono);letter-spacing:1.2px;white-space:nowrap}
-.card .rb p{margin:0;font:12.5px/1.3 var(--ui);color:#D9CBB4}
+/* the Watcher (its red eye sweeps the visor, clipped to the visor, so its glow and trail never smear onto the helmet) */
+.watcher{display:block;width:calc(104px * var(--hs));height:calc(104px * var(--hs));filter:drop-shadow(0 0 18px rgba(245,165,36,.6)) drop-shadow(0 0 40px rgba(245,165,36,.25))}
+.watcher .eye{animation:sweep 5s ease-in-out infinite}
+@keyframes sweep{0%,18%,100%{transform:translateX(0)}42%,60%{transform:translateX(-19px)}}
+/* KILL SWITCH: outlined letters (no font load), the cap height of 46 px Chakra Petch */
+.logo{display:flex;align-items:center;justify-content:center;height:max(30px,calc(46px * var(--hs)));margin-top:calc(30px * var(--hs));line-height:0;filter:drop-shadow(0 0 24px rgba(92,200,255,.25))}
+.logo > svg{display:block;height:max(21px,calc(32px * var(--hs)));width:auto;max-width:100%}
+/* the rules: a strip of three boxes for the side picked, › between them, in an amber-edged card */
+.home .rules{display:grid;grid-template-columns:minmax(0,1fr) 12px minmax(0,1fr) 12px minmax(0,1fr);align-items:start;gap:0;margin-top:calc(34px * var(--hs));padding:12px 8px;border:1px solid #5A4416;border-radius:14px;background:linear-gradient(#141008,#0A0D12)}
+.rb{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;min-width:0}
+.rb .k{width:34px;height:34px;font-size:34px}
+.rb > b{font:700 13px/1.15 var(--display);letter-spacing:1.5px;white-space:nowrap}
+.card .rb p{margin:0;font:12.5px/1.3 var(--ui);color:#C9D4E0}
 .rb b.r-win{color:var(--green)}.rb b.r-grow{color:var(--agi)}.rb b.r-drain{color:var(--hu)}.rb b.r-warn{color:var(--asi)}
-.chev{margin-top:11px;font:700 14px var(--ui);font-style:normal;color:var(--ai);text-align:center}
-@media (max-width:359px){.rb > b{font-size:11px;letter-spacing:.4px}.card .rb p{font-size:11.5px}}
-/* side, level, PLAY AS, then PLAY A FRIEND · JOIN CODE · STATS; JOIN CODE opens the code entry under that row. A picked
-   segment has an outline, a fill and a ✓, not colour alone (the AI's side in amber). */
-.home .seg{gap:3px;padding:3px;border-color:#1F3550;border-radius:12px;background:#08101A}
-.home .seg button{min-height:42px;font:700 12.5px var(--mono);letter-spacing:1.5px;color:#7F93AB;gap:6px}
-.home .seg button[aria-pressed="true"]{background:#18212D;border-color:#9FB2C8;color:var(--fg)}
-.home .seg button[aria-pressed="true"].h{background:#0B2438;border-color:var(--hu);color:var(--hu)}
-.home .seg button[aria-pressed="true"].ai{background:#22170A;border-color:var(--ai);color:var(--ai)}
-.home .seg button[aria-pressed="true"]::before{content:"✓";content:"✓" / "";font:900 11px var(--ui);margin-right:-1px}
-.home .sides{margin-top:max(8px,calc(12px * var(--hs)))}
-.home .seg.lv{margin-top:max(8px,calc(12px * var(--hs)))}
-.home #play{min-height:max(48px,calc(58px * var(--hs)));margin-top:max(8px,calc(12px * var(--hs)));border:0;border-radius:14px;font-size:18px;letter-spacing:1.2px;background:linear-gradient(#7DD6FF,var(--hu));box-shadow:0 0 0 1px rgba(255,255,255,.2) inset,0 8px 28px rgba(92,200,255,.35)}
-.home #play.ai{background:linear-gradient(#FFC25C,var(--ai));box-shadow:0 0 0 1px rgba(255,255,255,.2) inset,0 8px 28px rgba(245,165,36,.35)}
-.home .introrow{margin-top:max(8px,calc(12px * var(--hs)));grid-template-columns:1.4fr 1fr .9fr}
-.home .introrow .ghost{min-height:44px;border-radius:14px;border-color:#1F3550;background:#0A121C;color:var(--fg);font-size:13px;letter-spacing:1.2px;padding:0 6px;white-space:nowrap}
+.chev{margin-top:10px;font:700 15px var(--ui);font-style:normal;color:var(--ai);text-align:center}
+@media (max-width:359px){.rb > b{font-size:11.5px;letter-spacing:.5px}.card .rb p{font-size:11.5px}}
+/* side, level, PLAY AS, then PLAY A FRIEND · JOIN CODE · STATS; JOIN CODE opens the code entry under that row */
+.home .sides{margin-top:max(8px,calc(14px * var(--hs)))}
+.home .sides button{min-height:46px;font-size:15px;letter-spacing:3px}
+.home .seg.lv{margin-top:8px}
+.home .seg.lv button{min-height:42px;font-size:14px;letter-spacing:3px}
+.home #play{margin-top:max(8px,calc(12px * var(--hs)));border:0;background:linear-gradient(#8ED8FF,var(--hu));box-shadow:0 0 22px rgba(92,200,255,.35)}
+.home #play.ai{background:linear-gradient(#FFC25C,var(--ai));box-shadow:0 0 22px rgba(245,165,36,.35)}
+.home .introrow{margin-top:max(8px,calc(10px * var(--hs)));grid-template-columns:1.35fr 1fr .8fr}
+.home .introrow .ghost{min-height:48px;font-size:13px;letter-spacing:1.5px;padding:0 6px;white-space:nowrap}
 .home #joinopen[aria-expanded="true"]{border-color:var(--hu);color:var(--hu)}
 .home .join{margin-top:10px}
 .home .games{margin-top:14px}
-@media (max-width:370px){.home .seg button{font-size:12px;letter-spacing:.6px}.home .introrow .ghost{font-size:12px;letter-spacing:.6px}}
-@media (max-width:330px){.home .introrow .ghost{font-size:11.5px;letter-spacing:.3px;padding:0 4px}}
-/* the hero's motion: the grid flows toward you, the scan line drifts, the glow breathes, the eye sweeps, the pieces bob.
-   All of it stops with Reduce Motion (at the end of this file). */
-.herobg .plane{animation:hmgrid 6s linear infinite}
-.herobg .scan{animation:hmscan 7s ease-in-out infinite}
-.herobg .glow{animation:hmglow 4.5s ease-in-out infinite}
-.herobg .fl>.hp{animation:hmfloat 6s ease-in-out infinite}.herobg .fl:nth-of-type(2n)>.hp{animation-delay:-2s}.herobg .fl:nth-of-type(3n)>.hp{animation-delay:-4s}
-@keyframes hmgrid{to{background-position:0 46px,0 46px}}
-@keyframes hmscan{0%,100%{transform:translateY(-12px);opacity:.55}50%{transform:translateY(12px);opacity:1}}
-@keyframes hmglow{0%,100%{opacity:.8;transform:scale(.96)}50%{opacity:1;transform:scale(1.04)}}
-@keyframes hmsweep{0%,18%,100%{transform:translateX(0)}42%,60%{transform:translateX(-280px)}}
-@keyframes hmfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@media (max-width:359px){.home .introrow .ghost{font-size:11.5px;letter-spacing:.5px;padding:0 4px}.home .sides button,.home .seg.lv button{letter-spacing:1.5px}}
 /* a line with an icon: the friend lobby's "You play …" rows (and, as .home .rule above, the start screen's rules) */
 .rules{display:flex;flex-direction:column;gap:9px;padding-top:4px}
 .rule{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;align-items:center;font:16px/1.3 var(--ui);color:#C9D4E0}
@@ -613,4 +584,4 @@ pre{white-space:pre-wrap;padding:16px;font-size:13px}
   .hud,.actions{padding-left:0;padding-right:0}
   .meter,.console{margin-left:0;margin-right:0}
 }
-@media (prefers-reduced-motion:reduce){.watcher .eye,.herobg .plane,.herobg .scan,.herobg .glow,.herobg .fl>.hp,.blk.reveal,.sq.can::after,.sq.copy::after,.sq.dc.live .dci,.sq.dc.drain,.sq.dc.drain .dci,.sq.turned .blk,.meter.jolt,.console.end.won,.console.end.lost,.toast{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.watcher .eye,.blk.reveal,.sq.can::after,.sq.copy::after,.sq.dc.live .dci,.sq.dc.drain,.sq.dc.drain .dci,.sq.turned .blk,.meter.jolt,.console.end.won,.console.end.lost,.toast{animation:none!important}}
