@@ -1417,6 +1417,142 @@ var ABOUT = {
 	I: (p, s) => s && s.cut ? p.str > 0 ? `Drained to ${p.str}: fights as a ${p.str} and never grows again.` : "Drained to 0: fragile, any piece that finds it kills it." : `Grows +1 every ${BAL.RSI_EVERY} rounds; at ${BAL.ASI} it beats everything. The CTO on 🏢 (once it's dead, a ${BAL.BACKUP}+) drains it.`,
 	K: () => `Copies the number of whatever it fights, so both fall. Not a 🧠 at ${BAL.ASI}.`
 };
+// web/src/ui/home.js
+var CTO = CHAR.H[9];
+var STRIP = {
+	H: [
+		[
+			"AI",
+			"🛑",
+			"WIN",
+			"win",
+			"Reach the AI’s kill switch"
+		],
+		[
+			"AI",
+			"🧠",
+			"IT GROWS",
+			"grow",
+			`+1 every ${BAL.RSI_EVERY} rounds. At ${BAL.ASI} it beats all`
+		],
+		[
+			"H",
+			"🏢",
+			"DRAIN IT",
+			"drain",
+			`Put your ${CTO} CTO on the 🏢, take ${BAL.DRAIN} from the 🧠`
+		]
+	],
+	AI: [
+		[
+			"H",
+			"🌍",
+			"WIN",
+			"win",
+			"Reach the humans’ Internet"
+		],
+		[
+			"AI",
+			"🧠",
+			"YOU GROW",
+			"grow",
+			`+1 every ${BAL.RSI_EVERY} rounds. At ${BAL.ASI} you beat all`
+		],
+		[
+			"H",
+			"🏢",
+			"WATCH OUT",
+			"warn",
+			`Their ${CTO} CTO on the 🏢 drains your 🧠`
+		]
+	]
+};
+var sideOf = (side) => side === "AI" ? "AI" : "H";
+var stripItems = (side) => STRIP[sideOf(side)].map(([owner, icon, title, tone, text]) => ({
+	owner,
+	icon,
+	title,
+	tone,
+	text
+}));
+var SAY = {
+	H: [
+		"Win: reach the AI’s kill switch.",
+		`It grows: the AI’s brain gets +1 every ${BAL.RSI_EVERY} rounds, and at ${BAL.ASI} it beats all.`,
+		`Drain it: put your CTO on the datacenter to take ${BAL.DRAIN} from the brain.`
+	],
+	AI: [
+		"Win: reach the humans’ Internet.",
+		`You grow: your brain gets +1 every ${BAL.RSI_EVERY} rounds, and at ${BAL.ASI} you beat all.`,
+		"Watch out: their CTO on the datacenter drains your brain."
+	]
+};
+var stripLabel = (side) => "How to play. " + SAY[sideOf(side)].join(" ");
+var attr = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+var stripHtml = (side, icon) => `<div class="rules" id="introrules" role="group" aria-label="${attr(stripLabel(side))}">` + stripItems(side).map((s) => `<div class="rb" aria-hidden="true"><div class="k">${icon(s.owner, s.icon)}</div><b class="r-${s.tone}">${s.title}</b><p>${s.text}</p></div>`).join(`<i class="chev" aria-hidden="true">›</i>`) + "</div>";
+var FLOATERS = [
+	[
+		30,
+		28,
+		34,
+		.22,
+		"AI",
+		"",
+		""
+	],
+	[
+		318,
+		58,
+		30,
+		.18,
+		"H",
+		"🛸",
+		1
+	],
+	[
+		46,
+		238,
+		30,
+		.16,
+		"H",
+		"🔧",
+		3
+	],
+	[
+		322,
+		250,
+		36,
+		.2,
+		"AI",
+		"",
+		""
+	],
+	[
+		150,
+		-2,
+		26,
+		.12,
+		"AI",
+		"",
+		""
+	],
+	[
+		250,
+		178,
+		26,
+		.12,
+		"AI",
+		CHAR.AI[5],
+		5
+	]
+];
+var tile$2 = (owner, face, rank) => {
+	const inner = face ? `<span class="em${rank !== "" ? "" : " solo"}">${face}</span>${rank !== "" ? `<span class="rk">${rank}</span>` : ""}` : `<span class="q">?</span>`;
+	return owner === "H" ? `<span class="hp hum">${inner}</span>` : `<span class="hp oct"><span class="in">${inner}</span></span>`;
+};
+var MARK = `<svg class="watcher" xmlns="http://www.w3.org/2000/svg" viewBox="138 138 748 748" width="124" height="124" aria-hidden="true" focusable="false"><defs><linearGradient id="hm-hull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFC04F"/><stop offset=".55" stop-color="#F5A524"/><stop offset="1" stop-color="#DC860A"/></linearGradient><radialGradient id="hm-eg"><stop offset="0" stop-color="#FF4D4D" stop-opacity=".7"/><stop offset="1" stop-color="#FF4D4D" stop-opacity="0"/></radialGradient><linearGradient id="hm-tr" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF4D4D" stop-opacity="0"/><stop offset="1" stop-color="#FF4D4D" stop-opacity=".75"/></linearGradient><clipPath id="hm-vs"><path d="M262 392 H762 L828 458 V566 L762 632 H262 L196 566 V458 Z"/></clipPath></defs><path d="M363 152 H661 L872 363 V661 L661 872 H363 L152 661 V363 Z" fill="url(#hm-hull)" stroke="url(#hm-hull)" stroke-width="28" stroke-linejoin="round"/><path d="M262 392 H762 L828 458 V566 L762 632 H262 L196 566 V458 Z" fill="#06121C" stroke="#06121C" stroke-width="12" stroke-linejoin="round"/><g clip-path="url(#hm-vs)"><g class="eye"><rect x="268" y="487" width="378" height="50" rx="25" fill="url(#hm-tr)"/><circle cx="646" cy="512" r="190" fill="url(#hm-eg)"/><circle cx="646" cy="512" r="86" fill="#FF4D4D"/><circle cx="618" cy="484" r="26" fill="#FFE4E4"/></g></g></svg>`;
+var WORDMARK = `<svg viewBox="0 -2 633 74" aria-hidden="true" focusable="false"><g fill="#E6EDF3"><path d="M6.50 70L6.50 0L20.10 0L20.10 29.30L30.70 29.30L47.60 0L62.90 0L42.40 34.90L64.60 70L49 70L30.60 40.90L20.10 40.90L20.10 70L6.50 70Z"/><path d="M75.10 70L75.10 0L88.70 0L88.70 70L75.10 70Z"/><path d="M105.20 70L105.20 0L118.80 0L118.80 58.50L153.80 58.50L153.80 70L105.20 70Z"/><path d="M164.30 70L164.30 0L177.90 0L177.90 58.50L212.90 58.50L212.90 70L164.30 70Z"/><path d="M262.90 70L252.10 59.20L252.10 49.20L265.50 49.20L265.50 55.10L268.80 58.40L289.50 58.40L292.90 55L292.90 43.40L289.60 40.10L263.10 40.10L252.30 29.30L252.30 10.80L263.10 0L294.70 0L305.50 10.80L305.50 20.90L292.10 20.90L292.10 14.90L288.80 11.60L269 11.60L265.70 14.90L265.70 25.20L269 28.50L295.50 28.50L306.30 39.30L306.30 59L295.30 70L262.90 70Z"/><path d="M329.80 70L315.30 0L329 0L337.50 49.40L337.90 49.40L351.80 0L362 0L375.60 49.40L376 49.40L384.50 0L398.20 0L383.70 70L371 70L357.10 20.80L356.70 20.80L342.50 70L329.80 70Z"/><path d="M410.70 70L410.70 0L424.30 0L424.30 70L410.70 70Z"/><path d="M456.70 70L456.70 11.50L435.80 11.50L435.80 0L491.20 0L491.20 11.50L470.30 11.50L470.30 70L456.70 70Z"/><path d="M511.20 70L499.70 58.50L499.70 11.50L511.20 0L545.40 0L556.70 11.30L556.70 22L543.10 22L543.10 16.30L538.40 11.60L518.40 11.60L513.30 16.70L513.30 53.30L518.40 58.40L538.40 58.40L543.10 53.70L543.10 48L556.70 48L556.70 58.70L545.40 70L511.20 70Z"/><path d="M569.20 70L569.20 0L582.80 0L582.80 29.30L612.40 29.30L612.40 0L626 0L626 70L612.40 70L612.40 40.90L582.80 40.90L582.80 70L569.20 70Z"/></g></svg>`;
+var heroHtml = () => `<div class="hero"><div class="herobg" aria-hidden="true"><div class="stage"><div class="plane"></div><div class="glow"></div><div class="scan"></div>` + FLOATERS.map(([x, y, s, o, owner, face, rank]) => `<div class="fl" style="left:${x}px;top:${y}px;width:${s}px;height:${s}px;opacity:${o}">${tile$2(owner, face, rank)}</div>`).join("") + `<div class="hm">${MARK}</div></div></div><h1 class="logo" aria-label="Kill Switch">${WORDMARK}</h1></div>`;
 // web/src/ui/sound.js
 var SFX = {
 	ctx: null,
@@ -3953,67 +4089,18 @@ if (params.has("sim")) {
 	} catch (e) {}
 	if (params.has("level")) soloLevel = toLevel(params.get("level"));
 	const icon = (side, emoji) => `<div class="pz">${blockHtml(`<span class="ic">${emoji}</span>`, side)}</div>`;
-	function introRules(side) {
-		return (side === "H" ? [
-			[
-				"AI",
-				"🛑",
-				"Reach the AI’s kill switch.",
-				"You win.",
-				"win"
-			],
-			[
-				"H",
-				"🌍",
-				"Guard your Internet.",
-				"If the AI gets there, you lose.",
-				"lose"
-			],
-			[
-				"AI",
-				"🧠",
-				`The AI’s brain grows every ${BAL.RSI_EVERY} rounds.`,
-				"Kill it, or drain it from your 🏢.",
-				""
-			]
-		] : [
-			[
-				"H",
-				"🌍",
-				"Reach the humans’ Internet.",
-				"You win.",
-				"win"
-			],
-			[
-				"AI",
-				"🛑",
-				"Guard your kill switch.",
-				"If they get there, you lose.",
-				"lose"
-			],
-			[
-				"AI",
-				"🧠",
-				`Your brain grows every ${BAL.RSI_EVERY} rounds.`,
-				`At ${BAL.ASI} it beats everything.`,
-				"agi"
-			]
-		]).map(([s, e, a, b, c]) => `<div class="rule"><div class="k">${icon(s, e)}</div><div>${a} <b${c ? ` class="${c}"` : ""}>${b}</b></div></div>`).join("");
-	}
+	const introRules = (side) => stripHtml(side, icon);
 	function renderIntro() {
-		app.innerHTML = `<div class="overlay"><div class="card">
+		app.innerHTML = `<div class="overlay home"><div class="card">
       <div id="acctslot"></div>
-      <h1 class="logo" aria-label="Kill Switch"><svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 -15.75 763.4 101.5"><svg x="0" y="-15.75" width="101.5" height="101.5" viewBox="6 6 52 52" overflow="visible"><defs><linearGradient id="w4h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFBA45"/><stop offset=".55" stop-color="#F5A524"/><stop offset="1" stop-color="#E08A0B"/></linearGradient><radialGradient id="w4g"><stop offset="0" stop-color="#FF5C5C" stop-opacity=".55"/><stop offset="1" stop-color="#FF5C5C" stop-opacity="0"/></radialGradient><linearGradient id="w4t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF5C5C" stop-opacity="0"/><stop offset="1" stop-color="#FF5C5C" stop-opacity=".5"/></linearGradient></defs><path d="M21.23 6 L42.77 6 L58 21.23 L58 42.77 L42.77 58 L21.23 58 L6 42.77 L6 21.23 Z" fill="url(#w4h)"/><path d="M22.2 8.34 L41.8 8.34 L55.66 22.2 L55.66 41.8 L41.8 55.66 L22.2 55.66 L8.34 41.8 L8.34 22.2 Z" fill="none" stroke="#FFD27A" stroke-opacity=".38" stroke-width="0.94"/><path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z" fill="#06121C"/><clipPath id="w4v"><path d="M15.52 23.99 L48.48 23.99 L53.01 28.52 L53.01 34.55 L48.48 39.07 L15.52 39.07 L10.99 34.55 L10.99 28.52 Z"/></clipPath><g clip-path="url(#w4v)"><g class="eye"><rect x="16.03" y="30.03" width="23.11" height="3.01" rx="1.5" fill="url(#w4t)"/><circle cx="39.14" cy="31.53" r="10.17" fill="url(#w4g)"/><circle cx="39.14" cy="31.53" r="4.42" fill="#FF5C5C"/><circle cx="37.55" cy="29.94" r="1.33" fill="#FFE1E1"/></g></g></svg><g transform="translate(130.9 0)"><g fill="#E6EDF3"><path d="M6.50 70L6.50 0L20.10 0L20.10 29.30L30.70 29.30L47.60 0L62.90 0L42.40 34.90L64.60 70L49 70L30.60 40.90L20.10 40.90L20.10 70L6.50 70Z"/><path d="M75.10 70L75.10 0L88.70 0L88.70 70L75.10 70Z"/><path d="M105.20 70L105.20 0L118.80 0L118.80 58.50L153.80 58.50L153.80 70L105.20 70Z"/><path d="M164.30 70L164.30 0L177.90 0L177.90 58.50L212.90 58.50L212.90 70L164.30 70Z"/><path d="M262.90 70L252.10 59.20L252.10 49.20L265.50 49.20L265.50 55.10L268.80 58.40L289.50 58.40L292.90 55L292.90 43.40L289.60 40.10L263.10 40.10L252.30 29.30L252.30 10.80L263.10 0L294.70 0L305.50 10.80L305.50 20.90L292.10 20.90L292.10 14.90L288.80 11.60L269 11.60L265.70 14.90L265.70 25.20L269 28.50L295.50 28.50L306.30 39.30L306.30 59L295.30 70L262.90 70Z"/><path d="M329.80 70L315.30 0L329 0L337.50 49.40L337.90 49.40L351.80 0L362 0L375.60 49.40L376 49.40L384.50 0L398.20 0L383.70 70L371 70L357.10 20.80L356.70 20.80L342.50 70L329.80 70Z"/><path d="M410.70 70L410.70 0L424.30 0L424.30 70L410.70 70Z"/><path d="M456.70 70L456.70 11.50L435.80 11.50L435.80 0L491.20 0L491.20 11.50L470.30 11.50L470.30 70L456.70 70Z"/><path d="M511.20 70L499.70 58.50L499.70 11.50L511.20 0L545.40 0L556.70 11.30L556.70 22L543.10 22L543.10 16.30L538.40 11.60L518.40 11.60L513.30 16.70L513.30 53.30L518.40 58.40L538.40 58.40L543.10 53.70L543.10 48L556.70 48L556.70 58.70L545.40 70L511.20 70Z"/><path d="M569.20 70L569.20 0L582.80 0L582.80 29.30L612.40 29.30L612.40 0L626 0L626 70L612.40 70L612.40 40.90L582.80 40.90L582.80 70L569.20 70Z"/></g></g></svg></h1><div class="eyebrow tag">Stratego, but the AI gets smarter</div>
-      <div class="games" id="mygames" hidden></div>
-      <div class="rules" id="introrules">${introRules(soloSide)}</div>
-      <p class="rnote">Pieces are hidden until they fight. Higher number wins.</p>
-      <p class="eyebrow">Tap or drag a piece to where it goes.</p>
-      <div class="seg" role="group" aria-label="Play as"><button class="h" id="asH" aria-pressed="${soloSide === "H"}">🕵️ HUMANS</button><button class="ai" id="asAI" aria-pressed="${soloSide === "AI"}">🧠 THE AI</button></div>
+      ${heroHtml()}
+      ${introRules(soloSide)}
+      <div class="seg sides" role="group" aria-label="Play as"><button class="h" id="asH" aria-pressed="${soloSide === "H"}">🕵️ HUMANS</button><button class="ai" id="asAI" aria-pressed="${soloSide === "AI"}">🧠 THE AI</button></div>
       <div class="seg lv" role="group" aria-label="Bot level">${BOT_LEVELS.map((l) => `<button id="lv-${l}" aria-pressed="${soloLevel === l}">${l.toUpperCase()}</button>`).join("")}</div>
-      <button class="primary" id="play">PLAY AS ${soloSide === "H" ? "HUMANS" : "THE AI"}</button>
-      <div class="introrow"><button class="ghost" id="friend">PLAY A FRIEND</button><button class="ghost" id="stats">STATS</button></div>
-      <div class="eyebrow">Join with code</div>
-      <form class="join" id="joinform"><input id="joincode" maxlength="4" placeholder="CODE" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Game code"><button class="ghost" id="joinbtn">JOIN</button></form></div></div>`;
+      <button class="primary${soloSide === "AI" ? " ai" : ""}" id="play">PLAY AS ${soloSide === "H" ? "HUMANS" : "THE AI"}</button>
+      <div class="introrow"><button class="ghost" id="friend">PLAY A FRIEND</button><button class="ghost" id="joinopen" aria-expanded="false" aria-controls="joinform">JOIN CODE</button><button class="ghost" id="stats">STATS</button></div>
+      <form class="join" id="joinform" hidden><input id="joincode" maxlength="4" placeholder="CODE" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Game code"><button class="ghost" id="joinbtn">JOIN</button><button type="button" class="ghost sm" id="joinclose" aria-label="Close">✕</button></form>
+      <div class="games" id="mygames" hidden></div></div></div>`;
 		const pick = (side) => () => {
 			sfx.tap();
 			soloSide = side;
@@ -4022,8 +4109,11 @@ if (params.has("sim")) {
 			} catch (e) {}
 			document.getElementById("asH").setAttribute("aria-pressed", side === "H");
 			document.getElementById("asAI").setAttribute("aria-pressed", side === "AI");
-			document.getElementById("play").textContent = "PLAY AS " + (side === "H" ? "HUMANS" : "THE AI");
-			document.getElementById("introrules").innerHTML = introRules(side);
+			const play = document.getElementById("play");
+			play.textContent = "PLAY AS " + (side === "H" ? "HUMANS" : "THE AI");
+			play.classList.toggle("ai", side === "AI");
+			document.getElementById("introrules").outerHTML = introRules(side);
+			fitHero();
 		};
 		for (const l of BOT_LEVELS) document.getElementById("lv-" + l).addEventListener("click", () => {
 			sfx.tap();
@@ -4047,14 +4137,70 @@ if (params.has("sim")) {
 			sfx.tap();
 			openStats();
 		});
-		document.getElementById("joinform").addEventListener("submit", (e) => {
+		const jf = document.getElementById("joinform"), jo = document.getElementById("joinopen");
+		const showJoin = (open) => {
+			jf.hidden = !open;
+			jo.setAttribute("aria-expanded", open);
+			if (open) document.getElementById("joincode").focus();
+		};
+		jo.addEventListener("click", () => {
+			sfx.tap();
+			showJoin(jf.hidden);
+		});
+		document.getElementById("joinclose").addEventListener("click", () => {
+			sfx.tap();
+			showJoin(false);
+			jo.focus();
+		});
+		jf.addEventListener("submit", (e) => {
 			e.preventDefault();
 			sfx.tap();
 			openGame(document.getElementById("joincode").value);
 		});
 		renderMyGames();
 		paintAcct();
+		fitHero();
+		if (document.fonts) document.fonts.ready.then(fitHero);
 	}
+	const HS_MIN = .4, HS_MAX = 1.2, ROOM = 40;
+	function fitHero() {
+		const ov = app.querySelector(".overlay.home");
+		if (!ov) return;
+		const card = ov.querySelector(".card"), row = ov.querySelector(".introrow"), cs = getComputedStyle(ov);
+		const avail = ov.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+		const games = document.getElementById("mygames"), grow = !games || games.hidden;
+		const used = () => row.getBoundingClientRect().bottom - card.getBoundingClientRect().top;
+		const fits = (hs) => {
+			ov.style.setProperty("--hs", String(hs));
+			return used() + (hs > 1 ? ROOM : 0) <= avail + .5;
+		};
+		ov.style.setProperty("--room", "0px");
+		let hs = 1;
+		if (fits(1)) {
+			if (grow && fits(1.001)) {
+				let lo = 1.001, hi = HS_MAX;
+				if (fits(hi)) lo = hi;
+				else for (let k = 0; k < 10; k++) {
+					const mid = (lo + hi) / 2;
+					if (fits(mid)) lo = mid;
+					else hi = mid;
+				}
+				hs = Math.floor(lo * 1e3) / 1e3;
+			}
+		} else if (!fits(HS_MIN)) hs = HS_MIN;
+		else {
+			let lo = HS_MIN, hi = 1;
+			for (let k = 0; k < 10; k++) {
+				const mid = (lo + hi) / 2;
+				if (fits(mid)) lo = mid;
+				else hi = mid;
+			}
+			hs = Math.floor(lo * 1e3) / 1e3;
+		}
+		fits(hs);
+		if (grow) ov.style.setProperty("--room", Math.max(0, hs >= HS_MAX ? ROOM : avail - used()) + "px");
+	}
+	addEventListener("resize", () => requestAnimationFrame(fitHero));
 	function paintAcct() {
 		const slot = document.getElementById("acctslot");
 		if (!slot) return;
@@ -4071,6 +4217,9 @@ if (params.has("sim")) {
 			sfx.tap();
 			openFriends();
 		});
+		const ov = slot.closest(".overlay.home");
+		if (ov) ov.classList.toggle("withacct", !!slot.childElementCount);
+		fitHero();
 	}
 	function openFriends(back = "home") {
 		phase = "friends";
@@ -5091,7 +5240,7 @@ if (params.has("sim")) {
       <p>Waiting for <b>@${esc(LIVE.challenge.handle)}</b> to accept. It's in their My games now; unanswered, it goes in ${daysLeft(LIVE.challenge.expires)}.</p>
       <div class="panel">${sideRow(you, "You")}</div>${LIVE.note ? `<p class="lvnote">${LIVE.note}</p>` : ""}<div class="row2"><button class="ghost" id="lvswap">SWITCH SIDES</button><button class="ghost" id="lvleave">BACK</button></div>`;
 		else if (!LIVE.guestIn) body = `<div class="eyebrow">Play a friend · invite</div><p class="codebig" id="code">${[...LIVE.code].map((ch) => `<span>${ch}</span>`).join("")}</p>
-      <p>Send your friend the link, or they type <b>${LIVE.code}</b> under Join with code.</p>
+      <p>Send your friend the link, or they tap JOIN CODE and type <b>${LIVE.code}</b>.</p>
       <div class="row2"><button class="primary" id="lvshare">SHARE</button><button class="ghost" id="lvcopy">COPY</button></div>
       <div class="panel">${sideRow(you, "You")}</div>${LIVE.note ? `<p class="lvnote">${LIVE.note}</p>` : ""}<div class="row2"><button class="ghost" id="lvswap">SWITCH SIDES</button><button class="ghost" id="lvleave">BACK</button></div>`;
 		else body = `<div class="eyebrow">Play a friend · ${LIVE.code}</div><h1>${LIVE.host ? "YOUR FRIEND IS IN" : "YOU'RE IN"}</h1>
@@ -5183,6 +5332,7 @@ if (params.has("sim")) {
 		const list = myGames();
 		const tidy = () => {
 			box.hidden = !box.querySelector(".game");
+			fitHero();
 		};
 		const wireRows = (el) => el.querySelectorAll("button.game").forEach((b) => b.addEventListener("click", () => {
 			sfx.tap();
