@@ -390,8 +390,7 @@ body.me-ai .lum i.t,body.me-ai .lul i.t{background:var(--agi)}
    grid floor, KILL SWITCH, the rules for your side, then the buttons. It fits one iPhone screen with no My games. */
 .overlay.home{overflow-x:hidden;background:radial-gradient(120% 60% at 50% 18%,#0E1826 0%,#060A10 70%)}
 .overlay.home,html .overlay.home{padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))} /* over the apps' app.css */
-.overlay.home{display:flex;flex-direction:column}
-.home .card{position:relative;z-index:0;flex:none;gap:0;margin-top:auto;margin-bottom:auto;padding-bottom:0} /* centred on a tall phone, so the buttons sit lower */
+.home .card{position:relative;z-index:0;gap:0;padding-bottom:0}
 .overlay.home{--hs:1} /* the hero's scale: fitHero() in main.js shrinks it on a short screen */
 .home.noacct #acctslot:empty{display:none}
 .home #acctslot,.home #acctslot:empty{display:block;min-height:36px}

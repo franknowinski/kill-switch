@@ -4172,18 +4172,7 @@ if (params.has("sim")) {
 			return row.getBoundingClientRect().bottom - card.getBoundingClientRect().top <= avail + .5;
 		};
 		ov.classList.remove("noacct");
-		if (fits(1)) {
-			const ROOM = 24, roomy = (hs) => fits(hs) && row.getBoundingClientRect().bottom - card.getBoundingClientRect().top <= avail - ROOM + .5;
-			let lo = 1, hi = 1.2;
-			if (!roomy(hi)) for (let k = 0; k < 8; k++) {
-				const mid = (lo + hi) / 2;
-				if (roomy(mid)) lo = mid;
-				else hi = mid;
-			}
-			else lo = hi;
-			fits(Math.floor(lo * 1e3) / 1e3);
-			return;
-		}
+		if (fits(1)) return;
 		const slot = document.getElementById("acctslot");
 		if (!fits(.5) && slot && !slot.childElementCount) ov.classList.add("noacct");
 		if (!fits(.5)) return;
