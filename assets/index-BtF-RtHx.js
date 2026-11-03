@@ -28,7 +28,8 @@ var BAL = {
 	BOOST_MIN: 5,
 	BOOST_MAX: 6,
 	DRAIN: 1,
-	BACKUP: 7
+	BACKUP: 7,
+	BACK_LIMIT: 3
 };
 var onDC = (s, r, c) => !!s.dc && s.dc[0] === r && s.dc[1] === c;
 var BOOSTS = (p) => p.side === "AI" && p.type === "X" && p.str >= BAL.BOOST_MIN && p.str <= BAL.BOOST_MAX;
@@ -346,6 +347,10 @@ function newGame(seed, forms = {}) {
 		cut: false,
 		log: "Humans to move.",
 		last: null,
+		back: {
+			H: null,
+			AI: null
+		},
 		seed,
 		events: [],
 		history: [],
@@ -378,9 +383,13 @@ var neighbours = (s, p) => DIRS.map(([dr, dc]) => at$1(s, p.r + dr, p.c + dc)).f
 function copySource(s, p) {
 	return neighbours(s, p).filter((q) => q.side === p.side && COPYABLE(q.type)).sort((a, b) => b.str - a.str)[0] || null;
 }
+var backShut = (s, p) => {
+	const b = s.back && s.back[p.side];
+	return b && b.id === p.id && b.n >= BAL.BACK_LIMIT && b.to[0] === p.r && b.to[1] === p.c ? b.from : null;
+};
 function legalMoves(s, p) {
 	if (p.type === "F" || p.type === "T") return [];
-	const out = [];
+	const out = [], shut = backShut(s, p);
 	const canCopy = p.type === "R" && s.copies[p.side] > 0 && copySource(s, p);
 	for (const [dr, dc] of DIRS) {
 		let r = p.r + dr, c = p.c + dc;
@@ -390,7 +399,7 @@ function legalMoves(s, p) {
 				if (q.side !== p.side) out.push({ to: [r, c] });
 				break;
 			}
-			out.push({ to: [r, c] });
+			if (!(shut && shut[0] === r && shut[1] === c)) out.push({ to: [r, c] });
 			if (canCopy) out.push({
 				to: [r, c],
 				copy: true
@@ -488,6 +497,16 @@ function apply(s0, move) {
 			text: line
 		});
 	} else if (!q) {
+		const b = s.back && s.back[side], back = !!b && b.id === p.id && b.from[0] === r && b.from[1] === c && b.to[0] === p.r && b.to[1] === p.c;
+		s.back = {
+			...s.back,
+			[side]: {
+				id: p.id,
+				from: [p.r, p.c],
+				to: [r, c],
+				n: back ? b.n + 1 : 0
+			}
+		};
 		p.r = r;
 		p.c = c;
 		s.history.push({
@@ -649,6 +668,10 @@ function apply(s0, move) {
 		});
 		line = line ? `${line} 🏢 ${was} → ${mover.str}.` : t;
 	}
+	if (move.copy || q) s.back = {
+		...s.back,
+		[side]: null
+	};
 	s.last = {
 		from: [move.p.r, move.p.c],
 		to: [r, c],
@@ -1420,7 +1443,11 @@ var ABOUT = {
 // web/src/ui/sound.js
 var SFX = {
 	ctx: null,
-	on: true
+	on: true,
+	unlocked: false,
+	clock: null,
+	dead: false,
+	stuckCheck: null
 };
 try {
 	SFX.on = localStorage.getItem("ks-sound") !== "off";
@@ -1446,20 +1473,58 @@ function mediaChannel() {
 	} catch (e) {}
 }
 function audioCtx() {
+	if (SFX.ctx && SFX.ctx.state === "closed") retire();
 	if (!SFX.ctx) {
 		const AC = window.AudioContext || window.webkitAudioContext;
 		if (!AC) return null;
-		SFX.ctx = new AC();
+		const ctx = SFX.ctx = new AC();
+		SFX.clock = null;
+		ctx.onstatechange = () => {
+			if (SFX.ctx !== ctx) return;
+			SFX.clock = null;
+			if (ctx.state === "closed") retire();
+		};
 	}
 	if (SFX.ctx.state !== "running" && SFX.ctx.resume) SFX.ctx.resume().catch(() => {});
 	return SFX.ctx;
+}
+var STUCK_MS = 750;
+function retire() {
+	const old = SFX.ctx;
+	SFX.ctx = null;
+	SFX.unlocked = false;
+	SFX.clock = null;
+	SFX.dead = false;
+	SFX.stuckCheck = null;
+	if (old) {
+		old.onstatechange = null;
+		try {
+			if (old.state !== "closed") old.close().catch(() => {});
+		} catch (e) {}
+	}
+}
+function deadCtx(ctx) {
+	if (SFX.dead || ctx.state === "closed") return true;
+	if (ctx.state !== "running") return false;
+	const now = performance.now(), c = SFX.clock;
+	SFX.clock = {
+		t: ctx.currentTime,
+		at: now
+	};
+	return !!c && now - c.at > 1500 && ctx.currentTime - c.t < .05;
 }
 function unlockAudio() {
 	if (!SFX.on) return;
 	mediaChannel();
 	try {
+		if (SFX.ctx && deadCtx(SFX.ctx)) retire();
 		const ctx = audioCtx();
-		if (!ctx || SFX.unlocked) return;
+		if (!ctx) return;
+		if (ctx.state !== "running" && !SFX.stuckCheck) SFX.stuckCheck = setTimeout(() => {
+			SFX.stuckCheck = null;
+			if (SFX.ctx === ctx && ctx.state !== "running" && !document.hidden) SFX.dead = true;
+		}, STUCK_MS);
+		if (SFX.unlocked) return;
 		const src = ctx.createBufferSource();
 		src.buffer = ctx.createBuffer(1, 1, 22050);
 		src.connect(ctx.destination);
@@ -3080,6 +3145,9 @@ if (params.has("sim")) {
 		}
 		return best;
 	}
+	const holdMove = (e) => {
+		if (holdTouch && e.cancelable) e.preventDefault();
+	};
 	function bindPointer() {
 		const board = document.getElementById("board");
 		if (!board) return;
@@ -3087,14 +3155,13 @@ if (params.has("sim")) {
 			if (e.touches.length > 1) return;
 			const sq = sqAt(e.touches[0]);
 			holdTouch = !!sq && sq.matches(".grab,.can,.copy,.own");
+			if (holdTouch) e.target.addEventListener("touchmove", holdMove, { passive: false });
 		}, { passive: true });
-		board.addEventListener("touchmove", (e) => {
-			if (holdTouch && e.cancelable) e.preventDefault();
-		}, { passive: false });
+		board.addEventListener("touchmove", holdMove, { passive: false });
 		board.addEventListener("pointerdown", (e) => {
 			if (e.button !== 0) return;
 			const sq = sqAt(e);
-			if (!sq || sq.disabled || busy) return;
+			if (!sq || sq.disabled) return;
 			ptr = {
 				r: +sq.dataset.r,
 				c: +sq.dataset.c,
@@ -3104,6 +3171,9 @@ if (params.has("sim")) {
 				moved: false,
 				touch: e.pointerType !== "mouse"
 			};
+			try {
+				document.body.setPointerCapture(e.pointerId);
+			} catch (err) {}
 		});
 	}
 	const floatAt = (d, x, y) => d.touch ? [
@@ -3136,6 +3206,7 @@ if (params.has("sim")) {
 		const f = floater, d = dragEl;
 		floater = null;
 		dragEl = null;
+		document.body.classList.remove("dragging");
 		if (renderLater) queueMicrotask(() => {
 			if (renderLater) render();
 		});
@@ -3165,6 +3236,7 @@ if (params.has("sim")) {
 		});
 		place(floater, floatAt(ptr, ptr.fx, ptr.fy));
 		document.body.appendChild(floater);
+		document.body.classList.add("dragging");
 		sfx.tap();
 	}
 	window.addEventListener("pointermove", (e) => {
@@ -3179,7 +3251,11 @@ if (params.has("sim")) {
 				return;
 			}
 			const p = at$1(state, ptr.r, ptr.c), setupOpen = phase === "setup" && !(mode === "live" && LIVE.ready[me]);
-			const can = p && p.side === me && (setupOpen || phase === "play" && state.turn === me);
+			if (p && p.side === me && phase === "play" && !state.winner && (busy || state.turn !== me)) {
+				ptr.waited = true;
+				return;
+			}
+			const can = !busy && p && p.side === me && (setupOpen || phase === "play" && state.turn === me);
 			ptr.fx = e.clientX;
 			ptr.fy = e.clientY;
 			if (!p && setupOpen && me === "H" && onDC(state, ptr.r, ptr.c)) {
@@ -3233,7 +3309,7 @@ if (params.has("sim")) {
 		if (!ptr || e.pointerId !== ptr.id) return;
 		const was = ptr;
 		ptr = null;
-		if (!was.moved) return was.still && Math.hypot(e.clientX - was.x, e.clientY - was.y) > 28 ? void 0 : tap(was.r, was.c);
+		if (!was.moved) return (was.still || was.waited) && Math.hypot(e.clientX - was.x, e.clientY - was.y) > 28 ? void 0 : tap(was.r, was.c);
 		unlight(was);
 		const t = dropTarget(was, e.clientX, e.clientY);
 		if (t && sel) noSlide.add(String(sel.id));
@@ -3572,6 +3648,7 @@ if (params.has("sim")) {
 			const lf = state.forms[me] == null ? null : FORMATIONS[me][state.forms[me]];
 			logHtml = `<span class="you">${lf ? lf.name : "Random"}.</span> ${lf ? lf.hint : "A random spread."} Tap two pieces to swap them${me === "H" ? " (🏢 too)" : ""}.`;
 		} else if (info$1) logHtml = info$1;
+		else if (sel && phase === "play" && state.turn === me && !state.winner && backShut(state, sel)) logHtml = `<span class="you">Back and forth ${BAL.BACK_LIMIT} times.</span> This piece can't go straight back again: move it another way, or move another piece.`;
 		else if (state.turn !== me && !state.winner) logHtml = mode === "live" ? `Waiting for <b>${SIDE_NAME[other(me)]}</b><span class="dots"><i>.</i><i>.</i><i>.</i></span>${LIVE.online[LIVE.host ? "guest" : "host"] ? "" : " They're away; your friend sees the board when they're back."}` : `<b>${theirs()}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span>`;
 		else if (!state.winner && state.turn === me && me === "H" && drainNow && !(lastFight && lastFight.line && state.log === lastFight.line)) {
 			const cto = state.pieces.some(isCTO) ? "CTO" : "backup";
@@ -3931,15 +4008,23 @@ if (params.has("sim")) {
 				`Attack one and your piece joins the humans (not at ${BAL.ASI}).`
 			]
 		];
-		const basics = [[
-			"⚔️",
-			"Fight",
-			"Move onto an enemy. Higher number wins; the same number, both fall."
-		], [
-			"📡",
-			"Scanner",
-			"Shows the enemies next to it while they stay there."
-		]];
+		const basics = [
+			[
+				"⚔️",
+				"Fight",
+				"Move onto an enemy. Higher number wins; the same number, both fall."
+			],
+			[
+				"📡",
+				"Scanner",
+				"Shows the enemies next to it while they stay there."
+			],
+			[
+				"↔️",
+				"Back and forth",
+				`A piece can step straight back to where it was ${BAL.BACK_LIMIT} times in a row, then has to go another way.`
+			]
+		];
 		const group = (k, head, sub, cards) => `<section class="rg ${k}"><div class="rgh"><h2>${head}</h2><span>${sub}</span></div>${cards.filter(Boolean).map(([ic, h, t]) => `<div class="rc"><span class="ri">${ic}</span><div><h3>${h}</h3><p>${t}</p></div></div>`).join("")}</section>`;
 		return `<div class="rcs">${group(H ? "h" : "a", "You", H ? "Humans" : "The AI", you)}${group("w", "Watch out", H ? "what the AI can do" : "what the humans can do", them)}${group("n", "Basics", "both sides", basics)}</div>`;
 	}

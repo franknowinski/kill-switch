@@ -154,6 +154,9 @@ body.me-ai .pill.wait{color:var(--hu);border-color:rgba(92,200,255,.45)}
 .sq.dc.drain .dci,.sq.dc.drain .dcm{opacity:1;animation:bolt 1.1s ease-in-out infinite}.sq.dc.drain .dci b{color:var(--volt)}
 @keyframes drainpulse{0%,100%{box-shadow:inset 0 0 0 2px rgba(255,216,74,.4)}50%{box-shadow:inset 0 0 0 3px var(--volt),0 0 16px rgba(255,216,74,.6)}}
 @keyframes bolt{50%{filter:drop-shadow(0 0 6px #ffd84a)}}
+/* v0.74: the lit 🏢's glow is an endless filter animation, repainted every frame; while a piece is dragged it holds still,
+   so the drag gets the frames (the user: dragging wasn't smooth once the 🏢 lit up) */
+body.dragging .sq.dc .dci,body.dragging .sq.dc .dcm,body.dragging .sq.dc.drain{animation-play-state:paused}
 .sq.dc.off .dci,.sq.dc.off .dcm{opacity:.2;filter:grayscale(1)}
 .sq.dc.pick{box-shadow:inset 0 0 0 3px var(--hu),0 0 14px rgba(92,200,255,.6);z-index:1}
 .sq.dc.pick .dci{opacity:1}
