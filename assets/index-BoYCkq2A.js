@@ -747,8 +747,16 @@ function apply(s0, move) {
 				});
 			}
 			if (s.round > BAL.MAX_ROUNDS) {
-				s.winner = "D";
-				s.log = `Round ${BAL.MAX_ROUNDS} is over and nobody got through. A draw.`;
+				const b = brainOf(s);
+				s.timeUp = true;
+				s.winner = b && b.str >= BAL.AGI ? "AI" : "H";
+				s.log = `Round ${BAL.MAX_ROUNDS} is over. ` + (s.winner === "AI" ? `The 🧠 is still a ${b.str}: the AI outlasted the humans.` : b ? `The 🧠 is only a ${b.str}: the humans held it off.` : "The 🧠 is gone: the humans held it off.");
+				s.history.push({
+					round: BAL.MAX_ROUNDS,
+					side: s.winner,
+					text: s.log,
+					mile: true
+				});
 			}
 		}
 		s.turn = other(side);
@@ -1410,6 +1418,7 @@ function hardEval(s, side) {
 }
 function endTitle(s, me) {
 	if (s.winner === "D") return "TIME'S UP · DRAW";
+	if (s.timeUp) return "TIME'S UP" + (s.winner === me ? " · YOU WIN" : " · YOU LOSE");
 	const loser = other(s.winner);
 	return (!!s.pieces.some((p) => p.type === "F" && p.side === loser) ? "NO MOVES" : s.winner === "AI" ? "IT GOT OUT" : "SHUT DOWN") + (s.winner === me ? " · YOU WIN" : " · YOU LOSE");
 }
@@ -1447,7 +1456,8 @@ var SFX = {
 	unlocked: false,
 	clock: null,
 	dead: false,
-	stuckCheck: null
+	stuckCheck: null,
+	away: false
 };
 try {
 	SFX.on = localStorage.getItem("ks-sound") !== "off";
@@ -1514,6 +1524,7 @@ function deadCtx(ctx) {
 	return !!c && now - c.at > 1500 && ctx.currentTime - c.t < .05;
 }
 function unlockAudio() {
+	SFX.away = false;
 	if (!SFX.on) return;
 	mediaChannel();
 	try {
@@ -1543,15 +1554,17 @@ for (const ev of [
 	passive: true
 });
 document.addEventListener("visibilitychange", () => {
-	if (document.hidden) {
-		if (SFX.tag) SFX.tag.pause();
-	} else if (SFX.ctx && SFX.on) audioCtx();
-});
-window.addEventListener("pageshow", () => {
-	if (SFX.ctx && SFX.on) audioCtx();
+	if (!document.hidden) return;
+	if (SFX.tag) {
+		SFX.tag.pause();
+		SFX.tag.removeAttribute("src");
+		SFX.tag = null;
+	}
+	retire();
+	SFX.away = true;
 });
 function tone(freq, dur, type = "square", gain = .08, when = 0, slide = null) {
-	if (!SFX.on) return;
+	if (!SFX.on || document.hidden || SFX.away) return;
 	try {
 		const ctx = audioCtx();
 		if (!ctx) return;
@@ -1771,7 +1784,7 @@ function resetStats(store = defaultStore()) {
 }
 function endReason(state) {
 	if (!state || !state.winner) return null;
-	if (state.winner === "D") return "rounds";
+	if (state.winner === "D" || state.timeUp) return "rounds";
 	const loser = state.winner === "H" ? "AI" : "H";
 	if (state.pieces.some((p) => p.type === "F" && p.side === loser)) return "nomoves";
 	return state.winner === "H" ? "killswitch" : "internet";
@@ -1844,7 +1857,7 @@ var END_LABEL = {
 	killswitch: "🛑 Kill switch hit",
 	internet: "🌍 AI got out",
 	nomoves: "⛔ No moves left",
-	rounds: "⏱ Round limit (draw)"
+	rounds: "⏱ Time's up"
 };
 var RESULT_LABEL$1 = {
 	won: "WON",
@@ -3562,6 +3575,17 @@ if (params.has("sim")) {
 		return `<button class="ghost sm" id="restart" aria-label="${t}" title="${t}">🏠</button>`;
 	};
 	let renderLater = false;
+	const LAST_ROUNDS = 10;
+	const LOCK = {
+		bot: 200,
+		alert: 900,
+		hold: [
+			400,
+			430,
+			480
+		]
+	};
+	const syncLock = () => app.classList.toggle("locked", phase === "play" && !!state && !state.winner && (busy || state.turn !== me));
 	function render(opts = {}) {
 		if (phase === "intro" || phase === "lobby" || phase === "joining" || phase === "stats" || phase === "account" || phase === "friends") dropDrag();
 		else if (floater && ptr && ptr.moved) {
@@ -3569,6 +3593,7 @@ if (params.has("sim")) {
 			return;
 		}
 		renderLater = false;
+		syncLock();
 		if (phase === "intro") return renderIntro();
 		if (phase === "stats") return renderStats();
 		if (phase === "account") return screens.render();
@@ -3577,10 +3602,11 @@ if (params.has("sim")) {
 		const prev = snapshotRects();
 		const over = phase === "over", setupOpen = phase === "setup" && !(mode === "live" && LIVE.ready[me]), myTurn = phase === "play" && state.turn === me && !state.winner;
 		const brain = brainOf(state);
+		const lastRounds = phase === "play" && !state.winner && state.round > BAL.MAX_ROUNDS - LAST_ROUNDS;
 		const live = !!(brain && isSuper(brain)) && !state.cut;
 		const drainNow = phase === "play" && !state.winner && !!state.drainOn;
 		const turnPill = phase === "setup" ? `<span class="pill on turn${me === "AI" ? " ai" : ""}" id="turnpill">SET UP</span>` : phase === "play" && !state.winner ? state.turn === me ? `<span class="pill on turn mine${me === "AI" ? " ai" : ""}" id="turnpill">YOUR MOVE</span>` : `<span class="pill wait turn" id="turnpill">THEIR MOVE</span>` : "";
-		let html = `<div class="left${setupOpen ? " setup" : ""}"><div class="hud"><span class="pill">R${Math.min(state.round, BAL.MAX_ROUNDS)}</span>${turnPill}${mode === "solo" ? `<span class="pill r lvl">VS ${BOT_NAME[gameLevel].toUpperCase()} BOT</span>` : ""}${soundBtn()}</div>`;
+		let html = `<div class="left${setupOpen ? " setup" : ""}"><div class="hud"><span class="pill${lastRounds ? " late" : ""}" id="roundpill">R${Math.min(state.round, BAL.MAX_ROUNDS)}${lastRounds ? `/${BAL.MAX_ROUNDS}` : ""}</span>${turnPill}${mode === "solo" ? `<span class="pill r lvl">VS ${BOT_NAME[gameLevel].toUpperCase()} BOT</span>` : ""}${soundBtn()}</div>`;
 		html += meterHtml(brain, drainNow);
 		let bhtml = `<div class="boardwrap"><div class="board" id="board">`;
 		const cans = sel ? legalMoves(state, sel) : [];
@@ -3600,7 +3626,7 @@ if (params.has("sim")) {
 				else if (live) k.push("live");
 				else if (state.cut) k.push("off");
 				if (dcPick && phase === "setup") k.push("pick");
-				inner += p ? `<span class="dcm">🏢</span>` : `<span class="dci">🏢<b>DC</b></span>`;
+				inner += (drainNow ? `<span class="dcp"></span>` : "") + (p ? `<span class="dcm">🏢</span>` : `<span class="dci">🏢<b>DC</b></span>`);
 			}
 			if (p) {
 				k.push(cls(p.side));
@@ -3673,7 +3699,14 @@ if (params.has("sim")) {
 		} else if (over) html += bar(" end", `${homeBtn()}<button class="primary" id="again">PLAY AGAIN</button><button class="ghost" id="rules">PIECES ↓</button>`);
 		html += `</div><div class="right" id="rulesbox">` + listHtml() + `</div>`;
 		const lus = app.querySelector("#lineups"), lusX = lus ? lus.scrollLeft : null;
+		const toasts = phase === "play" || phase === "over" ? [...app.querySelectorAll("#toasts > .toast")] : [];
 		app.innerHTML = html;
+		const tbox = document.getElementById("toasts");
+		if (tbox) for (const t of toasts) {
+			const age = Math.round(performance.now() - t._t0);
+			t.style.animationDelay = `${-age}ms, calc(var(--hold, 1.6s) - ${age}ms)`;
+			tbox.appendChild(t);
+		}
 		const lus2 = app.querySelector("#lineups");
 		if (lus2) {
 			if (lusX != null) lus2.scrollLeft = lusX;
@@ -4023,6 +4056,11 @@ if (params.has("sim")) {
 				"↔️",
 				"Back and forth",
 				`A piece can step straight back to where it was ${BAL.BACK_LIMIT} times in a row, then has to go another way.`
+			],
+			[
+				"⏱",
+				`Round ${BAL.MAX_ROUNDS}`,
+				`No draws. If nobody has won after round ${BAL.MAX_ROUNDS}, the 🧠 decides: at ${BAL.AGI} or more ${H ? "the AI wins" : "you win"}; lower or gone, ${H ? "you win" : "the humans win"}.`
 			]
 		];
 		const group = (k, head, sub, cards) => `<section class="rg ${k}"><div class="rgh"><h2>${head}</h2><span>${sub}</span></div>${cards.filter(Boolean).map(([ic, h, t]) => `<div class="rc"><span class="ri">${ic}</span><div><h3>${h}</h3><p>${t}</p></div></div>`).join("")}</section>`;
@@ -4475,6 +4513,7 @@ if (params.has("sim")) {
 				return render();
 			}
 			busy = true;
+			syncLock();
 			noSlide.clear();
 			app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach((q) => q.classList.remove("can", "sel", "copy"));
 			const msg = app.querySelector(".msg");
@@ -4489,7 +4528,7 @@ if (params.has("sim")) {
 		const big = !FAST && state.events.some((e) => e.kind === "drain" && (e.first || e.to === 0) || e.kind === "agi" || e.kind === "asi");
 		afterMove(before).then(() => {
 			if (state.winner) return;
-			setTimeout(botTurn, FAST ? 0 : big ? 1800 : 420);
+			setTimeout(botTurn, FAST ? 0 : big ? LOCK.alert : LOCK.bot);
 		});
 	}
 	const wait = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -4680,11 +4719,7 @@ if (params.has("sim")) {
 		if (masked(a) || shown(a) !== a) flips.push(flip(ca, faceHtml(shown(a))));
 		if (masked(d) || shown(d) !== d) flips.push(flip(cd, faceHtml(shown(d))));
 		setConsole(engageHtml(a, d, ev, "open"));
-		await Promise.all([...flips, wait(reduce ? 0 : [
-			700,
-			740,
-			800
-		][tier])]);
+		await Promise.all([...flips, wait(reduce ? 0 : LOCK.hold[tier])]);
 		trace("resolve");
 		engage = engageHtml(a, d, ev, "done");
 		setConsole(engage);
@@ -4743,6 +4778,7 @@ if (params.has("sim")) {
 		};
 		if (fight && !FAST) {
 			busy = true;
+			syncLock();
 			skip = await animateFight(before, fight);
 			busy = false;
 		} else if (!FAST && state.last && !events.some((e) => e.kind === "copy")) sfx.move();
@@ -4784,6 +4820,11 @@ if (params.has("sim")) {
 				}
 			}
 		}
+		if (!state.winner && before.round !== state.round && state.round === BAL.MAX_ROUNDS - LAST_ROUNDS + 1) {
+			const b = brainOf(state), ai = !!b && b.str >= BAL.AGI;
+			toast(`${LAST_ROUNDS} ROUNDS LEFT · as it stands ${ai === (me === "AI") ? "you win" : "you lose"}`, true);
+			sfx.big();
+		}
 		if (state.winner) {
 			const win = state.winner === me;
 			if (state.winner === "D") sfx.level();
@@ -4800,6 +4841,7 @@ if (params.has("sim")) {
 		el.className = "toast" + (big ? " big" : "") + (extra ? " " + extra : "");
 		el.textContent = text.replace(/ · /g, "\xA0· ");
 		if (params.has("hold")) el.style.setProperty("--hold", "999s");
+		el._t0 = performance.now();
 		box.appendChild(el);
 		setTimeout(() => el.remove(), params.has("hold") ? 1e9 : big ? 3800 : 2200);
 	}
@@ -4937,6 +4979,7 @@ if (params.has("sim")) {
 		LIVE.chain = LIVE.chain.then(fn).catch((e) => {
 			console.error(e);
 			busy = false;
+			syncLock();
 		});
 	};
 	const liveYou = () => LIVE.host ? LIVE.hostSide : other(LIVE.hostSide);
