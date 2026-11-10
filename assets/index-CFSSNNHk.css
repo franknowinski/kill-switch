@@ -166,12 +166,10 @@ body.dragging .sq.dc .dci,body.dragging .sq.dc .dcm,body.dragging .dcp{animation
 .sq.dc.pick .dci{opacity:1}
 /* the moves: a piece shown face up for the first time flips over; one that switched sides flashes */
 .pz.drag{opacity:.25;filter:grayscale(.4)}
+/* v0.89: the touch log (triple-tap the round): at the bottom of the screen, clear of the board, never in the way of a touch */
+#ksdiag{position:fixed;left:6px;right:6px;bottom:calc(env(safe-area-inset-bottom,0px) + 6px);max-height:38vh;overflow:hidden;margin:0;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.88);color:#9FF0C8;font:10px/1.35 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none;z-index:60}
 /* v0.86: the last 10 rounds (R91/100): the round pill turns red */
 .pill.late{color:var(--asi);border-color:var(--asi)}
-/* v0.85: the board is shut (a fight playing out, the other side moving): your pieces dim once that has lasted 0.3 s, so a
-   quiet move never flickers. A redraw starts the wait again. */
-.locked .sq.own .pz{animation:lockdim .15s .3s forwards}
-@keyframes lockdim{to{opacity:.6}}
 .blk.reveal{animation:flip .5s cubic-bezier(.3,1.4,.5,1)}
 @keyframes flip{0%{transform:perspective(300px) rotateY(-90deg)}100%{transform:none}}
 .sq.turned .blk{animation:turnflash .7s ease-out}

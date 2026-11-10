@@ -3065,6 +3065,48 @@ if (params.has("sim")) {
 	const seed = Number(params.get("seed")) || Date.now() % 1e9;
 	const bot = rng(seed ^ 48879);
 	const FAST = params.has("over") || params.has("fast");
+	const DIAG = {
+		on: false,
+		log: [],
+		taps: []
+	};
+	try {
+		DIAG.on = localStorage.getItem("ks-diag") === "1";
+	} catch (e) {}
+	function diag(msg) {
+		try {
+			DIAG.log.push(typeof msg === "function" ? msg() : msg);
+			if (DIAG.log.length > 10) DIAG.log.shift();
+			if (!DIAG.on) return;
+			let el = document.getElementById("ksdiag");
+			if (!el) {
+				el = document.createElement("pre");
+				el.id = "ksdiag";
+				document.body.appendChild(el);
+			}
+			el.textContent = DIAG.log.join("\n");
+		} catch (e) {}
+	}
+	const dSq = (r, c) => {
+		const p = state && at$1(state, r, c);
+		return sqName(r, c) + (!p ? "" : p.side !== me ? " their piece" : ` my ${p.type}${LEVELS_UP(p.type) ? p.str : ""}`);
+	};
+	const dPx = (x, y) => `${Math.round(x)},${Math.round(y)}`;
+	window.addEventListener("pointerdown", (e) => {
+		if (!e.target || !e.target.closest || !e.target.closest("#roundpill")) return;
+		const now = performance.now();
+		DIAG.taps = DIAG.taps.filter((t) => now - t < 900).concat(now);
+		if (DIAG.taps.length < 3) return;
+		DIAG.taps = [];
+		DIAG.on = !DIAG.on;
+		try {
+			localStorage.setItem("ks-diag", DIAG.on ? "1" : "0");
+		} catch (err) {}
+		const el = document.getElementById("ksdiag");
+		if (el) el.remove();
+		diag(DIAG.on ? "touch log on · v0.90 · triple-tap the round to hide" : "touch log off");
+	}, true);
+	if (DIAG.on) queueMicrotask(() => diag("touch log on · v0.90 · triple-tap the round to hide"));
 	let ptr = null, dragEl = null, holdTouch = false;
 	const mid = (el) => {
 		const q = el.getBoundingClientRect();
@@ -3100,7 +3142,10 @@ if (params.has("sim")) {
 		let g = from.geo;
 		if (!g || !g.length || !g[0].q.isConnected) g = from.geo = measureBoard();
 		const src = g.find((m) => +m.q.dataset.r === from.r && +m.q.dataset.c === from.c);
-		if (!src) return null;
+		if (!src) {
+			if (from.say) from.why = "its square is gone";
+			return null;
+		}
 		from.home = src;
 		const lit = phase === "setup" ? ((m) => !m.q.disabled && SETUP_ROWS[me].includes(+m.q.dataset.r)) : ((m) => m.q.classList.contains("can") || m.q.classList.contains("copy"));
 		const dist = (m) => Math.hypot((x - m.x) / m.w, (y - m.y) / m.h);
@@ -3114,10 +3159,19 @@ if (params.has("sim")) {
 				best = m;
 			}
 		}
-		if (edge > DRAG.edge) return null;
-		if (best && best !== src) return bd <= DRAG.snap[from.touch ? "touch" : "mouse"] ? best.q : null;
+		if (edge > DRAG.edge) {
+			if (from.say) from.why = `off the board by ${edge.toFixed(2)} sq`;
+			return null;
+		}
+		if (best && best !== src) {
+			if (from.say) from.why = `nearest lit ${sqName(+best.q.dataset.r, +best.q.dataset.c)} is ${bd.toFixed(2)} sq from the finger (limit ${DRAG.snap[from.touch ? "touch" : "mouse"]})`;
+			return bd <= DRAG.snap[from.touch ? "touch" : "mouse"] ? best.q : null;
+		}
 		const vx = x - from.x, vy = y - from.y, vl = Math.hypot(vx, vy);
-		if (vl < Math.max(8, src.w * .4)) return null;
+		if (vl < Math.max(8, src.w * .4)) {
+			if (from.say) from.why = `finger still on its own square: pulled ${Math.round(vl)} px, a flick needs ${Math.round(Math.max(8, src.w * .4))}`;
+			return null;
+		}
 		best = null;
 		bd = Infinity;
 		for (const m of g) {
@@ -3130,7 +3184,26 @@ if (params.has("sim")) {
 				best = m;
 			}
 		}
+		if (from.say) from.why = best ? `flick ${Math.round(vl)} px toward ${sqName(+best.q.dataset.r, +best.q.dataset.c)}` : `flick ${Math.round(vl)} px ${Math.abs(vx) > Math.abs(vy) ? vx > 0 ? "right" : "left" : vy > 0 ? "down" : "up"}: no lit square within 40° of it`;
 		return best && best.q;
+	}
+	const FLICK = {
+		ms: 400,
+		deg: 40
+	};
+	function flickTarget(from, x, y) {
+		const g = from.geo, src = from.home;
+		if (!g || !src) return null;
+		const vx = x - from.x, vy = y - from.y, vl = Math.hypot(vx, vy);
+		if (vl < Math.max(8, src.w * .4)) return null;
+		const lim = Math.cos(FLICK.deg * Math.PI / 180);
+		const hit = g.filter((m) => m !== src && (m.q.classList.contains("can") || m.q.classList.contains("copy")) && (vx * (m.x - src.x) + vy * (m.y - src.y)) / (vl * Math.hypot(m.x - src.x, m.y - src.y)) >= lim);
+		if (hit.length !== 1) {
+			if (hit.length) from.why += `; quick flick, but ${hit.length} lit squares that way`;
+			return null;
+		}
+		from.why = `quick flick (${Math.round(performance.now() - from.t0)} ms, ${Math.round(vl)} px) toward ${sqName(+hit[0].q.dataset.r, +hit[0].q.dataset.c)}; before v0.90: ${from.why}`;
+		return hit[0].q;
 	}
 	const noSlide = /* @__PURE__ */ new Set();
 	let floater = null;
@@ -3160,6 +3233,10 @@ if (params.has("sim")) {
 	}
 	const holdMove = (e) => {
 		if (holdTouch && e.cancelable) e.preventDefault();
+		else if (holdTouch && ptr && !ptr.nc) {
+			ptr.nc = true;
+			diag("  the phone would not let the board hold this touch (touchmove not cancelable)");
+		}
 	};
 	function bindPointer() {
 		const board = document.getElementById("board");
@@ -3175,6 +3252,7 @@ if (params.has("sim")) {
 			if (e.button !== 0) return;
 			const sq = sqAt(e);
 			if (!sq || sq.disabled) return;
+			if (ptr) diag(`  a second touch came down before this one let go${ptr.moved ? " (the piece was lifted)" : ""}: this one is dropped`);
 			ptr = {
 				r: +sq.dataset.r,
 				c: +sq.dataset.c,
@@ -3182,8 +3260,11 @@ if (params.has("sim")) {
 				y: e.clientY,
 				id: e.pointerId,
 				moved: false,
-				touch: e.pointerType !== "mouse"
+				touch: e.pointerType !== "mouse",
+				n: 0,
+				t0: performance.now()
 			};
+			diag(() => `down ${dSq(ptr.r, ptr.c)} at ${dPx(e.clientX, e.clientY)} · ${phase !== "play" ? phase : state.turn === me ? "your move" : "their move"}${busy ? " · busy" : ""}${scrollY ? " · page scrolled " + Math.round(scrollY) : ""}`);
 			try {
 				document.body.setPointerCapture(e.pointerId);
 			} catch (err) {}
@@ -3254,6 +3335,9 @@ if (params.has("sim")) {
 	}
 	window.addEventListener("pointermove", (e) => {
 		if (!ptr || e.pointerId !== ptr.id) return;
+		ptr.n++;
+		ptr.lx = e.clientX;
+		ptr.ly = e.clientY;
 		if (!ptr.touch && e.buttons !== 1) return cancelPtr();
 		const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
 		if (!ptr.moved) {
@@ -3265,6 +3349,7 @@ if (params.has("sim")) {
 			}
 			const p = at$1(state, ptr.r, ptr.c), setupOpen = phase === "setup" && !(mode === "live" && LIVE.ready[me]);
 			if (p && p.side === me && phase === "play" && !state.winner && (busy || state.turn !== me)) {
+				if (!ptr.waited) diag(`  waits: ${busy ? "a fight is playing out" : "not your move yet"}`);
 				ptr.waited = true;
 				return;
 			}
@@ -3286,6 +3371,7 @@ if (params.has("sim")) {
 				liftPiece(src, `<span class="ic">🏢</span>`, "h");
 			} else if (!can) {
 				ptr.still = true;
+				diag(`  nothing to drag here (${!p ? "empty" : p.side !== me ? "not yours" : busy ? "busy" : "not now"})`);
 				return;
 			} else {
 				ptr.moved = true;
@@ -3300,6 +3386,7 @@ if (params.has("sim")) {
 				if (dragEl) dragEl.classList.add("drag");
 				ptr.geo = measureBoard();
 				liftPiece(src, faceHtml(face(p)), shape(p.side));
+				diag(`  lifted after ${Math.round(performance.now() - ptr.t0)} ms, move ${ptr.n} · lit: ${[...app.querySelectorAll(".sq.can,.sq.copy")].map((q) => sqName(+q.dataset.r, +q.dataset.c)).join(" ") || "NONE"}`);
 			}
 		}
 		if (floater) {
@@ -3322,9 +3409,21 @@ if (params.has("sim")) {
 		if (!ptr || e.pointerId !== ptr.id) return;
 		const was = ptr;
 		ptr = null;
+		const span = `${was.n} moves, ${Math.round(performance.now() - was.t0)} ms, let go ${dPx(e.clientX - was.x, e.clientY - was.y)} px from down${was.lx == null ? "" : `, last move ${dPx(was.lx - was.x, was.ly - was.y)}`}`;
+		if (!was.moved) {
+			const far = Math.hypot(e.clientX - was.x, e.clientY - was.y) > 28;
+			diag(`  up: ${(was.still || was.waited) && far ? was.waited ? "SWIPE LOST (let go before your move)" : "ignored" : "tap"} (${span})`);
+		}
 		if (!was.moved) return (was.still || was.waited) && Math.hypot(e.clientX - was.x, e.clientY - was.y) > 28 ? void 0 : tap(was.r, was.c);
+		const lit = was.over ? sqName(+was.over.dataset.r, +was.over.dataset.c) : "none", st0 = state;
 		unlight(was);
-		const t = dropTarget(was, e.clientX, e.clientY);
+		was.say = true;
+		let t = dropTarget(was, e.clientX, e.clientY);
+		if (!t && was.touch && !was.dc && phase === "play" && performance.now() - was.t0 < FLICK.ms) t = flickTarget(was, e.clientX, e.clientY);
+		diag(`  up: ${t ? "→ " + sqName(+t.dataset.r, +t.dataset.c) : "BACK, nothing played"} · ${was.why || "?"} · ringed square at let-go: ${lit} (${span})`);
+		if (t && !was.dc && phase === "play") queueMicrotask(() => {
+			if (state === st0 && mode !== "live") diag(`  BUT NO MOVE was played (busy ${busy}, your move ${state.turn === me}, picked ${sel ? sqName(sel.r, sel.c) : "nothing"})`);
+		});
 		if (t && sel) noSlide.add(String(sel.id));
 		const home = was.home && was.home.q.isConnected ? was.home : null;
 		endDrag(t || !home ? null : {
@@ -3341,9 +3440,10 @@ if (params.has("sim")) {
 		}
 		if (t) tap(+t.dataset.r, +t.dataset.c);
 	});
-	function cancelPtr() {
+	function cancelPtr(e) {
 		const was = ptr;
 		ptr = null;
+		if (was) diag(`  CANCELLED ${!was.touch ? "(mouse)" : e && e.pointerId != null && e.pointerId !== was.id ? "by ANOTHER touch's cancel (a second finger or the palm)" : "by the phone (taken as a scroll or a system gesture)"} after ${was.n} moves, ${Math.round(performance.now() - was.t0)} ms${was.moved ? ", piece was lifted" : ""}`);
 		if (was) unlight(was);
 		endDrag();
 		if (was && was.dc) {
@@ -3576,16 +3676,6 @@ if (params.has("sim")) {
 	};
 	let renderLater = false;
 	const LAST_ROUNDS = 10;
-	const LOCK = {
-		bot: 200,
-		alert: 900,
-		hold: [
-			400,
-			430,
-			480
-		]
-	};
-	const syncLock = () => app.classList.toggle("locked", phase === "play" && !!state && !state.winner && (busy || state.turn !== me));
 	function render(opts = {}) {
 		if (phase === "intro" || phase === "lobby" || phase === "joining" || phase === "stats" || phase === "account" || phase === "friends") dropDrag();
 		else if (floater && ptr && ptr.moved) {
@@ -3593,7 +3683,6 @@ if (params.has("sim")) {
 			return;
 		}
 		renderLater = false;
-		syncLock();
 		if (phase === "intro") return renderIntro();
 		if (phase === "stats") return renderStats();
 		if (phase === "account") return screens.render();
@@ -3699,14 +3788,7 @@ if (params.has("sim")) {
 		} else if (over) html += bar(" end", `${homeBtn()}<button class="primary" id="again">PLAY AGAIN</button><button class="ghost" id="rules">PIECES ↓</button>`);
 		html += `</div><div class="right" id="rulesbox">` + listHtml() + `</div>`;
 		const lus = app.querySelector("#lineups"), lusX = lus ? lus.scrollLeft : null;
-		const toasts = phase === "play" || phase === "over" ? [...app.querySelectorAll("#toasts > .toast")] : [];
 		app.innerHTML = html;
-		const tbox = document.getElementById("toasts");
-		if (tbox) for (const t of toasts) {
-			const age = Math.round(performance.now() - t._t0);
-			t.style.animationDelay = `${-age}ms, calc(var(--hold, 1.6s) - ${age}ms)`;
-			tbox.appendChild(t);
-		}
 		const lus2 = app.querySelector("#lineups");
 		if (lus2) {
 			if (lusX != null) lus2.scrollLeft = lusX;
@@ -4513,7 +4595,6 @@ if (params.has("sim")) {
 				return render();
 			}
 			busy = true;
-			syncLock();
 			noSlide.clear();
 			app.querySelectorAll(".sq.can,.sq.sel,.sq.copy").forEach((q) => q.classList.remove("can", "sel", "copy"));
 			const msg = app.querySelector(".msg");
@@ -4525,10 +4606,10 @@ if (params.has("sim")) {
 		sel = null;
 		copyMode = false;
 		info$1 = null;
-		const big = !FAST && state.events.some((e) => e.kind === "drain" && (e.first || e.to === 0) || e.kind === "agi" || e.kind === "asi");
+		const big = !FAST && state.events.some((e) => e.kind === "drain" && (e.first || e.to === 0) || e.kind === "agi" || e.kind === "asi") || !FAST && before.round !== state.round && state.round === BAL.MAX_ROUNDS - LAST_ROUNDS + 1;
 		afterMove(before).then(() => {
 			if (state.winner) return;
-			setTimeout(botTurn, FAST ? 0 : big ? LOCK.alert : LOCK.bot);
+			setTimeout(botTurn, FAST ? 0 : big ? 1800 : 420);
 		});
 	}
 	const wait = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -4719,7 +4800,11 @@ if (params.has("sim")) {
 		if (masked(a) || shown(a) !== a) flips.push(flip(ca, faceHtml(shown(a))));
 		if (masked(d) || shown(d) !== d) flips.push(flip(cd, faceHtml(shown(d))));
 		setConsole(engageHtml(a, d, ev, "open"));
-		await Promise.all([...flips, wait(reduce ? 0 : LOCK.hold[tier])]);
+		await Promise.all([...flips, wait(reduce ? 0 : [
+			700,
+			740,
+			800
+		][tier])]);
 		trace("resolve");
 		engage = engageHtml(a, d, ev, "done");
 		setConsole(engage);
@@ -4778,7 +4863,6 @@ if (params.has("sim")) {
 		};
 		if (fight && !FAST) {
 			busy = true;
-			syncLock();
 			skip = await animateFight(before, fight);
 			busy = false;
 		} else if (!FAST && state.last && !events.some((e) => e.kind === "copy")) sfx.move();
@@ -4841,7 +4925,6 @@ if (params.has("sim")) {
 		el.className = "toast" + (big ? " big" : "") + (extra ? " " + extra : "");
 		el.textContent = text.replace(/ · /g, "\xA0· ");
 		if (params.has("hold")) el.style.setProperty("--hold", "999s");
-		el._t0 = performance.now();
 		box.appendChild(el);
 		setTimeout(() => el.remove(), params.has("hold") ? 1e9 : big ? 3800 : 2200);
 	}
@@ -4979,7 +5062,6 @@ if (params.has("sim")) {
 		LIVE.chain = LIVE.chain.then(fn).catch((e) => {
 			console.error(e);
 			busy = false;
-			syncLock();
 		});
 	};
 	const liveYou = () => LIVE.host ? LIVE.hostSide : other(LIVE.hostSide);
